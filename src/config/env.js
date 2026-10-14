@@ -38,6 +38,11 @@ export const env = {
     redirectUri: trimUrl(process.env.GOOGLE_REDIRECT_URI) || `${backendUrl}/api/google/callback`,
   },
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || '',
+  keepAlive: {
+    enabled: process.env.KEEP_ALIVE ? process.env.KEEP_ALIVE === 'true' : isProd,
+    url: trimUrl(process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL),
+    intervalMinutes: Math.min(14, Math.max(1, Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES) || 5)),
+  },
 };
 
 export const googleConfigured = () => !!(env.google.clientId && env.google.clientSecret && env.tokenEncryptionKey);

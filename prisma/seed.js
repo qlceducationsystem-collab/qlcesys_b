@@ -25,14 +25,16 @@ async function seedEditableContent() {
   }
 }
 
-async function seedAdmin() {
-  const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME } = process.env;
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
-  const email = ADMIN_EMAIL.trim().toLowerCase();
+const ADMIN_ACCOUNTS = ['ADMIN', 'OWNER_ADMIN'];
+
+async function seedAdmin(prefix) {
+  const email = process.env[`${prefix}_EMAIL`]?.trim().toLowerCase();
+  const password = process.env[`${prefix}_PASSWORD`];
+  if (!email || !password) return;
   if (await prisma.user.findUnique({ where: { email } })) return;
-  if (ADMIN_PASSWORD.length < 12) throw new Error('ADMIN_PASSWORD debe tener al menos 12 caracteres');
+  if (password.length < 12) throw new Error(`${prefix}_PASSWORD debe tener al menos 12 caracteres`);
   await prisma.user.create({
-    data: { email, name: ADMIN_NAME || 'Administrador QLC', role: 'ADMIN', adminLevel: 'FULL', passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 12) },
+    data: { email, name: process.env[`${prefix}_NAME`] || 'Administrador QLC', role: 'ADMIN', adminLevel: 'FULL', passwordHash: await bcrypt.hash(password, 12) },
   });
   console.info(`[seed] Administrador creado: ${email}`);
 }
@@ -40,7 +42,7 @@ async function seedAdmin() {
 async function main() {
   await seedCatalogs();
   await seedEditableContent();
-  await seedAdmin();
+  for (const prefix of ADMIN_ACCOUNTS) await seedAdmin(prefix);
   console.info(`[seed] ${CATEGORIES.length} categorías, ${MODULES.length} módulos, ${OFFERS.length} ofertas y ${PUBLIC_SECTIONS.length} secciones sincronizadas`);
 }
 

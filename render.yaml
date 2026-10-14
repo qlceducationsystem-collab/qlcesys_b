@@ -42,7 +42,11 @@ services:
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
-        sync: false
+        generateValue: true
+      - key: KEEP_ALIVE
+        value: "true"
+      - key: KEEP_ALIVE_INTERVAL_MINUTES
+        value: "5"
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

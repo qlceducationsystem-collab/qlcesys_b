@@ -7,14 +7,15 @@ import { logAdminChange, logSystemChange } from './audit.service.js';
 import { publicOffer } from './access.service.js';
 
 const clientSelect = {
-  id: true, name: true, email: true, phone: true, role: true, isActive: true, createdAt: true, lastLoginAt: true,
+  id: true, name: true, email: true, phone: true, role: true, isActive: true, createdAt: true, lastLoginAt: true, totpEnabledAt: true,
   accessGrants: { where: { active: true } },
   progress: { where: { status: 'COMPLETED' }, select: { id: true } },
   _count: { select: { periods: true, monthlyCloses: true, appointments: true } },
 };
 
-const toClient = ({ accessGrants, progress, _count, ...u }) => ({
+const toClient = ({ accessGrants, progress, _count, totpEnabledAt, ...u }) => ({
   ...u,
+  twoFactorEnabled: !!totpEnabledAt,
   counts: _count,
   completedModules: progress.length,
   access: summarizeAccess(accessGrants),

@@ -2,6 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
+import { completeTwoFactor } from './helpers.js';
 import { annualWindow, shiftMonth } from '../src/domain/patrimonial.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
@@ -32,14 +33,16 @@ run('Bloque 2 · M7–M12 (integración)', () => {
   async function register(key) {
     const res = await request(app).post('/api/auth/register').send({ name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
     assert.equal(res.status, 201);
-    tokens[key] = res.body.token;
+    assert.equal(res.body.status, 'SETUP_2FA');
+    tokens[key] = (await completeTwoFactor(app, res.body.challengeToken)).token;
     ids[key] = res.body.user.id;
   }
 
   async function createAdmin(key, adminLevel) {
     const email = `${key}-${uid}@admin.qlc`;
     await prisma.user.create({ data: { email, name: key, role: 'ADMIN', adminLevel, passwordHash: await bcrypt.hash('AdminPass123!', 4) } });
-    tokens[key] = (await request(app).post('/api/auth/login').send({ email, password: 'AdminPass123!' })).body.token;
+    const login = await request(app).post('/api/auth/login').send({ email, password: 'AdminPass123!' });
+    tokens[key] = (await completeTwoFactor(app, login.body.challengeToken)).token;
   }
 
   async function buy(who, offerCode) {

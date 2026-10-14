@@ -23,12 +23,6 @@ export const TEMPLATES = {
     body: `<p>Tu cuenta fue creada correctamente. Desde tu plataforma podrás registrar tu situación financiera y avanzar en tu programa educativo.</p>${button(`${env.frontendUrl}/app`, 'Entrar a mi plataforma')}`,
     text: `Hola ${name}, tu cuenta en QLC Financial Education fue creada. Entra en ${env.frontendUrl}/app`,
   }),
-  passwordReset: ({ name, url }) => ({
-    subject: 'Restablece tu contraseña',
-    title: 'Restablecer contraseña',
-    body: `<p>Hola ${escapeHtml(name)}, recibimos una solicitud para restablecer tu contraseña. El enlace vence en 60 minutos.</p>${button(url, 'Crear nueva contraseña')}<p>Si no lo solicitaste, ignora este mensaje.</p>`,
-    text: `Restablece tu contraseña en: ${url} (vence en 60 minutos)`,
-  }),
   test: ({ name }) => ({
     subject: 'Correo de prueba · QLC Financial Education',
     title: 'Integración de Gmail funcionando',

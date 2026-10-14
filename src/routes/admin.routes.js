@@ -20,6 +20,7 @@ import { listAllAttempts } from '../services/payments/payment.service.js';
 import { platformMetrics } from '../services/analytics.service.js';
 import { sendEmail } from '../services/email.service.js';
 import { logAdminChange } from '../services/audit.service.js';
+import { resetTwoFactor } from '../services/auth.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
@@ -40,6 +41,10 @@ r.post('/clients/:id/grants/:grantId/revoke', FULL, validate(reasonSchema), ah(a
   res.json({ ok: true });
 }));
 r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req, req.params.id, req.body))));
+r.post('/clients/:id/reset-2fa', FULL, validate(reasonSchema), ah(async (req, res) => {
+  await resetTwoFactor(req, req.params.id, req.body.reason);
+  res.json({ ok: true });
+}));
 
 r.get('/audit', ah(async (req, res) => res.json(await admin.listAudit(auditQuery.parse(req.query)))));
 

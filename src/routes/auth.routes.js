@@ -11,17 +11,15 @@ const ctx = (req) => ({ sessionId: req.headers['x-session-id'] });
 
 r.post('/register', authLimiter, validate(schemas.registerSchema), ah(async (req, res) => res.status(201).json(await auth.register(req.body, ctx(req)))));
 r.post('/login', authLimiter, validate(schemas.loginSchema), ah(async (req, res) => res.json(await auth.login(req.body, ctx(req)))));
+r.post('/login/2fa', authLimiter, validate(schemas.codeLoginSchema), ah(async (req, res) => res.json(await auth.loginWithCode(req.body, ctx(req)))));
+r.post('/2fa/setup', authLimiter, validate(schemas.challengeSchema), ah(async (req, res) => res.json(await auth.beginSetup(req.body))));
+r.post('/2fa/activate', authLimiter, validate(schemas.activateTwoFactorSchema), ah(async (req, res) => res.json(await auth.activateTwoFactor(req.body, ctx(req)))));
 r.get('/me', authenticate, ah(async (req, res) => res.json({ user: await auth.me(req.user.id) })));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 
-r.post('/forgot-password', authLimiter, validate(schemas.forgotSchema), ah(async (req, res) => {
-  await auth.requestPasswordReset(req.body.email);
-  res.json({ message: 'Si el correo existe, recibirás instrucciones para restablecer tu contraseña.' });
-}));
-
-r.post('/reset-password', authLimiter, validate(schemas.resetSchema), ah(async (req, res) => {
-  await auth.resetPassword(req.body);
-  res.json({ message: 'Contraseña actualizada' });
+r.post('/reset-password', authLimiter, validate(schemas.resetWithCodeSchema), ah(async (req, res) => {
+  await auth.resetPasswordWithCode(req.body);
+  res.json({ message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
 }));
 
 r.post('/change-password', authenticate, validate(schemas.changePasswordSchema), ah(async (req, res) => {

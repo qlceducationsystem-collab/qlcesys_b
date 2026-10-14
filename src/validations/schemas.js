@@ -17,8 +17,14 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Requerido').max(128),
 });
 
-export const forgotSchema = z.object({ email: z.string().trim().toLowerCase().email('Correo inválido') });
-export const resetSchema = z.object({ token: z.string().min(20).max(200), password: z.string().min(8).max(128) });
+const emailField = z.string().trim().toLowerCase().email('Correo inválido');
+const totpCode = z.string().trim().regex(/^\d{6}$/, 'El código tiene 6 dígitos');
+const challenge = z.string().min(20).max(1000);
+
+export const codeLoginSchema = z.object({ email: emailField, code: totpCode });
+export const challengeSchema = z.object({ challengeToken: challenge });
+export const activateTwoFactorSchema = z.object({ challengeToken: challenge, code: totpCode });
+export const resetWithCodeSchema = z.object({ email: emailField, code: totpCode, password: z.string().min(8, 'Mínimo 8 caracteres').max(128) });
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
   newPassword: z.string().min(8, 'Mínimo 8 caracteres').max(128),

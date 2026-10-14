@@ -228,17 +228,23 @@ enum GoalKind {
 }
 
 model User {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String
-  name         String
-  phone        String?
-  role         Role        @default(CLIENT)
-  adminLevel   AdminLevel?
-  isActive     Boolean     @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                 String      @id @default(cuid())
+  email              String      @unique
+  passwordHash       String
+  name               String
+  phone              String?
+  role               Role        @default(CLIENT)
+  adminLevel         AdminLevel?
+  isActive           Boolean     @default(true)
+  lastLoginAt        DateTime?
+  totpSecret         String?
+  totpPendingSecret  String?
+  totpEnabledAt      DateTime?
+  totpLastStep       Int?
+  totpFailedAttempts Int         @default(0)
+  totpLockedUntil    DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
   resetTokens      PasswordResetToken[]
   periods          FinancialPeriod[]

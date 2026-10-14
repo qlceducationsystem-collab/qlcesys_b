@@ -6,6 +6,20 @@ import { getAccess } from '../services/access.service.js';
 
 export const signToken = (user) => jwt.sign({ sub: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 
+const CHALLENGE_PURPOSE = '2fa-setup';
+
+export const signChallenge = (user) => jwt.sign({ sub: user.id, purpose: CHALLENGE_PURPOSE }, env.jwtSecret, { expiresIn: '15m' });
+
+export function verifyChallenge(token) {
+  try {
+    const payload = jwt.verify(String(token || ''), env.jwtSecret);
+    if (payload.purpose !== CHALLENGE_PURPOSE) throw new Error('purpose');
+    return payload.sub;
+  } catch {
+    throw unauthorized('La sesión de configuración expiró. Inicia sesión de nuevo.');
+  }
+}
+
 const bearer = (req) => {
   const header = req.headers.authorization || '';
   return header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -15,6 +29,7 @@ async function userFromToken(token) {
   let payload;
   try {
     payload = jwt.verify(token, env.jwtSecret);
+    if (payload.purpose) throw new Error('purpose');
   } catch {
     throw unauthorized('Sesión inválida o expirada');
   }
