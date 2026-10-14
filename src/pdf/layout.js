@@ -1,4 +1,3 @@
-// Utilidades de maquetación PDF (pdfkit) con identidad QLC.
 import PDFDocument from 'pdfkit';
 
 export const C = { navy: '#0B1426', blue: '#2F6FED', gold: '#C9A54C', silver: '#8A94A6', text: '#1D2433', light: '#EEF1F6', green: '#1E8E5A', red: '#C0392B' };
@@ -35,7 +34,6 @@ export function ensureSpace(doc, h) {
   if (doc.y + h > doc.page.height - 60) doc.addPage();
 }
 
-// Rejilla de indicadores clave (label/valor).
 export function kpis(doc, items, cols = 3) {
   const w = (doc.page.width - 96) / cols;
   const h = 44;
@@ -53,7 +51,6 @@ export function kpis(doc, items, cols = 3) {
   doc.fillColor(C.text).font('Helvetica').fontSize(9);
 }
 
-// Tabla simple: columns = [{ label, width, align }], rows = arrays de strings.
 export function table(doc, columns, rows) {
   const totalW = doc.page.width - 96;
   const widths = columns.map((c) => (c.width || 1 / columns.length) * totalW);

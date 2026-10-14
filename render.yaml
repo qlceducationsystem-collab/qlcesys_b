@@ -19,17 +19,29 @@ services:
         sync: false
       - key: BACKEND_URL
         sync: false
-      - key: PLAN_NAME
-        value: QLC Financial Education - Membresía mensual
-      - key: PLAN_AMOUNT
-        sync: false
-      - key: PLAN_CURRENCY
-        value: MXN
+      - key: PAYMENT_PROVIDER
+        value: mock
       - key: MERCADOPAGO_ACCESS_TOKEN
         sync: false
       - key: MERCADOPAGO_PUBLIC_KEY
         sync: false
       - key: MERCADOPAGO_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
         sync: false
       - key: ADMIN_EMAIL
         sync: false

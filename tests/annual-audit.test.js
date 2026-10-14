@@ -1,36 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { netReturn, purchasingPower } from '../src/domain/tools.js';
 import { buildAnnualReport } from '../src/domain/annual.js';
 import { buildPeriodSummary } from '../src/domain/finance.js';
 import { diffFields } from '../src/domain/audit.js';
-import { verifyWebhookSignature } from '../src/services/mercadopago.client.js';
-
-test('Rendimiento neto: impuesto sobre ganancia después de costos, no sobre capital', () => {
-  const r = netReturn({ capital: 100000, returnRate: 10, commissions: 1000, otherCosts: 500, taxRate: 20 });
-  assert.equal(r.gross, 10000);
-  assert.equal(r.afterCosts, 8500);
-  assert.equal(r.tax, 1700);
-  assert.equal(r.net, 6800);
-  assert.equal(r.netRate, 6.8);
-});
-
-test('Rendimiento neto sin costos ni impuesto; pérdida no genera impuesto; capital 0', () => {
-  assert.equal(netReturn({ capital: 1000, returnRate: 5 }).net, 50);
-  assert.equal(netReturn({ capital: 1000, returnRate: -5, taxRate: 30 }).tax, 0);
-  assert.equal(netReturn({ capital: 0, returnRate: 5 }).netRate, null);
-});
-
-test('Poder adquisitivo: valor real = nominal / (1 + inflación)^años', () => {
-  const r = purchasingPower({ amount: 100000, years: 2, inflationRate: 10, nominalRate: 0 });
-  assert.equal(r.finalReal, 82644.63);
-  assert.equal(r.lossOfPurchasingPower, 17355.37);
-  assert.equal(r.beatsInflation, false);
-  const g = purchasingPower({ amount: 100000, years: 1, inflationRate: 4, nominalRate: 8 });
-  assert.equal(g.beatsInflation, true);
-  assert.equal(g.realRate, 3.85);
-});
+import { verifyWebhookSignature } from '../src/services/payments/mercadopago.client.js';
 
 const RF = { code: 'RENTA_FIJA', name: 'Renta fija', sortOrder: 1 };
 const month = (m, opening, initial, final, extra = {}) => ({

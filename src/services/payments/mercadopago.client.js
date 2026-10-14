@@ -1,12 +1,11 @@
 import crypto from 'node:crypto';
-import { env } from '../config/env.js';
-import { HttpError } from '../utils/httpError.js';
+import { env } from '../../config/env.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const API = 'https://api.mercadopago.com';
 
 export const mpConfigured = () => !!env.mercadoPago.accessToken;
 
-// Cliente mínimo de la API REST de Mercado Pago (solo backend).
 export async function mpRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
   if (!mpConfigured()) throw new HttpError(503, 'Mercado Pago no está configurado');
   const res = await fetch(`${API}${path}`, {
@@ -26,10 +25,6 @@ export async function mpRequest(path, { method = 'GET', body, idempotencyKey } =
   return data;
 }
 
-/**
- * Verifica la firma x-signature de una notificación.
- * Manifest: id:{data.id};request-id:{x-request-id};ts:{ts};
- */
 export function verifyWebhookSignature({ signature, requestId, dataId, secret = env.mercadoPago.webhookSecret }) {
   if (!secret || !signature) return false;
   const parts = Object.fromEntries(

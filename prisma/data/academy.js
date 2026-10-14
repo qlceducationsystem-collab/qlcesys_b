@@ -1,367 +1,236 @@
-// Contenido de la Academia financiera (12 meses). Fuente: documentos maestros QLC.
-// Cada módulo: Educación → Herramienta → Ejercicio → Registro → Seguimiento.
-// Contenido educativo: no contiene promesas de rendimiento ni recomendaciones personalizadas.
+const section = (title, ...paragraphs) => ({ title, paragraphs });
 
-const tool = (code, name, path, description) => ({ code, name, path, description });
-
-export const MODULES = [
+const BLOCK_1 = [
   {
     month: 1,
-    block: 1,
     title: 'Fundamentos',
-    summary: 'Ahorrar, invertir, patrimonio, inflación, interés, interés compuesto, liquidez y riesgo.',
+    summary: 'Ahorro, inversión, patrimonio, inflación, interés, interés compuesto, liquidez y riesgo.',
     content: {
-      sections: [
-        {
-          title: 'Ahorrar e invertir no son lo mismo',
-          body: [
-            'Ahorrar es separar una parte de tus ingresos para no consumirla. Invertir es colocar ese capital en un activo, instrumento, proyecto o estrategia esperando obtener un beneficio futuro.',
-            'El beneficio puede provenir de intereses, dividendos, crecimiento del precio, renta, flujo de efectivo o el resultado de una actividad empresarial. Ningún beneficio está garantizado: siempre existe riesgo.',
-          ],
-        },
-        {
-          title: 'Patrimonio',
-          body: [
-            'Tu patrimonio neto es lo que tienes menos lo que debes: activos − pasivos. Ganar dinero no es lo mismo que construir patrimonio; una persona puede tener ingresos altos y no acumular activos si gasta prácticamente todo lo que genera.',
-          ],
-        },
-        {
-          title: 'Inflación, interés e interés compuesto',
-          body: [
-            'La inflación reduce el poder adquisitivo del dinero con el tiempo. El interés es el costo o la remuneración del dinero en el tiempo.',
-            'El interés compuesto ocurre cuando los rendimientos se reinvierten y comienzan a generar sus propios rendimientos. Funciona a favor cuando inviertes y en contra cuando mantienes deudas.',
-          ],
-        },
-        {
-          title: 'Liquidez y riesgo',
-          body: [
-            'Liquidez es la facilidad para convertir un activo en dinero sin perder valor. Riesgo es la posibilidad de que el resultado sea diferente al esperado, incluida la pérdida parcial o total del capital.',
-          ],
-        },
+      tool: { name: 'Diagnóstico financiero inicial', question: '¿Cuál es mi situación financiera actual y cuál es mi punto de partida?' },
+      essentials: [
+        'Registra tu flujo mensual, tu patrimonio actual y tu liquidez.',
+        'La información se guarda como tu línea base y alimenta Inicio, Ingresos y gastos, Patrimonio, Protección y Mi cartera.',
+        'El diagnóstico no te dice dónde invertir: muestra la estructura actual de tus finanzas.',
       ],
-      keyIdeas: [
-        'Invertir no debe reemplazar inmediatamente tu fuente de ingresos.',
-        'Primero se protege, después se construye liquidez y luego se invierte.',
-        'No existe una inversión perfecta: existe una estructura donde cada activo cumple una función.',
+      riskNotes: ['Los indicadores son educativos y no constituyen una calificación definitiva de tu situación.'],
+      lesson: [
+        section(
+          'Una radiografía financiera inicial',
+          'La herramienta del Módulo 1 no pretende decirte “invierte aquí” o “haz esto”. Su función es responder: ¿cuál es mi situación financiera actual y cuál es mi punto de partida?',
+          'El Módulo 1 dice “así estás hoy”. Los módulos siguientes miden y mejoran cada parte, y el sistema principal podrá mostrar cómo estabas al comenzar y cómo estás ahora.',
+        ),
+        section(
+          'Tasa de ahorro',
+          'Es el dinero que queda después de gastos y pagos de deuda, dividido entre tus ingresos. Con ingresos de $30,000, gastos de $22,000 y deuda mensual de $3,000 quedan $5,000: una tasa de ahorro de 16.7%.',
+          'Lectura educativa: 20% o más indica buena capacidad de ahorro; entre 10% y 19.9% una capacidad moderada; menos de 10% sugiere revisar la estructura de gastos.',
+        ),
+        section(
+          'Patrimonio neto',
+          'Responde: si hoy sumara todo lo que tengo y restara todo lo que debo, ¿cuánto realmente tengo? Activos de $400,000 con deudas de $80,000 representan un patrimonio neto de $320,000.',
+        ),
+        section(
+          'Liquidez',
+          'Responde: si mañana dejo de recibir ingresos, ¿cuánto tiempo puedo seguir pagando mis gastos? Un fondo de $50,000 con gastos de $22,000 cubre aproximadamente 2.3 meses.',
+          'Una persona puede tener un patrimonio elevado y aun así muy poca liquidez. Patrimonio no es lo mismo que liquidez.',
+        ),
+        section(
+          'Inversión / patrimonio y deuda / patrimonio',
+          'Inversión / patrimonio muestra qué parte del patrimonio neto está colocada en inversiones e introduce el concepto de Allocation.',
+          'Deuda / patrimonio muestra el peso de la deuda respecto al patrimonio neto. Es un indicador educativo: para analizar realmente una deuda se necesitan tasa, plazo, pago y tipo de deuda.',
+        ),
+        section(
+          'Flujo disponible',
+          'Es lo que queda después de pagar gastos, deuda y la aportación programada a inversión. Muestra la diferencia entre el dinero que queda antes de invertir y el que queda después de cumplir tu plan financiero.',
+        ),
       ],
-      tool: tool('patrimonio', 'Mi patrimonio inicial', '/app/patrimonio', 'Registra tu primer periodo y obtén la fotografía de activos, pasivos y patrimonio neto.'),
       exercise: {
-        prompt: 'Haz una lista de todo lo que tienes y todo lo que debes. ¿Cuál es tu patrimonio neto aproximado hoy?',
-        steps: ['Crea tu primer periodo mensual.', 'Registra tus inversiones en Mi cartera.', 'Registra tus deudas.', 'Revisa tu patrimonio neto.'],
+        prompt: 'Completa tu diagnóstico con tus datos reales y escribe qué indicador te sorprendió más y por qué.',
+        steps: ['Captura tu flujo mensual.', 'Captura tu patrimonio actual y tu fondo de emergencia.', 'Genera y guarda el diagnóstico.', 'Revisa cómo se reflejó en Inicio y Patrimonio.'],
       },
-      tracking: 'Cada mes compara tu patrimonio neto con el del periodo anterior.',
     },
   },
   {
     month: 2,
-    block: 1,
     title: 'Productos financieros',
     summary: 'Renta fija, renta variable, fondos, acciones, bienes raíces, negocios y activos digitales.',
     content: {
-      sections: [
-        {
-          title: 'Renta fija',
-          body: ['Puede aportar estabilidad relativa y determinados flujos, con riesgos propios como tasas, inflación, crédito del emisor y liquidez.'],
-        },
-        {
-          title: 'Renta variable, fondos y acciones',
-          body: ['Acciones, fondos y otros instrumentos cuyo valor puede fluctuar. Pueden utilizarse para buscar crecimiento patrimonial, con volatilidad y posibilidad de pérdida de capital.'],
-        },
-        {
-          title: 'Bienes raíces y negocios',
-          body: [
-            'Los bienes raíces pueden combinar apreciación y generación de renta, pero tienen riesgos de liquidez, mantenimiento y mercado.',
-            'Los negocios son actividades productivas que pueden generar flujo de efectivo, con riesgos operativos: demanda, competencia, personal, gastos e inventario.',
-          ],
-        },
-        {
-          title: 'Activos digitales',
-          body: ['Clase de activos con características y riesgos específicos, incluida una elevada volatilidad y riesgos propios del ecosistema.'],
-        },
+      tool: { name: 'Mapa de productos financieros', question: '¿Exactamente en qué productos tengo mi dinero y qué características tiene cada uno?' },
+      essentials: [
+        'Registra cada producto individualmente: nombre, tipo, capital actual, horizonte, liquidez y riesgo percibido.',
+        'Cada producto alimenta Mi cartera, Allocation y Patrimonio. No necesitas registrarlo dos veces.',
+        'La herramienta no recomienda qué comprar: ayuda a entender y ordenar.',
       ],
-      keyIdeas: ['Cada producto cumple una función distinta.', 'Antes de invertir pregunta: ¿qué estoy comprando y qué puede hacerme perder dinero?'],
-      tool: tool('cartera', 'Mi cartera', '/app/cartera', 'Registra cada producto dentro de su categoría con capital inicial y final.'),
+      riskNotes: [],
+      lesson: [
+        section(
+          'De la cifra global a los productos individuales',
+          'En el Módulo 1 registraste tus inversiones como una cifra global. Ahora el Módulo 2 empieza a descomponerla: qué parte está en CETES, en fondos, en acciones o en activos digitales.',
+          'Módulo 1 es la fotografía financiera; Módulo 2 es la composición de los activos; Módulo 3 será la construcción de la cartera.',
+        ),
+        section(
+          'Qué información se registra por producto',
+          'Nombre y tipo del producto, capital actual, horizonte (corto, mediano o largo plazo), liquidez (alta, media o baja) y riesgo percibido (bajo, medio, alto o muy alto).',
+          'El horizonte enseña que no todos los activos tienen la misma función temporal; la liquidez conecta con lo aprendido en el Módulo 1; el riesgo prepara los módulos de cartera y riesgo.',
+        ),
+        section(
+          'Cómo se conecta con la plataforma',
+          'Producto individual → categoría → Mi cartera → Allocation → Patrimonio. Si registras BTC, ETH y otros activos digitales, el sistema puede consolidarlos en su categoría.',
+          'Así los módulos no son cursos independientes: cada uno utiliza la información construida en el anterior.',
+        ),
+      ],
       exercise: {
-        prompt: 'Clasifica cada una de tus inversiones en su categoría y describe qué función cumple dentro de tu patrimonio.',
-        steps: ['Agrega cada producto en Mi cartera.', 'Captura capital inicial y final.', 'Observa el resultado y ROI de cada producto.'],
+        prompt: 'Registra todos tus productos. ¿Hay alguna parte de tus inversiones que todavía no sabías clasificar?',
+        steps: ['Agrega cada producto con su capital actual.', 'Clasifica horizonte, liquidez y riesgo.', 'Revisa el capital pendiente por desglosar.'],
       },
-      tracking: 'Actualiza el capital final de cada producto al cierre de cada mes.',
     },
   },
   {
     month: 3,
-    block: 1,
     title: 'Construcción de cartera',
-    summary: 'Diversificación, asignación de activos, horizonte temporal, tolerancia al riesgo, liquidez, volatilidad y correlación.',
+    summary: 'Diversificación, asignación de activos, horizonte, tolerancia al riesgo, liquidez, volatilidad y correlación.',
     content: {
-      sections: [
-        {
-          title: 'Diversificar no significa comprar muchas cosas',
-          body: [
-            'Diversificar significa distribuir el patrimonio entre fuentes y riesgos que no dependan exactamente del mismo factor. Diez activos que se comportan igual no crean necesariamente una buena diversificación.',
-          ],
-        },
-        {
-          title: 'Asignación de activos y horizonte',
-          body: [
-            'No existe un porcentaje universal que sea la cartera correcta para todos. La asignación se construye alrededor del objetivo, el horizonte, la capacidad para asumir pérdidas y la necesidad de liquidez.',
-          ],
-        },
-        {
-          title: 'Volatilidad y correlación',
-          body: [
-            'La volatilidad describe cuánto puede cambiar un precio. La correlación describe qué tanto se mueven juntos dos activos. Lo importante es qué tan relacionados están los riesgos.',
-          ],
-        },
+      tool: { name: 'Constructor de cartera', question: '¿Cómo está distribuido mi dinero entre las diferentes categorías de activos?' },
+      essentials: [
+        'La cartera actual se calcula con los productos que ya registraste: no vuelves a escribir capitales.',
+        'La simulación educativa es independiente y no modifica tu cartera real.',
+        '“Equilibrada” no significa cartera recomendada, segura ni correcta.',
       ],
-      keyIdeas: ['La pregunta no es solo cuánto puedes ganar, sino qué ocurre si una parte de tu cartera cae.'],
-      tool: tool('allocation', 'Allocation / distribución', '/app/allocation', 'Observa cómo está distribuido tu patrimonio por categoría y producto.'),
+      riskNotes: ['La lectura educativa usa parámetros definidos por QLC y no es una recomendación de inversión.'],
+      lesson: [
+        section(
+          'De productos a cartera',
+          'Los productos se agrupan por categoría y la herramienta calcula qué porcentaje representa cada una. Ahora puedes ver tu cartera, no solamente saber cuánto dinero tienes.',
+          'Tener cuatro inversiones no significa necesariamente estar diversificado: cuatro activos digitales pueden concentrar la misma clase de riesgo. Número de productos no es igual a diversificación real.',
+        ),
+        section(
+          'Allocation',
+          'En este módulo aprendes a interpretar tu asignación. Después, la sección permanente Allocation conserva esa distribución y la actualiza conforme cambia la cartera.',
+        ),
+        section(
+          'Lectura educativa',
+          'Se calcula con cinco variables: diversificación por categorías (30%), concentración de la categoría principal (30%), exposición a alto riesgo (20%), liquidez (10%) y número de categorías utilizadas (10%).',
+          'Resultado: 80–100 Equilibrada, 60–79 Moderada, 40–59 Concentrada, 0–39 Muy concentrada.',
+          '“Equilibrada” significa únicamente que la estructura presenta una distribución relativamente diversificada y sin una concentración dominante según los parámetros educativos de QLC. No existe un porcentaje universal correcto para todas las personas.',
+        ),
+      ],
       exercise: {
-        prompt: '¿Qué porcentaje de tu cartera depende de una sola categoría? ¿Qué pasaría si esa categoría cayera?',
-        steps: ['Revisa tu distribución en Allocation.', 'Identifica la categoría con mayor participación.', 'Escribe tu reflexión en el registro del módulo.'],
+        prompt: '¿Qué categoría concentra más tu patrimonio? ¿Qué pasaría con tu cartera si esa categoría cayera?',
+        steps: ['Revisa tu cartera actual.', 'Compara con una simulación educativa.', 'Registra tu reflexión y completa el módulo.'],
       },
-      tracking: 'Compara tu distribución mes a mes para ver si la estructura cambia.',
     },
   },
   {
     month: 4,
-    block: 1,
     title: 'Inversiones de mayor riesgo',
-    summary: 'Trading, apalancamiento, volatilidad, drawdown, riesgo de pérdida, ejecución, tecnología y automatización.',
+    summary: 'Riesgo, volatilidad, apalancamiento, exposición, drawdown y efecto del movimiento sobre la exposición.',
     content: {
-      sections: [
-        {
-          title: 'Apalancamiento',
-          body: ['Permite controlar una exposición mayor utilizando menos margen, pero también puede amplificar las consecuencias de un movimiento adverso.'],
-        },
-        {
-          title: 'Drawdown y riesgo de pérdida',
-          body: [
-            'El drawdown es la caída desde un máximo hasta un mínimo. Dos estrategias pueden mostrar el mismo rendimiento final con perfiles de riesgo completamente distintos.',
-            'El desempeño histórico no elimina el riesgo de mercado; ningún resultado pasado garantiza resultados futuros.',
-          ],
-        },
-        {
-          title: 'Presupuesto de riesgo',
-          body: ['Establece de antemano cuánto capital puede estar expuesto a estrategias de alta volatilidad. No improvises este número después de entrar al mercado.'],
-        },
+      tool: { name: 'Mapa de exposición y simulador de riesgo', question: '¿Qué estoy arriesgando?' },
+      essentials: [
+        'Simulación educativa: no modifica Mi cartera, Patrimonio, Allocation, Ingresos ni Gastos.',
+        'Compara el mismo movimiento con 1x, 10x y 50x: el movimiento del mercado no cambia, cambia la exposición.',
       ],
-      keyIdeas: ['Una inversión de alto riesgo nunca debería tener, por sí sola, el poder de comprometer toda la estructura patrimonial.'],
-      riskNote: 'El contenido es educativo. Las inversiones de alto riesgo pueden generar pérdidas significativas.',
-      tool: tool('allocation', 'Exposición a alto riesgo', '/app/allocation', 'Consulta qué porcentaje de tu cartera está en activos de alto riesgo.'),
+      riskNotes: [
+        'El apalancamiento aumenta tanto la sensibilidad a movimientos favorables como a movimientos adversos. Una operación apalancada puede generar pérdidas significativas sobre el margen utilizado.',
+      ],
+      lesson: [
+        section(
+          'Riesgo y exposición',
+          'Con $1,000 de capital y 10x de apalancamiento, la exposición nominal es de $10,000. Un movimiento de 2% a favor produce aproximadamente +$200; en contra, −$200.',
+          'Sin apalancamiento el mismo 2% equivale a ±$20; con 50x a ±$1,000. El movimiento del mercado no cambió: lo que cambió fue la exposición.',
+        ),
+        section(
+          'Volatilidad y drawdown',
+          'La volatilidad describe cuánto puede cambiar el precio. El drawdown es una caída desde un máximo de referencia hasta un mínimo posterior. Dos estrategias pueden mostrar el mismo resultado con perfiles de riesgo completamente distintos.',
+        ),
+        section(
+          'Simulación ≠ situación real',
+          'Si simulas $1,000 con 50x, eso no significa que realmente tengas $50,000 expuestos. La plataforma guarda el ejercicio como resultado educativo, separado de tu patrimonio.',
+        ),
+      ],
       exercise: {
-        prompt: 'Define por escrito qué porcentaje máximo de tu patrimonio estarías dispuesto a exponer a alto riesgo y por qué.',
-        steps: ['Revisa tu exposición actual en Allocation.', 'Registra tu presupuesto de riesgo en este módulo.'],
+        prompt: 'Utiliza $1,000 de margen y compara qué ocurre con 1x, 10x y 50x ante un movimiento adverso de 2%.',
+        steps: ['Simula el escenario con cada apalancamiento.', 'Guarda al menos una simulación.', 'Responde: ¿qué cambió realmente, el mercado o la exposición?'],
       },
-      tracking: 'Revisa cada mes si tu exposición real coincide con tu presupuesto de riesgo.',
     },
   },
   {
     month: 5,
-    block: 1,
     title: 'Trading',
-    summary: 'Diferencia entre invertir y hacer trading y por qué el trading debe considerarse una actividad de alto riesgo.',
+    summary: 'Simulación de una operación: entrada, salida, LONG/SHORT, exposición, costos y resultado sobre el margen.',
     content: {
-      sections: [
-        {
-          title: 'Invertir frente a hacer trading',
-          body: [
-            'El trading busca aprovechar movimientos de precio mediante operaciones de compra, venta o ambas. Es diferente de una inversión tradicional de largo plazo y puede involucrar análisis, datos, ejecución, gestión de posiciones, automatización y apalancamiento.',
-          ],
-        },
-        {
-          title: 'La imagen distorsionada de las redes sociales',
-          body: [
-            'Mostrar solo operaciones ganadoras no permite conocer la distribución completa de resultados, el capital expuesto, los periodos negativos ni el riesgo utilizado.',
-            'El trading profesional se analiza como un sistema: metodología + datos + infraestructura + ejecución + control de exposición + disciplina + evaluación.',
-          ],
-        },
+      tool: { name: 'Simulador de una operación', question: '¿Cómo funciona una operación?' },
+      essentials: [
+        'No ejecuta órdenes, no se conecta a ningún exchange y no modifica tu información patrimonial.',
+        'El resultado es simulado y educativo, no una rentabilidad esperada.',
       ],
-      keyIdeas: ['El trading no es una forma sencilla de enriquecimiento.', 'El proceso y la infraestructura importan.'],
-      riskNote: 'El trading es una actividad de alto riesgo y las pérdidas pueden ser significativas.',
-      tool: tool('cartera', 'Activos de alto riesgo', '/app/cartera', 'Registra por separado tus posiciones de trading para medir su resultado real.'),
+      riskNotes: [
+        'Una simulación favorable no significa que una operación real sea segura, rentable o repetible.',
+        'En un exchange real pueden intervenir comisiones de entrada y salida, spread, funding, tasa de mantenimiento, slippage, precio de liquidación y reglas específicas.',
+      ],
+      lesson: [
+        section(
+          'Fórmulas de la operación',
+          'Exposición nominal = capital / margen × apalancamiento.',
+          'LONG: movimiento % = (precio de salida − precio de entrada) / precio de entrada × 100. SHORT: movimiento % = (precio de entrada − precio de salida) / precio de entrada × 100.',
+          'Resultado bruto = exposición nominal × movimiento decimal. Costos simulados = exposición nominal × porcentaje de costos. Resultado neto = resultado bruto − costos. Resultado sobre margen = resultado neto / capital × 100.',
+        ),
+        section(
+          'Ejemplo completo',
+          'Con $1,000, LONG, 10x, entrada $100,000 y salida $102,000: exposición $10,000, movimiento +2%, resultado bruto +$200, costos simulados (0.10%) −$10, resultado neto +$190, es decir +19% sobre tus $1,000.',
+          'Si la salida fuera $98,000 en LONG, el resultado bruto sería −$200 y el neto −$210 (−21% sobre el margen).',
+        ),
+      ],
       exercise: {
-        prompt: 'Si operas o planeas operar, registra la posición en la categoría Activos de alto riesgo y anota tus reglas de exposición.',
-        steps: ['Registra la posición en Mi cartera.', 'Escribe tus reglas de tamaño de posición y pérdida máxima.'],
+        prompt: 'Con $1,000, entrada $100,000 y salida $102,000 prueba 1x, 10x y 50x. ¿Qué cambió realmente: el movimiento del mercado o la exposición de la operación?',
+        steps: ['Simula el escenario con 1x, 10x y 50x.', 'Simula también un escenario adverso.', 'Guarda tus simulaciones y responde la pregunta.'],
       },
-      tracking: 'Mide el resultado real de tus posiciones de alto riesgo en cada corte mensual.',
     },
   },
   {
     month: 6,
-    block: 1,
     title: 'Operación profesional',
-    summary: 'Datos, infraestructura, gestión de riesgo, ejecución, automatización, algoritmos y monitoreo.',
+    summary: 'Datos, gestión del riesgo, exposición, ejecución, automatización, monitoreo, registro y control operativo.',
     content: {
-      sections: [
-        {
-          title: 'Infraestructura, ejecución y algoritmos',
-          body: [
-            'Una operación profesional se apoya en datos, infraestructura, ejecución, automatización, algoritmos y monitoreo. En mercados rápidos, la diferencia entre el precio esperado y el ejecutado puede cambiar el resultado.',
-          ],
-        },
-        {
-          title: 'Una estrategia especializada como asignación',
-          body: [
-            'Una estrategia especializada de trading puede ocupar una asignación dentro de una cartera, no necesariamente la totalidad del patrimonio.',
-            'QLC se describe conceptualmente como una propuesta de trading no custodial / copytrading institucional para inversores individuales, donde la tecnología, el software, la ejecución, los algoritmos y la experiencia aportan la infraestructura. Es una descripción del modelo propuesto, no una garantía de resultados.',
-            'El documento conceptual de QLC contempla una asignación inicial de 20 a 400 USDT por cuenta principal como medida de control de exposición, no como garantía. Cualquier condición comercial debe consultarse en los términos vigentes de QLC.',
-          ],
-        },
+      tool: { name: 'Simulador de operación profesional', question: '¿Cómo se controla un conjunto de operaciones dentro de un sistema?' },
+      essentials: [
+        'Simulación educativa: no conecta exchanges ni realiza trading real.',
+        'Los resultados no alimentan tu patrimonio, cartera ni allocation.',
       ],
-      keyIdeas: ['La gestión profesional también consiste en saber cuándo no aumentar la exposición.'],
-      riskNote: 'Existe riesgo de mercado y, según la operativa, riesgo asociado al apalancamiento. Un límite de capital no convierte una estrategia en segura.',
-      tool: tool('cortes', 'Cortes mensuales', '/app/cortes', 'Cierra tu periodo y conserva el historial de tu evolución patrimonial.'),
-      exercise: {
-        prompt: 'Realiza tu primer corte mensual conciliado y descarga el PDF.',
-        steps: ['Verifica que tu periodo esté conciliado.', 'Cierra el periodo en Cortes mensuales.', 'Descarga el PDF del corte.'],
-      },
-      tracking: 'Cada mes cierra el periodo para construir tu historial patrimonial.',
-    },
-  },
-  {
-    month: 7,
-    block: 2,
-    title: 'Presupuesto y control financiero',
-    summary: 'Aprende a administrar el dinero: dónde termina tu dinero y cuánto puedes destinar a ahorro e inversión.',
-    content: {
-      sections: [
-        {
-          title: 'Capacidad de ahorro',
-          body: [
-            'Capacidad de ahorro = ingresos − gastos. Es uno de los motores que permite transformar ingresos actuales en patrimonio futuro.',
-            'Los porcentajes de tu presupuesto se calculan a partir de los importes reales que registras, no de porcentajes predefinidos.',
-          ],
-        },
+      riskNotes: [
+        '“Profesional” no significa “seguro” ni “rentable”. Automatizar no elimina el riesgo de mercado ni garantiza resultados.',
+        'La clasificación del nivel operativo es exclusivamente educativa y no representa una metodología financiera universal.',
       ],
-      keyIdeas: ['Lo que no se mide no se puede administrar.'],
-      tool: tool('flujo', 'Mi presupuesto mensual', '/app/ingresos-gastos', 'Registra ingresos y gastos y obtén tu distribución y capacidad de ahorro.'),
-      exercise: {
-        prompt: 'Registra todos tus ingresos y gastos del mes. ¿Qué categoría de gasto te sorprendió más?',
-        steps: ['Registra cada ingreso.', 'Registra cada gasto por categoría.', 'Revisa tu capacidad de ahorro.'],
-      },
-      tracking: 'Compara tu capacidad de ahorro mes a mes.',
-    },
-  },
-  {
-    month: 8,
-    block: 2,
-    title: 'Fondo de emergencia y liquidez',
-    summary: 'Proteger la estabilidad financiera antes de asumir riesgos.',
-    content: {
-      sections: [
-        {
-          title: 'Protección antes que inversión',
-          body: [
-            'Antes de buscar rendimiento revisa qué tan protegido está tu patrimonio: seguro de gastos médicos mayores, seguro de vida cuando existen dependientes económicos, fondo de emergencia y una estructura razonable para enfrentar obligaciones.',
-            'La liquidez evita que una necesidad inmediata te obligue a vender una inversión en un momento desfavorable.',
-          ],
-        },
+      lesson: [
+        section(
+          'Más allá de una operación',
+          'Una operación profesional requiere un sistema: datos, gestión del riesgo, exposición, ejecución, automatización, monitoreo, registro y control operativo.',
+        ),
+        section(
+          'Fórmulas',
+          'Riesgo monetario por operación = capital operativo × riesgo por operación (%). Riesgo acumulado teórico (%) = riesgo por operación × número de operaciones. Riesgo monetario acumulado = riesgo monetario por operación × número de operaciones. Exposición nominal máxima teórica = capital operativo × apalancamiento.',
+          'Con $10,000, 1% por operación, 5 operaciones y 5x: $100 por operación, 5% acumulado, $500 acumulados y $50,000 de exposición teórica.',
+        ),
+        section(
+          'Automatización y monitoreo',
+          'Manual: las decisiones requieren intervención humana. Semiautomatizado: algunas tareas siguen reglas. Automatizado: las reglas se ejecutan dentro del escenario educativo.',
+          'Monitorear permite detectar cambios, pero no elimina el riesgo de mercado.',
+        ),
       ],
-      keyIdeas: ['Evita que un solo acontecimiento destruya años de trabajo y ahorro.'],
-      tool: tool('proteccion', 'Herramienta de liquidez y protección', '/app/proteccion', 'Registra liquidez, fondo de emergencia, reservas y coberturas.'),
       exercise: {
-        prompt: '¿Cuántos meses de gastos cubre tu liquidez actual? ¿Cuentas con coberturas para eventos graves?',
-        steps: ['Registra tu liquidez y fondo de emergencia.', 'Registra tus coberturas de seguro.', 'Revisa los meses de gastos cubiertos.'],
+        prompt: 'Con $10,000 y 1% de riesgo por operación compara 1, 5 y 10 operaciones. ¿Por qué un sistema profesional necesita conocer la exposición total y no solo el riesgo de cada operación?',
+        steps: ['Simula los tres escenarios.', 'Guarda al menos una simulación.', 'Registra tu respuesta y completa la Ruta de Mercados.'],
       },
-      tracking: 'Observa cómo evoluciona tu liquidez en cada periodo.',
-    },
-  },
-  {
-    month: 9,
-    block: 2,
-    title: 'Deudas y costo del dinero',
-    summary: 'Controlar obligaciones y entender su costo financiero.',
-    content: {
-      sections: [
-        {
-          title: 'La deuda reduce el patrimonio neto',
-          body: [
-            'Una deuda es un pasivo: reduce tu patrimonio neto y tiene un costo financiero. El costo aproximado mensual puede estimarse como saldo × tasa anual / 12.',
-          ],
-        },
-      ],
-      keyIdeas: ['El interés compuesto también trabaja en contra cuando mantienes deudas.'],
-      tool: tool('deudas', 'Registro de deudas', '/app/deudas', 'Registra saldo, pago y tasa de cada obligación.'),
-      exercise: {
-        prompt: 'Ordena tus deudas por tasa de interés. ¿Cuál tiene el mayor costo mensual?',
-        steps: ['Registra cada deuda con saldo, pago y tasa.', 'Revisa el costo mensual estimado.'],
-      },
-      tracking: 'Revisa cada mes la evolución del saldo de tus deudas.',
-    },
-  },
-  {
-    month: 10,
-    block: 2,
-    title: 'Impuestos y costo real de las inversiones',
-    summary: 'Entender el rendimiento neto después de comisiones, costos e impuestos.',
-    content: {
-      sections: [
-        {
-          title: 'Rendimiento bruto frente a rendimiento neto',
-          body: [
-            'Ganancia bruta = capital inicial × rendimiento. Ganancia después de comisiones = ganancia bruta − comisiones − otros costos.',
-            'Impuesto = ganancia después de comisiones × % de impuesto. El impuesto se aplica sobre la ganancia después de costos, no sobre el capital inicial.',
-            'Resultado después de impuestos = ganancia después de comisiones − impuesto.',
-          ],
-        },
-      ],
-      keyIdeas: ['Si no hay comisiones u otros costos, registra $0. Si no defines impuesto, el porcentaje es 0%.'],
-      riskNote: 'Las obligaciones fiscales concretas dependen de la jurisdicción y situación individual y pueden requerir asesoría profesional.',
-      tool: tool('rendimiento-neto', 'Calculadora de rendimiento neto', '/app/academia/herramientas/rendimiento-neto', 'Separa rendimiento bruto, comisiones, costos, impuesto y resultado final.'),
-      exercise: {
-        prompt: 'Calcula el rendimiento neto de una de tus inversiones con sus comisiones reales.',
-        steps: ['Abre la calculadora.', 'Captura capital, rendimiento, comisiones, costos e impuesto.', 'Guarda el resultado.'],
-      },
-      tracking: 'Compara el rendimiento neto de tus inversiones contra su rendimiento bruto.',
-    },
-  },
-  {
-    month: 11,
-    block: 2,
-    title: 'Inflación, poder adquisitivo y crecimiento real',
-    summary: 'Comprender la diferencia entre crecimiento nominal y crecimiento real.',
-    content: {
-      sections: [
-        {
-          title: 'Crecimiento nominal y real',
-          body: [
-            'Un patrimonio puede aumentar en pesos y, aun así, perder poder adquisitivo si su crecimiento queda por debajo de la inflación.',
-            'Valor real aproximado = valor nominal / (1 + inflación)^años.',
-          ],
-        },
-      ],
-      keyIdeas: ['Lo importante no es solo cuánto dinero tienes, sino qué puedes comprar con él.'],
-      tool: tool('poder-adquisitivo', 'Simulador de poder adquisitivo', '/app/academia/herramientas/poder-adquisitivo', 'Introduce una cantidad, un horizonte y un escenario de inflación.'),
-      exercise: {
-        prompt: 'Simula tu patrimonio actual con un escenario de inflación y compáralo con el crecimiento de tus inversiones.',
-        steps: ['Abre el simulador.', 'Captura cantidad, años, inflación y rendimiento nominal.', 'Guarda el escenario.'],
-      },
-      tracking: 'Compara cada año tu crecimiento patrimonial con la inflación del periodo.',
-    },
-  },
-  {
-    month: 12,
-    block: 2,
-    title: 'Plan patrimonial y revisión anual',
-    summary: 'Medir y evaluar todo el año con tu Informe Patrimonial Anual.',
-    content: {
-      sections: [
-        {
-          title: 'Tu primer informe patrimonial anual',
-          body: [
-            'Con los cortes mensuales del año el sistema consolida patrimonio inicial y final, variación, crecimiento, ingresos, gastos, ahorro, deudas, liquidez y resultados por categoría.',
-            'La sección "¿Qué cambió durante el año?" se genera a partir de tus propios datos registrados.',
-          ],
-        },
-      ],
-      keyIdeas: ['No solamente aprender sobre dinero: aprender a organizar, medir y comprender tu propio patrimonio.'],
-      tool: tool('informe-anual', 'Informe patrimonial anual', '/app/informe-anual', 'Genera y descarga el informe consolidado del año.'),
-      exercise: {
-        prompt: 'Genera tu informe anual y escribe tres conclusiones sobre cómo cambió tu patrimonio y por qué.',
-        steps: ['Genera el informe anual.', 'Lee la sección ¿Qué cambió durante el año?', 'Registra tus conclusiones.'],
-      },
-      tracking: 'El historial anual queda disponible para comparar Año 1, Año 2, Año 3...',
     },
   },
 ];
+
+const BLOCK_2 = [
+  [7, 'Presupuesto y control financiero', 'Ingresos, gastos y distribución del dinero.'],
+  [8, 'Fondo de emergencia y liquidez', 'Reserva y liquidez para imprevistos.'],
+  [9, 'Deudas y costo del dinero', 'Obligaciones, intereses, costo financiero y capacidad de pago.'],
+  [10, 'Impuestos y costo real', 'Rendimiento bruto, comisiones, costos e impuestos aplicables.'],
+  [11, 'Inflación y poder adquisitivo', 'Crecimiento nominal, crecimiento real y pérdida de poder adquisitivo.'],
+  [12, 'Plan patrimonial anual', 'Integra todo el año y genera el Informe Patrimonial Anual.'],
+].map(([month, title, summary]) => ({ month, title, summary, content: { comingSoon: true } }));
+
+export const MODULES = [...BLOCK_1.map((m) => ({ ...m, block: 1 })), ...BLOCK_2.map((m) => ({ ...m, block: 2 }))];

@@ -1,10 +1,7 @@
-// Lógica financiera central de QLC. Funciones puras: no tocan base de datos.
-// Todas las pantallas, cortes, PDFs e informes usan estas mismas funciones.
 import { num, round2, sum } from '../utils/money.js';
 
 const RECONCILE_TOLERANCE = 0.005;
 
-// ROI = (final - inicial) / inicial * 100. Con capital inicial 0 → null (N/D).
 export function roi(initial, final) {
   const i = num(initial);
   if (i === 0) return null;
@@ -19,11 +16,6 @@ export function capitalResult(initial, final) {
 
 const pct = (part, total) => (num(total) === 0 ? 0 : round2((num(part) / num(total)) * 100));
 
-/**
- * Resume la cartera de un periodo.
- * positions: [{ assetId, name, institution, category: { code, name, sortOrder }, initialCapital, finalCapital }]
- * Categoría y global se calculan sumando capitales (NUNCA promediando ROI).
- */
 export function summarizePortfolio(positions = []) {
   const products = positions.map((p) => ({
     assetId: p.assetId,
@@ -31,6 +23,8 @@ export function summarizePortfolio(positions = []) {
     name: p.name,
     institution: p.institution ?? null,
     notes: p.notes ?? null,
+    productType: p.productType ?? null,
+    source: p.source ?? null,
     categoryCode: p.category.code,
     categoryName: p.category.name,
     ...capitalResult(p.initialCapital, p.finalCapital),
@@ -66,14 +60,12 @@ export function summarizePortfolio(positions = []) {
   };
 }
 
-// Aportaciones y deducciones se mantienen separadas de la rentabilidad.
 export function summarizeMovements(movements = []) {
   const contributions = sum(movements.filter((m) => m.type === 'APORTACION'), (m) => m.amount);
   const withdrawals = sum(movements.filter((m) => m.type === 'DEDUCCION'), (m) => m.amount);
   return { contributions, withdrawals, net: round2(contributions - withdrawals) };
 }
 
-// Patrimonio final = inicial + aportaciones - deducciones + rentabilidad
 export function finalNetWorth({ opening, contributions, withdrawals, profitability }) {
   return round2(num(opening) + num(contributions) - num(withdrawals) + num(profitability));
 }
@@ -97,7 +89,6 @@ function groupTotals(items, key) {
     .sort((a, b) => b.amount - a.amount);
 }
 
-// Capacidad de ahorro = ingresos - gastos
 export function summarizeCashflow(incomes = [], expenses = []) {
   const income = sum(incomes, (i) => i.amount);
   const expense = sum(expenses, (e) => e.amount);
@@ -114,7 +105,6 @@ export function summarizeCashflow(incomes = [], expenses = []) {
 
 export const INSURANCE_TYPES = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'OTRO_SEGURO'];
 
-// total = liquidez disponible (suma al patrimonio). coverage = sumas aseguradas (no es activo).
 export function summarizeProtection(records = []) {
   const liquid = records.filter((r) => !INSURANCE_TYPES.includes(r.type));
   const insurance = records.filter((r) => INSURANCE_TYPES.includes(r.type));
@@ -126,7 +116,6 @@ export function summarizeProtection(records = []) {
   };
 }
 
-// Flujo operativo de negocios: flujo neto = ingresos del negocio - costos.
 export function summarizeBusiness(flows = []) {
   const items = flows.map((f) => ({
     id: f.id,
@@ -145,7 +134,6 @@ export function summarizeBusiness(flows = []) {
   };
 }
 
-// Indicadores descriptivos derivados de los datos (no son recomendaciones).
 export function buildIndicators({ portfolio, cashflow, protection, debts, assets }) {
   const highRisk = portfolio.categories.find((c) => c.code === 'ALTO_RIESGO');
   const top = [...portfolio.categories].sort((a, b) => b.final - a.final)[0];
@@ -161,7 +149,6 @@ export function buildIndicators({ portfolio, cashflow, protection, debts, assets
   };
 }
 
-// debts: [{ id, name, annualRate, status, balance, payment }]
 export function summarizeDebts(debts = []) {
   const items = debts.map((d) => {
     const balance = round2(num(d.balance));
@@ -175,7 +162,7 @@ export function summarizeDebts(debts = []) {
       annualRate: rate,
       balance,
       payment: round2(num(d.payment)),
-      // Costo financiero aproximado del mes: saldo * tasa anual / 12
+
       monthlyInterest: round2((balance * rate) / 100 / 12),
     };
   });
@@ -187,10 +174,6 @@ export function summarizeDebts(debts = []) {
   };
 }
 
-/**
- * Resumen completo de un periodo: fuente única para dashboard, patrimonio,
- * conciliación, cortes mensuales y PDF.
- */
 export function buildPeriodSummary({ opening = 0, positions, movements, incomes, expenses, protection, debts, businessFlows = [] }) {
   const portfolio = summarizePortfolio(positions);
   const mov = summarizeMovements(movements);
@@ -218,7 +201,7 @@ export function buildPeriodSummary({ opening = 0, positions, movements, incomes,
       withdrawals: mov.withdrawals,
       netMovement: mov.net,
       profitability,
-      final: portfolio.global.final, // un solo patrimonio final: el de la cartera
+      final: portfolio.global.final,
       variation: round2(portfolio.global.final - num(opening)),
     },
     reconciliation,

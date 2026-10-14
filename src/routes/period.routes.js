@@ -7,6 +7,7 @@ import * as periods from '../services/period.service.js';
 import { closePeriod, reopenPeriod } from '../services/close.service.js';
 import { getHistory } from '../services/history.service.js';
 import { logAdminChange } from '../services/audit.service.js';
+import { allocationFromPortfolio } from '../domain/learning.js';
 
 const r = Router();
 
@@ -18,13 +19,11 @@ r.post('/', validate(periodSchema), ah(async (req, res) => {
   res.status(201).json(period);
 }));
 
-// Evolución mensual (cerrados → snapshot, abiertos → cálculo vivo).
 r.get('/history', validate(historyQuery, 'query'), ah(async (req, res) => res.json(await getHistory(req.subjectId, req.validQuery))));
 
-// Resumen completo del periodo: fuente única para todas las pantallas.
 r.get('/:id/summary', ah(async (req, res) => {
   const { period, summary } = await periods.getPeriodSummary(req.subjectId, req.params.id);
-  res.json({ period, summary });
+  res.json({ period, summary, allocation: allocationFromPortfolio(summary.portfolio.products) });
 }));
 
 r.patch('/:id/opening', validate(openingSchema), ah(async (req, res) => {
@@ -39,7 +38,6 @@ r.patch('/:id/opening', validate(openingSchema), ah(async (req, res) => {
 
 r.post('/:id/close', ah(async (req, res) => res.status(201).json(await closePeriod(req, req.params.id))));
 
-// Reapertura (corrección administrativa): solo administración completa y con motivo.
 r.post('/:id/reopen', requireAdminLevel('FULL'), validate(reasonSchema), ah(async (req, res) => {
   res.json(await reopenPeriod(req, req.params.id, req.body.reason));
 }));

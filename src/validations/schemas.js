@@ -81,7 +81,7 @@ export const movementSchema = z.object({
   periodId: id,
   type: z.enum(['APORTACION', 'DEDUCCION']),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
-  // Fecha calendario: se fija al mediodía UTC para que no cambie de día por zona horaria.
+
   date: z.coerce.date().transform((d) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12))),
   description: text(),
   assetId: id.optional().nullable(),
@@ -99,23 +99,6 @@ export const progressSchema = z.object({
   status: z.enum(['IN_PROGRESS', 'COMPLETED']),
   exercise: optText(5000),
 });
-
-const pctField = z.coerce.number().min(-100).max(1000);
-export const toolSchemas = {
-  'rendimiento-neto': z.object({
-    capital: money,
-    returnRate: pctField,
-    commissions: money.default(0),
-    otherCosts: money.default(0),
-    taxRate: z.coerce.number().min(0).max(100).default(0),
-  }),
-  'poder-adquisitivo': z.object({
-    amount: money,
-    years: z.coerce.number().int().min(0).max(60),
-    inflationRate: z.coerce.number().min(-50).max(500),
-    nominalRate: pctField.default(0),
-  }),
-};
 
 export const adminLevelSchema = z.object({ adminLevel: z.enum(['VIEW', 'EDIT', 'FULL']), reason: text(500) });
 
@@ -143,13 +126,109 @@ export const appointmentAdminSchema = z.object({
 
 export const reasonSchema = z.object({ reason: text(500) });
 
-export const adminSubscriptionSchema = z.object({
-  status: z.enum(['PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED']),
-  reason: text(500),
-});
-
 export const adminUserSchema = z.object({ isActive: z.boolean(), reason: text(500) });
 
 export const openingSchema = z.object({ openingNetWorth: money.nullable() });
 export const yearParam = z.object({ year: z.coerce.number().int().min(2000).max(2100) });
 export const historyQuery = z.object({ year: z.coerce.number().int().min(2000).max(2100).optional() });
+
+const enumOf = (values) => z.enum(values);
+const amount = money.default(0);
+
+export const diagnosisSchema = z.object({
+  income: amount,
+  expenses: amount,
+  debtPayment: amount,
+  monthlyInvestment: amount,
+  cash: amount,
+  investments: amount,
+  otherAssets: amount,
+  totalDebt: amount,
+  emergencyFund: amount,
+  riskTolerance: enumOf(['CONSERVADOR', 'MODERADO', 'ALTO']),
+  mainGoal: enumOf(['CONSTRUIR_PATRIMONIO', 'FONDO_EMERGENCIA', 'INVERTIR_MEJOR', 'REDUCIR_DEUDAS']),
+});
+
+export const productSchema = z.object({
+  name: text(120),
+  productType: enumOf(['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'BIENES_RAICES', 'NEGOCIO', 'ACTIVO_DIGITAL', 'LIQUIDEZ']),
+  capital: z.coerce.number().positive('Captura un monto mayor a 0').max(1e12),
+  horizon: enumOf(['CORTO', 'MEDIANO', 'LARGO']),
+  liquidityLevel: enumOf(['ALTA', 'MEDIA', 'BAJA']),
+  perceivedRisk: enumOf(['BAJO', 'MEDIO', 'ALTO', 'MUY_ALTO']),
+});
+
+export const moduleProgressSchema = z.object({
+  status: enumOf(['IN_PROGRESS', 'COMPLETED']),
+  exercise: z.string().trim().max(5000).optional(),
+});
+
+export const routeSchema = z.object({ route: enumOf(['MARKETS', 'PATRIMONIAL']) });
+
+const binary = z.coerce.number().int().min(0).max(1);
+export const marketFilterSchema = z.object({ answers: z.object({ q1: binary, q2: binary, q3: binary, q4: binary, q5: binary, q6: binary }) });
+
+const leverage = z.coerce.number().refine((v) => [1, 2, 5, 10, 25, 50, 100, 150].includes(v), 'Apalancamiento no válido');
+const positive = z.coerce.number().min(0).max(1e12);
+
+export const simulationSchemas = {
+  3: z.object({
+    RENTA_FIJA: amount, RENTA_VARIABLE: amount, BIENES_RAICES: amount, NEGOCIOS: amount, LIQUIDEZ: amount, ALTO_RIESGO: amount,
+  }),
+  4: z.object({ capital: positive, direction: enumOf(['LONG', 'SHORT']), leverage, movePct: z.coerce.number().min(0).max(100), favorable: z.boolean() }),
+  5: z.object({
+    capital: positive,
+    direction: enumOf(['LONG', 'SHORT']),
+    leverage,
+    entryPrice: z.coerce.number().positive().max(1e12),
+    exitPrice: z.coerce.number().positive().max(1e12),
+    costPct: z.coerce.number().min(0).max(10),
+  }),
+  6: z.object({
+    capital: positive,
+    riskPct: z.coerce.number().min(0).max(100),
+    positions: z.coerce.number().int().min(1).max(100),
+    leverage,
+    automation: enumOf(['MANUAL', 'SEMI', 'AUTO']),
+    monitoring: enumOf(['BASIC', 'CONTINUOUS', 'ALERTS']),
+  }),
+};
+
+export const offerUpdateSchema = z.object({
+  name: text(120),
+  description: optText(500),
+  price: z.coerce.number().min(0).max(1e9).nullable(),
+  currency: z.string().trim().toUpperCase().length(3),
+  accessDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+  active: z.boolean(),
+});
+
+export const grantSchema = z.object({ offerCode: text(40), reason: text(500) });
+
+const cta = z.string().trim().max(80).optional().nullable().transform((v) => v || null);
+export const publicSectionSchema = z.object({
+  navLabel: text(40),
+  active: z.boolean(),
+  eyebrow: optText(120),
+  title: text(160),
+  highlight: optText(80),
+  subtitle: optText(300),
+  description: optText(900),
+  secondaryText: optText(600),
+  primaryCtaLabel: cta,
+  primaryCtaTarget: cta,
+  secondaryCtaLabel: cta,
+  secondaryCtaTarget: cta,
+  items: z.array(z.object({ title: text(120), text: optText(400), tag: optText(40) })).max(12).optional().nullable(),
+});
+
+export const reorderSchema = z.object({ keys: z.array(z.string().min(1).max(40)).min(1).max(30) });
+
+export const analyticsEventSchema = z.object({
+  event: z.string().min(1).max(40),
+  sessionId: z.string().max(64).optional(),
+  path: z.string().max(120).optional(),
+  metadata: z.record(z.union([z.string().max(60), z.number(), z.boolean()])).optional(),
+});
+
+export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });

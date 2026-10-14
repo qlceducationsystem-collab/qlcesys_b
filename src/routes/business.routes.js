@@ -1,4 +1,3 @@
-// Negocios y flujo: flujo operativo mensual de los negocios registrados en Mi cartera.
 import { prisma } from '../config/prisma.js';
 import { badRequest } from '../utils/httpError.js';
 import { periodCrudRouter } from './periodCrud.js';

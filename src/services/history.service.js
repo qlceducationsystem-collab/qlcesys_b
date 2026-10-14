@@ -1,7 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { getPeriodSummary, latestClose } from './period.service.js';
 
-// Fila compacta por periodo (para gráficas de evolución).
 const toRow = (period, s, source) => ({
   periodId: period.id,
   year: period.year,
@@ -23,7 +22,6 @@ const toRow = (period, s, source) => ({
   reconciled: s.reconciliation.reconciled,
 });
 
-// Periodos cerrados → snapshot histórico; abiertos → cálculo vivo.
 export async function getHistory(userId, { year } = {}) {
   const periods = await prisma.financialPeriod.findMany({
     where: { userId, ...(year ? { year } : {}) },

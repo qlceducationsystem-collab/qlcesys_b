@@ -38,13 +38,11 @@ const flat = (pos) => ({
 
 r.get('/categories', ah(async (_req, res) => res.json(await prisma.assetCategory.findMany({ orderBy: { sortOrder: 'asc' } }))));
 
-// Resumen de cartera + patrimonio + conciliación del periodo.
 r.get('/', validate(periodQuery, 'query'), ah(async (req, res) => {
   const { period, summary } = await getPeriodSummary(req.subjectId, req.validQuery.periodId);
   res.json({ period, portfolio: summary.portfolio, patrimony: summary.patrimony, reconciliation: summary.reconciliation });
 }));
 
-// Detalle histórico de un producto en todos los periodos.
 r.get('/assets/:assetId', ah(async (req, res) => {
   const asset = await prisma.asset.findFirst({
     where: { id: req.params.assetId, userId: req.subjectId },
@@ -100,7 +98,7 @@ r.delete('/positions/:positionId', ah(async (req, res) => {
   await getOpenPeriod(req.subjectId, pos.periodId);
   await prisma.$transaction(async (tx) => {
     await tx.assetPosition.delete({ where: { id: pos.id } });
-    // Si el producto ya no existe en ningún periodo, se elimina el maestro.
+
     const remaining = await tx.assetPosition.count({ where: { assetId: pos.assetId } });
     if (!remaining) await tx.asset.delete({ where: { id: pos.assetId } });
     await logAdminChange(req, { module: MODULE, action: 'DELETE', entityId: pos.id, before: flat(pos) }, tx);

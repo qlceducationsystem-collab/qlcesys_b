@@ -7,11 +7,6 @@ import { periodQuery } from '../validations/schemas.js';
 import { getOpenPeriod, getOwnedPeriod } from '../services/period.service.js';
 import { logAdminChange } from '../services/audit.service.js';
 
-/**
- * CRUD genérico para registros de un usuario dentro de un periodo
- * (ingresos, gastos, protección, movimientos). Garantiza:
- * propiedad del registro, periodo abierto y trazabilidad administrativa.
- */
 export function periodCrudRouter({ model, schema, module, beforeWrite, orderBy = { createdAt: 'asc' } }) {
   const r = Router();
   const delegate = () => prisma[model];

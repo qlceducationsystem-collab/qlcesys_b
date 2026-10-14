@@ -26,7 +26,7 @@ test('ROI negativo y valores con decimales', () => {
 });
 
 test('ROI por categoría usa capitales agregados, NO promedio de ROI', () => {
-  // A: 100 → 200 (+100%), B: 900 → 900 (0%). Promedio simple = 50%; correcto = 10%.
+
   const p = summarizePortfolio([pos('A', RF, 100, 200), pos('B', RF, 900, 900)]);
   assert.equal(p.categories[0].roi, 10);
   assert.equal(p.categories[0].result, 100);
@@ -85,18 +85,17 @@ test('Conciliación: diferencia 0 → conciliado; otra → no conciliado con dif
 });
 
 test('Resumen del periodo: ejemplo completo conciliado, sin duplicar aportaciones', () => {
-  // Patrimonio inicial 1,000,000; aportación 100,000; deducción 50,000.
-  // Los capitales iniciales del periodo reflejan esos movimientos (1,050,000) y la cartera termina en 1,080,000.
+
   const s = buildPeriodSummary({
     opening: 1000000,
     positions: [pos('CETES', RF, 450000, 460000), pos('Acciones', RV, 600000, 620000)],
     movements: [{ type: 'APORTACION', amount: 100000 }, { type: 'DEDUCCION', amount: 50000 }],
     incomes: [], expenses: [], protection: [], debts: [],
   });
-  assert.equal(s.patrimony.profitability, 30000); // la aportación NO se cuenta como rentabilidad
+  assert.equal(s.patrimony.profitability, 30000);
   assert.equal(s.patrimony.netMovement, 50000);
   assert.equal(s.patrimony.final, 1080000);
-  assert.equal(s.patrimony.variation, 80000); // = movimiento neto + rentabilidad
+  assert.equal(s.patrimony.variation, 80000);
   assert.equal(s.patrimony.variation, s.patrimony.netMovement + s.patrimony.profitability);
   assert.equal(s.reconciliation.reconciled, true);
 });

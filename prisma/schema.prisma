@@ -1,8 +1,3 @@
-// QLC Financial Education — modelo de datos
-// Regla: los valores derivados (ROI, resultados, patrimonio final, conciliación)
-// NO se almacenan; se calculan en src/domain/finance.js.
-// Excepción: MonthlyClose y AnnualReport guardan snapshots históricos inmutables.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -18,27 +13,10 @@ enum Role {
   ADMIN
 }
 
-// Nivel administrativo: visualización, edición o administración completa.
 enum AdminLevel {
   VIEW
   EDIT
   FULL
-}
-
-enum SubscriptionStatus {
-  PENDING
-  ACTIVE
-  PAST_DUE
-  CANCELLED
-  EXPIRED
-}
-
-enum PaymentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REFUNDED
-  CANCELLED
 }
 
 enum PeriodStatus {
@@ -68,8 +46,6 @@ enum ExpenseCategory {
   OTROS
 }
 
-// Liquidez, fondo y reservas suman al patrimonio. Los seguros guardan la suma
-// asegurada como cobertura y NO se suman como activo.
 enum ProtectionType {
   LIQUIDEZ
   FONDO_EMERGENCIA
@@ -108,35 +84,135 @@ enum ModuleStatus {
   COMPLETED
 }
 
+enum ProductType {
+  RENTA_FIJA
+  RENTA_VARIABLE
+  FONDOS
+  ACCIONES
+  BIENES_RAICES
+  NEGOCIO
+  ACTIVO_DIGITAL
+  LIQUIDEZ
+}
+
+enum Horizon {
+  CORTO
+  MEDIANO
+  LARGO
+}
+
+enum LiquidityLevel {
+  ALTA
+  MEDIA
+  BAJA
+}
+
+enum PerceivedRisk {
+  BAJO
+  MEDIO
+  ALTO
+  MUY_ALTO
+}
+
+enum RiskTolerance {
+  CONSERVADOR
+  MODERADO
+  ALTO
+}
+
+enum FinancialGoal {
+  CONSTRUIR_PATRIMONIO
+  FONDO_EMERGENCIA
+  INVERTIR_MEJOR
+  REDUCIR_DEUDAS
+}
+
+enum LearningRoute {
+  MARKETS
+  PATRIMONIAL
+}
+
+enum SimulationKind {
+  PORTFOLIO_SIMULATION
+  RISK_EXPOSURE
+  TRADE
+  PROFESSIONAL_OPERATION
+}
+
+enum OfferType {
+  FULL_ANNUAL
+  TOOL_ONLY
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MediaFileType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum MediaProvider {
+  CLOUDINARY
+  GOOGLE_DRIVE
+}
+
+enum GoogleService {
+  DRIVE
+  GMAIL
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+}
+
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String      @id @default(cuid())
+  email        String      @unique
   passwordHash String
   name         String
   phone        String?
-  role         Role     @default(CLIENT)
+  role         Role        @default(CLIENT)
   adminLevel   AdminLevel?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive     Boolean     @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  subscription   Subscription?
-  payments       Payment[]
-  resetTokens    PasswordResetToken[]
-  periods        FinancialPeriod[]
-  incomes        Income[]
-  expenses       Expense[]
-  protection     ProtectionRecord[]
-  debts          Debt[]
-  assets         Asset[]
-  businessFlows  BusinessFlow[]
-  movements      PatrimonialMovement[]
-  monthlyCloses  MonthlyClose[]          @relation("CloseOwner")
-  annualReports  AnnualReport[]
-  progress       ModuleProgress[]
-  appointments   Appointment[]
-  auditAsAdmin   AdminAuditLog[]         @relation("AuditAdmin")
-  auditAsClient  AdminAuditLog[]         @relation("AuditClient")
+  resetTokens      PasswordResetToken[]
+  periods          FinancialPeriod[]
+  incomes          Income[]
+  expenses         Expense[]
+  protection       ProtectionRecord[]
+  debts            Debt[]
+  assets           Asset[]
+  businessFlows    BusinessFlow[]
+  movements        PatrimonialMovement[]
+  monthlyCloses    MonthlyClose[]          @relation("CloseOwner")
+  annualReports    AnnualReport[]
+  progress         ModuleProgress[]
+  appointments     Appointment[]
+  auditAsAdmin     AdminAuditLog[]         @relation("AuditAdmin")
+  auditAsClient    AdminAuditLog[]         @relation("AuditClient")
+  financialProfile FinancialProfile?
+  learningState    LearningState?
+  routeAssessments MarketRouteAssessment[]
+  submissions      ModuleSubmission[]
+  simulations      EducationalSimulation[]
+  paymentAttempts  PaymentAttempt[]
+  accessGrants     AccessGrant[]
+  analyticsEvents  AnalyticsEvent[]
 }
 
 model PasswordResetToken {
@@ -151,46 +227,6 @@ model PasswordResetToken {
   @@index([userId])
 }
 
-model Subscription {
-  id               String             @id @default(cuid())
-  userId           String             @unique
-  plan             String
-  amount           Decimal            @db.Decimal(14, 2)
-  currency         String
-  status           SubscriptionStatus @default(PENDING)
-  mpPreapprovalId  String?            @unique
-  mpPayerId        String?
-  initPoint        String?
-  startDate        DateTime?
-  activatedAt      DateTime?
-  nextBillingDate  DateTime?
-  cancelledAt      DateTime?
-  lastPaymentAt    DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payments         Payment[]
-}
-
-model Payment {
-  id             String        @id @default(cuid())
-  userId         String
-  subscriptionId String?
-  mpPaymentId    String        @unique
-  amount         Decimal       @db.Decimal(14, 2)
-  currency       String
-  status         PaymentStatus
-  mpStatus       String?
-  paidAt         DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
-
-  @@index([userId])
-}
-
-// Registro de notificaciones procesadas (idempotencia de webhooks)
 model WebhookEvent {
   id          String   @id @default(cuid())
   provider    String
@@ -206,8 +242,6 @@ model FinancialPeriod {
   year            Int
   month           Int
   status          PeriodStatus @default(OPEN)
-  // Solo se usa en el primer periodo del usuario; los siguientes toman
-  // el patrimonio final del corte anterior.
   openingNetWorth Decimal?     @db.Decimal(14, 2)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -224,6 +258,21 @@ model FinancialPeriod {
   @@unique([userId, year, month])
 }
 
+model FinancialProfile {
+  id                  String         @id @default(cuid())
+  userId              String         @unique
+  monthlyInvestment   Decimal        @db.Decimal(14, 2)
+  emergencyFund       Decimal        @db.Decimal(14, 2)
+  declaredCash        Decimal        @db.Decimal(14, 2)
+  declaredInvestments Decimal        @db.Decimal(14, 2)
+  declaredOtherAssets Decimal        @db.Decimal(14, 2)
+  riskTolerance       RiskTolerance
+  mainGoal            FinancialGoal
+  diagnosedAt         DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model Income {
   id          String          @id @default(cuid())
   userId      String
@@ -231,12 +280,14 @@ model Income {
   category    IncomeCategory
   description String
   amount      Decimal         @db.Decimal(14, 2)
+  source      String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   period      FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
   @@index([userId, periodId])
+  @@index([periodId, source])
 }
 
 model Expense {
@@ -246,12 +297,14 @@ model Expense {
   category    ExpenseCategory
   description String
   amount      Decimal         @db.Decimal(14, 2)
+  source      String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   period      FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
   @@index([userId, periodId])
+  @@index([periodId, source])
 }
 
 model ProtectionRecord {
@@ -262,6 +315,7 @@ model ProtectionRecord {
   name      String
   amount    Decimal         @db.Decimal(14, 2)
   notes     String?
+  source    String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -270,32 +324,32 @@ model ProtectionRecord {
   @@index([userId, periodId])
 }
 
-// Obligación financiera (dato maestro). Saldo y pago por periodo en DebtBalance.
 model Debt {
-  id           String        @id @default(cuid())
-  userId       String
-  name         String
-  lender       String?
-  annualRate   Decimal       @db.Decimal(7, 4)
-  status       DebtStatus    @default(ACTIVE)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balances     DebtBalance[]
+  id         String        @id @default(cuid())
+  userId     String
+  name       String
+  lender     String?
+  annualRate Decimal       @db.Decimal(7, 4)
+  status     DebtStatus    @default(ACTIVE)
+  source     String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balances   DebtBalance[]
 
   @@index([userId])
 }
 
 model DebtBalance {
-  id         String          @id @default(cuid())
-  debtId     String
-  periodId   String
-  balance    Decimal         @db.Decimal(14, 2)
-  payment    Decimal         @db.Decimal(14, 2)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  debt       Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  period     FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  id        String          @id @default(cuid())
+  debtId    String
+  periodId  String
+  balance   Decimal         @db.Decimal(14, 2)
+  payment   Decimal         @db.Decimal(14, 2)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  debt      Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
   @@unique([debtId, periodId])
 }
@@ -309,23 +363,28 @@ model AssetCategory {
   assets    Asset[]
 }
 
-// Producto de inversión (dato maestro). Capitales por periodo en AssetPosition.
 model Asset {
-  id          String          @id @default(cuid())
-  userId      String
-  categoryId  String
-  name        String
-  institution String?
-  notes       String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category    AssetCategory   @relation(fields: [categoryId], references: [id])
-  positions   AssetPosition[]
-  movements   PatrimonialMovement[]
-  flows       BusinessFlow[]
+  id             String          @id @default(cuid())
+  userId         String
+  categoryId     String
+  name           String
+  institution    String?
+  notes          String?
+  productType    ProductType?
+  horizon        Horizon?
+  liquidityLevel LiquidityLevel?
+  perceivedRisk  PerceivedRisk?
+  source         String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category       AssetCategory   @relation(fields: [categoryId], references: [id])
+  positions      AssetPosition[]
+  movements      PatrimonialMovement[]
+  flows          BusinessFlow[]
 
   @@index([userId])
+  @@index([userId, source])
 }
 
 model AssetPosition {
@@ -360,8 +419,6 @@ model PatrimonialMovement {
   @@index([userId, periodId])
 }
 
-// Flujo operativo mensual de un negocio registrado en Mi cartera (categoría NEGOCIOS).
-// Independiente del flujo personal (Ingresos y gastos) para no duplicarlo.
 model BusinessFlow {
   id        String          @id @default(cuid())
   userId    String
@@ -380,21 +437,19 @@ model BusinessFlow {
   @@index([userId, periodId])
 }
 
-// Snapshot histórico inmutable de un periodo cerrado. Cada reapertura/corrección
-// genera una nueva revisión; las anteriores se conservan.
 model MonthlyClose {
-  id            String          @id @default(cuid())
-  userId        String
-  periodId      String
-  revision      Int             @default(1)
-  year          Int
-  month         Int
-  snapshot      Json
-  closedById    String
-  closedAt      DateTime        @default(now())
-  supersededAt  DateTime?
-  user          User            @relation("CloseOwner", fields: [userId], references: [id], onDelete: Cascade)
-  period        FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  id           String          @id @default(cuid())
+  userId       String
+  periodId     String
+  revision     Int             @default(1)
+  year         Int
+  month        Int
+  snapshot     Json
+  closedById   String
+  closedAt     DateTime        @default(now())
+  supersededAt DateTime?
+  user         User            @relation("CloseOwner", fields: [userId], references: [id], onDelete: Cascade)
+  period       FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
   @@unique([periodId, revision])
   @@index([userId, year])
@@ -412,13 +467,14 @@ model AnnualReport {
 }
 
 model AcademyModule {
-  id        String           @id @default(cuid())
-  month     Int              @unique
-  block     Int
-  title     String
-  summary   String
-  content   Json
-  progress  ModuleProgress[]
+  id       String           @id @default(cuid())
+  month    Int              @unique
+  block    Int
+  title    String
+  summary  String
+  content  Json
+  progress ModuleProgress[]
+  media    ModuleMedia[]
 }
 
 model ModuleProgress {
@@ -435,6 +491,210 @@ model ModuleProgress {
   module      AcademyModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, moduleId])
+}
+
+model ModuleSubmission {
+  id           String   @id @default(cuid())
+  userId       String
+  moduleNumber Int
+  data         Json
+  result       Json
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, moduleNumber])
+}
+
+model EducationalSimulation {
+  id           String         @id @default(cuid())
+  userId       String
+  moduleNumber Int
+  kind         SimulationKind
+  input        Json
+  result       Json
+  createdAt    DateTime       @default(now())
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, moduleNumber])
+}
+
+model LearningState {
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  route         LearningRoute?
+  routeChosenAt DateTime?
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MarketRouteAssessment {
+  id            String   @id @default(cuid())
+  userId        String
+  answers       Json
+  tradingScore  Int
+  exchangeScore Int
+  totalScore    Int
+  passed        Boolean
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model ProductOffer {
+  id           String           @id @default(cuid())
+  code         String           @unique
+  name         String
+  description  String?
+  type         OfferType
+  moduleNumber Int?
+  price        Decimal?         @db.Decimal(14, 2)
+  currency     String           @default("MXN")
+  accessDays   Int?
+  active       Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  attempts     PaymentAttempt[]
+  grants       AccessGrant[]
+}
+
+model PaymentAttempt {
+  id          String               @id @default(cuid())
+  userId      String
+  offerId     String
+  amount      Decimal?             @db.Decimal(14, 2)
+  currency    String
+  provider    String
+  providerRef String?              @unique
+  status      PaymentAttemptStatus @default(PENDING)
+  resolvedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer       ProductOffer         @relation(fields: [offerId], references: [id])
+  grant       AccessGrant?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model AccessGrant {
+  id               String         @id @default(cuid())
+  userId           String
+  offerId          String
+  paymentAttemptId String?        @unique
+  accessType       OfferType
+  moduleNumber     Int?
+  startsAt         DateTime
+  expiresAt        DateTime?
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer            ProductOffer   @relation(fields: [offerId], references: [id])
+  paymentAttempt   PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id])
+
+  @@index([userId, active])
+}
+
+model MediaAsset {
+  id           String          @id @default(cuid())
+  publicId     String          @unique
+  secureUrl    String
+  width        Int?
+  height       Int?
+  format       String?
+  resourceType String
+  bytes        Int?
+  purpose      String
+  uploadedById String?
+  createdAt    DateTime        @default(now())
+  sections     PublicSection[]
+}
+
+model PublicSection {
+  id                 String      @id @default(cuid())
+  key                String      @unique
+  navLabel           String
+  position           Int
+  active             Boolean     @default(true)
+  eyebrow            String?
+  title              String
+  highlight          String?
+  subtitle           String?
+  description        String?
+  secondaryText      String?
+  primaryCtaLabel    String?
+  primaryCtaTarget   String?
+  secondaryCtaLabel  String?
+  secondaryCtaTarget String?
+  items              Json?
+  imageId            String?
+  updatedById        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  image              MediaAsset? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+}
+
+model ModuleMedia {
+  id             String        @id @default(cuid())
+  moduleId       String
+  fileType       MediaFileType
+  provider       MediaProvider
+  providerFileId String
+  url            String?
+  name           String
+  mimeType       String
+  size           Int?
+  position       Int           @default(0)
+  active         Boolean       @default(true)
+  uploadedById   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  module         AcademyModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, position])
+}
+
+model GoogleIntegration {
+  id                    String            @id @default(cuid())
+  service               GoogleService     @unique
+  email                 String?
+  encryptedRefreshToken String?
+  scopes                String?
+  status                IntegrationStatus @default(DISCONNECTED)
+  connectedAt           DateTime?
+  connectedById         String?
+  lastError             String?
+  lastSyncAt            DateTime?
+  driveFolders          Json?
+  updatedAt             DateTime          @updatedAt
+}
+
+model EmailLog {
+  id        String      @id @default(cuid())
+  to        String
+  subject   String
+  template  String
+  status    EmailStatus
+  error     String?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  event     String
+  userId    String?
+  sessionId String?
+  path      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([event, createdAt])
+  @@index([createdAt])
 }
 
 model Appointment {
@@ -458,7 +718,7 @@ model Appointment {
 model AdminAuditLog {
   id        String   @id @default(cuid())
   adminId   String
-  clientId  String
+  clientId  String?
   module    String
   action    String
   entityId  String?
@@ -468,7 +728,7 @@ model AdminAuditLog {
   reason    String?
   createdAt DateTime @default(now())
   admin     User     @relation("AuditAdmin", fields: [adminId], references: [id])
-  client    User     @relation("AuditClient", fields: [clientId], references: [id])
+  client    User?    @relation("AuditClient", fields: [clientId], references: [id])
 
   @@index([clientId, createdAt])
   @@index([adminId])

@@ -1,0 +1,93 @@
+import { prisma } from '../config/prisma.js';
+
+export const PUBLIC_EVENTS = ['PUBLIC_PAGE_VIEW', 'PUBLIC_SECTION_VIEW', 'PAYMENT_MODAL_OPEN', 'ACADEMY_OPEN', 'MODULE_OPEN'];
+
+const SAFE_METADATA_KEYS = ['section', 'module', 'offer', 'accessType', 'status', 'route', 'passed', 'source'];
+
+const cleanMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const entries = Object.entries(metadata)
+    .filter(([k, v]) => SAFE_METADATA_KEYS.includes(k) && ['string', 'number', 'boolean'].includes(typeof v))
+    .map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 60) : v]);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+};
+
+export async function track(event, { userId, sessionId, path, metadata } = {}, db = prisma) {
+  try {
+    await db.analyticsEvent.create({
+      data: {
+        event,
+        userId: userId || null,
+        sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
+        path: path ? String(path).slice(0, 120) : null,
+        metadata: cleanMetadata(metadata),
+      },
+    });
+  } catch (err) {
+    console.error('[analytics] evento no registrado:', err.message);
+  }
+}
+
+const DAY = 86400000;
+const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+
+function dailySeries(rows, days) {
+  const start = Date.now() - (days - 1) * DAY;
+  const keys = Array.from({ length: days }, (_, i) => dayKey(start + i * DAY));
+  const counts = Object.fromEntries(keys.map((k) => [k, 0]));
+  for (const r of rows) if (counts[dayKey(r.createdAt)] !== undefined) counts[dayKey(r.createdAt)] += 1;
+  return keys.map((k) => ({ date: k, count: counts[k] }));
+}
+
+const countBy = (rows, pick) =>
+  Object.entries(rows.reduce((acc, r) => ({ ...acc, [pick(r)]: (acc[pick(r)] || 0) + 1 }), {}))
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+
+export async function platformMetrics({ days = 30 } = {}) {
+  const since = new Date(Date.now() - days * DAY);
+  const now = new Date();
+  const [totalUsers, newUsers, recentEvents, grants, progress, attempts, totalModules] = await Promise.all([
+    prisma.user.count({ where: { role: 'CLIENT' } }),
+    prisma.user.findMany({ where: { role: 'CLIENT', createdAt: { gte: since } }, select: { createdAt: true } }),
+    prisma.analyticsEvent.findMany({ where: { createdAt: { gte: since } }, select: { event: true, createdAt: true, metadata: true, userId: true, sessionId: true } }),
+    prisma.accessGrant.findMany({ where: { active: true, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, select: { userId: true, accessType: true } }),
+    prisma.moduleProgress.findMany({ where: { module: { block: 1 } }, select: { userId: true, status: true, module: { select: { month: true } } } }),
+    prisma.paymentAttempt.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.academyModule.count({ where: { block: 1 } }),
+  ]);
+
+  const byEvent = (name) => recentEvents.filter((e) => e.event === name);
+  const pageViews = byEvent('PUBLIC_PAGE_VIEW');
+  const sectionViews = byEvent('PUBLIC_SECTION_VIEW');
+  const completedByUser = progress.filter((p) => p.status === 'COMPLETED').reduce((acc, p) => ({ ...acc, [p.userId]: (acc[p.userId] || 0) + 1 }), {});
+  const learners = new Set(progress.map((p) => p.userId));
+  const avgProgress = learners.size
+    ? Math.round(([...learners].reduce((a, u) => a + (completedByUser[u] || 0), 0) / learners.size / Math.max(1, totalModules)) * 100)
+    : 0;
+  const modules = Array.from({ length: totalModules }, (_, i) => i + 1).map((m) => ({
+    module: m,
+    started: progress.filter((p) => p.module.month === m).length,
+    completed: progress.filter((p) => p.module.month === m && p.status === 'COMPLETED').length,
+  }));
+  const attemptsBy = Object.fromEntries(attempts.map((a) => [a.status, a._count._all]));
+
+  return {
+    days,
+    users: { total: totalUsers, new: newUsers.length, activeClients: new Set(grants.map((g) => g.userId)).size },
+    logins: byEvent('LOGIN').length,
+    registrations: byEvent('REGISTER').length,
+    modules,
+    learners: learners.size,
+    averageProgress: avgProgress,
+    payments: { approved: attemptsBy.APPROVED || 0, rejected: attemptsBy.REJECTED || 0, pending: attemptsBy.PENDING || 0 },
+    accessTypes: countBy(grants, (g) => g.accessType),
+    publicViews: { total: pageViews.length, uniqueSessions: new Set(pageViews.map((e) => e.sessionId).filter(Boolean)).size },
+    sections: countBy(sectionViews, (e) => e.metadata?.section || 'desconocida'),
+    series: {
+      publicViews: dailySeries(pageViews, days),
+      registrations: dailySeries(byEvent('REGISTER'), days),
+      logins: dailySeries(byEvent('LOGIN'), days),
+    },
+  };
+}

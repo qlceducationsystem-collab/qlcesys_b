@@ -1,5 +1,3 @@
-// Consolidación anual a partir de snapshots de cortes mensuales. Función pura.
-// Las observaciones describen hechos de los datos; no son asesoría ni promesas.
 import { round2, sum } from '../utils/money.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -39,7 +37,6 @@ export function buildAnnualReport(year, snapshots) {
     netWorth: m.balanceSheet.netWorth,
   }));
 
-  // Resultado acumulado por categoría (suma de resultados mensuales).
   const catMap = new Map();
   for (const m of months) {
     for (const c of m.portfolio.categories) {
@@ -53,7 +50,6 @@ export function buildAnnualReport(year, snapshots) {
     return { ...c, finalCapital: lastCat?.final ?? 0, share: lastCat?.share ?? 0 };
   });
 
-  // Resultado acumulado por inversión individual.
   const prodMap = new Map();
   for (const m of months) {
     for (const p of m.portfolio.products) {

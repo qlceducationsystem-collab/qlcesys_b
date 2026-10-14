@@ -6,10 +6,6 @@ import { logAdminChange } from './audit.service.js';
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 export const periodLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
 
-/**
- * Cierra un periodo: valida conciliación, guarda snapshot inmutable y marca CLOSED.
- * Todo en una transacción.
- */
 export async function closePeriod(req, periodId) {
   const userId = req.subjectId;
   return prisma.$transaction(async (tx) => {
@@ -40,7 +36,6 @@ export async function closePeriod(req, periodId) {
   });
 }
 
-// Solo ADMIN: reabre un periodo cerrado conservando la revisión anterior.
 export async function reopenPeriod(req, periodId, reason) {
   return prisma.$transaction(async (tx) => {
     const period = await tx.financialPeriod.findFirst({ where: { id: periodId, userId: req.subjectId } });

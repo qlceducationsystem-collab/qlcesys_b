@@ -1,4 +1,3 @@
-// PDFs de corte mensual e informe anual a partir de snapshots históricos.
 import { createDoc, date, finish, kpis, money, pct, section, statusBanner, table } from './layout.js';
 
 const CAT_COLS = [

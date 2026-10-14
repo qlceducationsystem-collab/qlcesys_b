@@ -23,7 +23,6 @@ export async function getAnnualReport(userId, year) {
   return report;
 }
 
-// Años con cortes vigentes y cuántos meses cerrados tiene cada uno.
 export async function closedYears(userId) {
   const rows = await prisma.monthlyClose.groupBy({
     by: ['year'],

@@ -26,11 +26,13 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "express": "^4.22.3",
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
     "pdfkit": "^0.20.2",
     "prisma": "^6.19.3",
     "zod": "^3.25.76"

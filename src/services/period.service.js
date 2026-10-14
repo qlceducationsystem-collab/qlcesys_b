@@ -4,8 +4,11 @@ import { conflict, notFound } from '../utils/httpError.js';
 import { num, round2, sum } from '../utils/money.js';
 
 const periodOrder = [{ year: 'desc' }, { month: 'desc' }];
+const periodIndex = (p) => p.year * 12 + p.month;
 
 export const listPeriods = (userId) => prisma.financialPeriod.findMany({ where: { userId }, orderBy: periodOrder });
+
+export const latestPeriod = (userId, db = prisma) => db.financialPeriod.findFirst({ where: { userId }, orderBy: periodOrder });
 
 export async function getOwnedPeriod(userId, periodId, db = prisma) {
   const period = await db.financialPeriod.findFirst({ where: { id: periodId, userId } });
@@ -32,18 +35,12 @@ const previousPeriod = (userId, { year, month }, db = prisma) =>
 export const latestClose = (periodId, db = prisma) =>
   db.monthlyClose.findFirst({ where: { periodId, supersededAt: null }, orderBy: { revision: 'desc' } });
 
-/**
- * Patrimonio inicial: final del periodo anterior (corte si existe; si no, cartera viva).
- * Primer periodo: el valor capturado por el usuario o, si no lo capturó,
- * capital inicial registrado − movimiento neto del periodo.
- */
 export async function getOpening(userId, period, db = prisma, data = null) {
   const prev = await previousPeriod(userId, period, db);
   if (!prev) {
     if (period.openingNetWorth !== null && period.openingNetWorth !== undefined) return round2(num(period.openingNetWorth));
     const d = data || (await loadPeriodData(userId, period.id, db));
-    const net = summarizeMovements(d.movements).net;
-    return round2(sum(d.positions, (p) => p.initialCapital) - net);
+    return round2(sum(d.positions, (p) => p.initialCapital) - summarizeMovements(d.movements).net);
   }
   const close = await latestClose(prev.id, db);
   if (close) return round2(num(close.snapshot?.patrimony?.final));
@@ -72,6 +69,8 @@ export async function loadPeriodData(userId, periodId, db = prisma) {
       name: p.asset.name,
       institution: p.asset.institution,
       notes: p.asset.notes,
+      productType: p.asset.productType,
+      source: p.asset.source,
       category: p.asset.category,
       initialCapital: p.initialCapital,
       finalCapital: p.finalCapital,
@@ -92,28 +91,18 @@ export async function getPeriodSummary(userId, periodId, db = prisma) {
   return { period, data, summary: buildPeriodSummary({ opening, ...data }) };
 }
 
-// Solo el primer periodo (abierto) admite capturar patrimonio inicial manual.
 export async function updateOpening(userId, periodId, openingNetWorth) {
   const period = await getOpenPeriod(userId, periodId);
   if (await previousPeriod(userId, period)) throw conflict('El patrimonio inicial proviene del periodo anterior');
   return prisma.financialPeriod.update({ where: { id: period.id }, data: { openingNetWorth } });
 }
 
-/**
- * Crea un periodo. Si existe uno anterior, arrastra productos (capital inicial =
- * capital final anterior), registros de protección y saldos de deudas activas.
- */
 export async function createPeriod(userId, { year, month, openingNetWorth }) {
   return prisma.$transaction(async (tx) => {
     const exists = await tx.financialPeriod.findFirst({ where: { userId, year, month } });
     if (exists) throw conflict('Ese periodo ya existe');
-    // Los periodos son secuenciales: no se puede insertar uno anterior al último
-    // (cambiaría silenciosamente el patrimonio inicial de periodos existentes).
-    const latest = await tx.financialPeriod.findFirst({ where: { userId }, orderBy: periodOrder });
-    if (latest && latest.year * 12 + latest.month > year * 12 + month) {
-      throw conflict('Solo puedes crear periodos posteriores al último registrado');
-    }
-    const prev = latest;
+    const prev = await tx.financialPeriod.findFirst({ where: { userId }, orderBy: periodOrder });
+    if (prev && periodIndex(prev) > year * 12 + month) throw conflict('Solo puedes crear periodos posteriores al último registrado');
     const period = await tx.financialPeriod.create({
       data: { userId, year, month, openingNetWorth: prev ? null : openingNetWorth ?? null },
     });
@@ -126,13 +115,11 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
     ]);
     if (positions.length)
       await tx.assetPosition.createMany({
-        data: positions.map((p) => ({
-          assetId: p.assetId, periodId: period.id, initialCapital: p.finalCapital, finalCapital: p.finalCapital,
-        })),
+        data: positions.map((p) => ({ assetId: p.assetId, periodId: period.id, initialCapital: p.finalCapital, finalCapital: p.finalCapital })),
       });
     if (protection.length)
       await tx.protectionRecord.createMany({
-        data: protection.map((r) => ({ userId, periodId: period.id, type: r.type, name: r.name, amount: r.amount, notes: r.notes })),
+        data: protection.map((r) => ({ userId, periodId: period.id, type: r.type, name: r.name, amount: r.amount, notes: r.notes, source: r.source })),
       });
     if (balances.length)
       await tx.debtBalance.createMany({
@@ -140,4 +127,14 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
       });
     return period;
   });
+}
+
+export async function ensureWorkingPeriod(userId) {
+  const latest = await latestPeriod(userId);
+  if (latest?.status === 'OPEN') return latest;
+  const now = new Date();
+  const current = { year: now.getFullYear(), month: now.getMonth() + 1 };
+  if (!latest || periodIndex(latest) < periodIndex(current)) return createPeriod(userId, current);
+  const next = latest.month === 12 ? { year: latest.year + 1, month: 1 } : { year: latest.year, month: latest.month + 1 };
+  return createPeriod(userId, next);
 }

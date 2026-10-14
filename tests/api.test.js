@@ -1,5 +1,3 @@
-// Pruebas de integración contra una base PostgreSQL de PRUEBAS (nunca producción).
-// Se ejecutan solo si existe TEST_DATABASE_URL; la base debe tener las migraciones aplicadas.
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
@@ -9,7 +7,9 @@ const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
 
 run('API (integración)', () => {
-  let app, prisma, processNotification;
+  let app;
+  let prisma;
+  let resolveAttempt;
   const uid = Date.now().toString(36);
   const tokens = {};
   const ids = {};
@@ -21,12 +21,14 @@ run('API (integración)', () => {
       post: (url, body, h = {}) => auth(request(app).post(url)).set(h).send(body),
       put: (url, body, h = {}) => auth(request(app).put(url)).set(h).send(body),
       patch: (url, body, h = {}) => auth(request(app).patch(url)).set(h).send(body),
+      del: (url, h = {}) => auth(request(app).delete(url)).set(h),
     };
   };
 
   async function register(key) {
-    const res = await request(app).post('/api/auth/register').send({ name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!', role: 'ADMIN' });
     assert.equal(res.status, 201);
+    assert.equal(res.body.user.role, 'CLIENT');
     tokens[key] = res.body.token;
     ids[key] = res.body.user.id;
   }
@@ -34,8 +36,13 @@ run('API (integración)', () => {
   async function createAdmin(key, adminLevel) {
     const email = `${key}-${uid}@admin.qlc`;
     await prisma.user.create({ data: { email, name: key, role: 'ADMIN', adminLevel, passwordHash: await bcrypt.hash('AdminPass123!', 4) } });
-    const res = await request(app).post('/api/auth/login').send({ email, password: 'AdminPass123!' });
-    tokens[key] = res.body.token;
+    tokens[key] = (await request(app).post('/api/auth/login').send({ email, password: 'AdminPass123!' })).body.token;
+  }
+
+  async function buy(who, offerCode, outcome = 'APPROVED') {
+    const checkout = await api(who).post('/api/payments/checkout', { offerCode });
+    assert.equal(checkout.status, 201);
+    return api(who).post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome });
   }
 
   before(async () => {
@@ -44,9 +51,10 @@ run('API (integración)', () => {
     ({ createApp: app } = await import('../src/app.js'));
     app = app();
     ({ prisma } = await import('../src/config/prisma.js'));
-    ({ processNotification } = await import('../src/services/subscription.service.js'));
+    ({ resolveAttempt } = await import('../src/services/payments/payment.service.js'));
     await register('a');
     await register('b');
+    await register('tools');
     await createAdmin('full', 'FULL');
     await createAdmin('view', 'VIEW');
     await createAdmin('edit', 'EDIT');
@@ -54,119 +62,121 @@ run('API (integración)', () => {
 
   after(async () => prisma?.$disconnect());
 
-  test('Sin membresía activa no hay acceso privado (403)', async () => {
-    const res = await api('a').get('/api/dashboard');
-    assert.equal(res.status, 403);
+  test('Sin acceso no hay área privada; el registro nunca crea administradores', async () => {
+    assert.equal((await api('a').get('/api/dashboard')).status, 403);
     assert.equal((await request(app).get('/api/dashboard')).status, 401);
+    assert.equal((await api('a').get('/api/admin/clients')).status, 403);
+    assert.equal((await api('a').get('/api/academy')).status, 200);
   });
 
-  test('Webhook repetido es idempotente y activa la membresía una sola vez', async () => {
-    await prisma.subscription.create({ data: { userId: ids.a, plan: 'MONTHLY', amount: 1, currency: 'MXN', mpPreapprovalId: `pre-${uid}` } });
-    const fetcher = async (path) => {
-      if (path.startsWith('/v1/payments/')) {
-        return { id: `pay-${uid}`, status: 'approved', transaction_amount: 1, currency_id: 'MXN', external_reference: ids.a, date_approved: new Date().toISOString(), metadata: { preapproval_id: `pre-${uid}` } };
-      }
-      throw new Error('no esperado');
-    };
-    const first = await processNotification({ topic: 'payment', dataId: `pay-${uid}`, eventId: 'evt-1' }, { fetcher });
-    const again = await processNotification({ topic: 'payment', dataId: `pay-${uid}`, eventId: 'evt-1' }, { fetcher });
-    const retry = await processNotification({ topic: 'payment', dataId: `pay-${uid}`, eventId: 'evt-2' }, { fetcher });
-    assert.deepEqual(first, { processed: true });
-    assert.deepEqual(again, { duplicate: true });
-    assert.deepEqual(retry, { processed: true });
-    assert.equal(await prisma.payment.count({ where: { userId: ids.a } }), 1);
-    const sub = await prisma.subscription.findUnique({ where: { userId: ids.a } });
-    assert.equal(sub.status, 'ACTIVE');
-    assert.ok(sub.activatedAt);
-    assert.equal((await api('a').get('/api/dashboard')).status, 200);
+  test('Pago simulado rechazado no otorga acceso; aprobado sí, una sola vez', async () => {
+    const rejected = await buy('a', 'FULL_ANNUAL', 'REJECTED');
+    assert.equal(rejected.body.attempt.status, 'REJECTED');
+    assert.equal(rejected.body.access.hasAny, false);
+    const approved = await buy('a', 'FULL_ANNUAL');
+    assert.equal(approved.body.access.mode, 'FULL');
+    const attemptId = approved.body.attempt.id;
+    const again = await resolveAttempt(attemptId, 'APPROVED');
+    assert.equal(again.changed, false);
+    assert.equal(await prisma.accessGrant.count({ where: { userId: ids.a } }), 1);
+    assert.equal((await api('a').post(`/api/payments/attempts/${attemptId}/simulate`, { outcome: 'APPROVED' })).status, 400);
   });
 
-  test('Cliente registra periodo, cartera y movimientos; resumen conciliado', async () => {
-    const p = await api('a').post('/api/periods', { year: 2026, month: 1, openingNetWorth: 1000000 });
-    assert.equal(p.status, 201);
-    ids.period = p.body.id;
-    const cats = await api('a').get('/api/portfolio/categories');
-    assert.equal(cats.body.length, 6);
-    const pos = await api('a').post('/api/portfolio/positions', { periodId: ids.period, categoryCode: 'RENTA_FIJA', name: 'CETES', initialCapital: 1050000, finalCapital: 1080000 });
-    assert.equal(pos.status, 201);
-    ids.position = pos.body.id;
-    await api('a').post('/api/patrimonial-movements', { periodId: ids.period, type: 'APORTACION', amount: 100000, date: '2026-01-10', description: 'Caja de ahorro' });
-    const m2 = await api('a').post('/api/patrimonial-movements', { periodId: ids.period, type: 'DEDUCCION', amount: 50000, date: '2026-01-20', description: 'Retiro CETES' });
-    assert.equal(m2.status, 201);
-    const s = await api('a').get(`/api/periods/${ids.period}/summary`);
-    assert.equal(s.body.summary.patrimony.final, 1080000);
-    assert.equal(s.body.summary.patrimony.profitability, 30000);
-    assert.equal(s.body.summary.reconciliation.reconciled, true);
+  test('M1 guarda datos reales que alimentan el resumen financiero', async () => {
+    assert.equal((await api('a').get('/api/academy/modules/2')).status, 403);
+    const res = await api('a').put('/api/academy/diagnosis', {
+      income: 30000, expenses: 22000, debtPayment: 3000, monthlyInvestment: 3000,
+      cash: 50000, investments: 100000, otherAssets: 250000, totalDebt: 80000, emergencyFund: 50000,
+      riskTolerance: 'MODERADO', mainGoal: 'CONSTRUIR_PATRIMONIO',
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.result.netWorth, 320000);
+    ids.period = res.body.periodId;
+    const s = (await api('a').get(`/api/periods/${ids.period}/summary`)).body.summary;
+    assert.equal(s.cashflow.income, 30000);
+    assert.equal(s.cashflow.expenses, 25000);
+    assert.equal(s.balanceSheet.netWorth, 320000);
+    assert.equal(s.reconciliation.reconciled, true);
+    assert.equal((await api('a').put('/api/academy/modules/1/progress', { status: 'COMPLETED' })).status, 200);
   });
 
-  test('Validación de inputs: montos negativos rechazados', async () => {
-    const res = await api('a').post('/api/incomes', { periodId: ids.period, category: 'SALARIO', description: 'x', amount: -5 });
-    assert.equal(res.status, 400);
+  test('M2 desglosa inversiones sin duplicar patrimonio', async () => {
+    const add = await api('a').post('/api/academy/products', { name: 'CETES', productType: 'RENTA_FIJA', capital: 40000, horizon: 'CORTO', liquidityLevel: 'ALTA', perceivedRisk: 'BAJO' });
+    assert.equal(add.status, 201);
+    ids.asset = add.body.id;
+    const s = (await api('a').get(`/api/periods/${ids.period}/summary`)).body.summary;
+    assert.equal(s.balanceSheet.netWorth, 320000);
+    assert.ok(s.portfolio.products.some((p) => p.name === 'CETES' && p.final === 40000));
+    assert.equal(s.portfolio.products.find((p) => p.source === 'M1_INVESTMENTS').final, 60000);
   });
 
-  test('Usuario no puede acceder a datos ajenos (ni con X-Client-Id)', async () => {
-    await prisma.subscription.create({ data: { userId: ids.b, plan: 'MONTHLY', amount: 1, currency: 'MXN', status: 'ACTIVE', activatedAt: new Date(), nextBillingDate: new Date(Date.now() + 864e5 * 30) } });
+  test('Otro usuario no puede leer ni borrar datos ajenos', async () => {
+    await buy('b', 'FULL_ANNUAL');
     assert.equal((await api('b').get(`/api/periods/${ids.period}/summary`)).status, 404);
     assert.equal((await api('b').get(`/api/periods/${ids.period}/summary`, { 'X-Client-Id': ids.a })).status, 404);
-    const del = await request(app).delete(`/api/portfolio/positions/${ids.position}`).set('Authorization', `Bearer ${tokens.b}`);
-    assert.equal(del.status, 404);
-    assert.equal((await api('b').get('/api/admin/clients')).status, 403);
+    assert.ok([403, 404].includes((await api('b').del(`/api/academy/products/${ids.asset}`)).status));
+    assert.equal(await prisma.asset.count({ where: { id: ids.asset } }), 1);
   });
 
-  test('Admin VIEW consulta pero no modifica; admin EDIT modifica con trazabilidad', async () => {
+  test('Admin VIEW solo consulta; admin EDIT modifica los mismos registros con auditoría', async () => {
     const h = { 'X-Client-Id': ids.a };
-    assert.equal((await api('view').get(`/api/periods/${ids.period}/summary`, h)).status, 200);
-    const body = { periodId: ids.period, categoryCode: 'RENTA_FIJA', name: 'CETES', initialCapital: 1050000, finalCapital: 1080000 };
-    assert.equal((await api('view').put(`/api/portfolio/positions/${ids.position}`, { ...body, finalCapital: 1 }, h)).status, 403);
-    const upd = await api('edit').put(`/api/portfolio/positions/${ids.position}`, { ...body, finalCapital: 1085000 }, h);
+    assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
+    const body = { name: 'CETES', productType: 'RENTA_FIJA', capital: 45000, horizon: 'CORTO', liquidityLevel: 'ALTA', perceivedRisk: 'BAJO' };
+    assert.equal((await api('view').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
+    assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, { ...body, name: 'CETES 28 días' }, h)).status, 200);
+    const log = await prisma.adminAuditLog.findFirst({ where: { clientId: ids.a, module: 'MODULO_2', field: 'name' } });
+    assert.equal(log.newValue, 'CETES 28 días');
+    const products = (await api('a').get('/api/academy/products')).body.products;
+    assert.equal(products[0].capital, 45000);
+  });
+
+  test('Ruta y filtro de mercados: criterio exacto y bloqueo de M4', async () => {
+    assert.equal((await api('a').put('/api/academy/route', { route: 'MARKETS' })).status, 403);
+    await api('a').put('/api/academy/modules/2/progress', { status: 'COMPLETED' });
+    await api('a').put('/api/academy/modules/3/progress', { status: 'COMPLETED' });
+    assert.equal((await api('a').put('/api/academy/route', { route: 'MARKETS' })).status, 200);
+    const fail = await api('a').post('/api/academy/market-filter', { answers: { q1: 1, q2: 1, q3: 0, q4: 1, q5: 1, q6: 0 } });
+    assert.equal(fail.body.passed, false);
+    assert.equal((await api('a').get('/api/academy/modules/4')).status, 403);
+    const pass = await api('a').post('/api/academy/market-filter', { answers: { q1: 1, q2: 1, q3: 1, q4: 1, q5: 1, q6: 0 } });
+    assert.equal(pass.body.passed, true);
+    assert.equal((await api('a').get('/api/academy/modules/4')).status, 200);
+  });
+
+  test('Simulaciones M4–M6 no modifican el patrimonio real', async () => {
+    const before = (await api('a').get(`/api/periods/${ids.period}/summary`)).body.summary.balanceSheet.netWorth;
+    const m4 = await api('a').post('/api/academy/modules/4/simulate', { input: { capital: 1000, direction: 'LONG', leverage: 50, movePct: 2, favorable: false }, save: true });
+    assert.equal(m4.body.result.result, -1000);
+    await api('a').put('/api/academy/modules/4/progress', { status: 'COMPLETED' });
+    const m5 = await api('a').post('/api/academy/modules/5/simulate', { input: { capital: 1000, direction: 'LONG', leverage: 10, entryPrice: 100000, exitPrice: 102000, costPct: 0.1 }, save: true });
+    assert.equal(m5.body.result.netResult, 190);
+    assert.equal((await api('a').post('/api/academy/modules/6/simulate', { input: { capital: 1 } })).status, 403);
+    await api('a').put('/api/academy/modules/5/progress', { status: 'COMPLETED' });
+    const m6 = await api('a').post('/api/academy/modules/6/simulate', { input: { capital: 10000, riskPct: 1, positions: 5, leverage: 5, automation: 'SEMI', monitoring: 'CONTINUOUS' }, save: true });
+    assert.equal(m6.body.result.accumulatedRiskMoney, 500);
+    const after = (await api('a').get(`/api/periods/${ids.period}/summary`)).body.summary.balanceSheet.netWorth;
+    assert.equal(after, before);
+    assert.equal(await prisma.educationalSimulation.count({ where: { userId: ids.a } }), 3);
+  });
+
+  test('Solo herramientas: herramienta comprada sin academia; las demás bloqueadas', async () => {
+    await buy('tools', 'TOOL_M3');
+    const m3 = await api('tools').get('/api/academy/modules/3');
+    assert.equal(m3.status, 200);
+    assert.equal(m3.body.mode, 'TOOL_ONLY');
+    assert.equal(m3.body.lesson, null);
+    assert.equal((await api('tools').get('/api/academy/modules/1')).status, 403);
+    assert.equal((await api('tools').get('/api/dashboard')).status, 200);
+  });
+
+  test('Precios y contenido público administrables; precio nulo se mantiene como por definir', async () => {
+    assert.equal((await api('edit').put('/api/admin/pricing/TOOL_M1', { name: 'x', price: 10, currency: 'MXN', active: true })).status, 403);
+    const upd = await api('full').put('/api/admin/pricing/TOOL_M1', { name: 'Herramienta M1', price: null, currency: 'MXN', active: true });
     assert.equal(upd.status, 200);
-    const log = await prisma.adminAuditLog.findFirst({ where: { clientId: ids.a, field: 'finalCapital' } });
-    assert.equal(log.oldValue, '1080000');
-    assert.equal(log.newValue, '1085000');
-    assert.equal(log.module, 'CARTERA');
-    // El cliente ve la cifra recalculada (misma fuente de datos, sin copia del admin).
-    let s = await api('a').get(`/api/periods/${ids.period}/summary`);
-    assert.equal(s.body.summary.patrimony.final, 1085000);
-    assert.equal(s.body.summary.patrimony.profitability, 35000);
-    assert.equal(s.body.summary.reconciliation.reconciled, true);
-    // Un capital inicial que no corresponde a inicial + movimientos → no conciliado.
-    await api('edit').put(`/api/portfolio/positions/${ids.position}`, { ...body, initialCapital: 1060000 }, h);
-    s = await api('a').get(`/api/periods/${ids.period}/summary`);
-    assert.equal(s.body.summary.reconciliation.reconciled, false);
-    assert.equal(s.body.summary.reconciliation.difference, 10000);
-    await api('edit').put(`/api/portfolio/positions/${ids.position}`, body, h);
-  });
-
-  test('Cierre mensual guarda snapshot, bloquea ediciones y el siguiente periodo arrastra el final', async () => {
-    const close = await api('a').post(`/api/periods/${ids.period}/close`, {});
-    assert.equal(close.status, 201);
-    assert.equal(close.body.snapshot.patrimony.final, 1080000);
-    const blocked = await api('a').post('/api/incomes', { periodId: ids.period, category: 'SALARIO', description: 'x', amount: 5 });
-    assert.equal(blocked.status, 409);
-    const next = await api('a').post('/api/periods', { year: 2026, month: 2 });
-    const s = await api('a').get(`/api/periods/${next.body.id}/summary`);
-    assert.equal(s.body.summary.patrimony.opening, 1080000);
-    assert.equal(s.body.summary.portfolio.global.initial, 1080000);
-    assert.equal(s.body.summary.reconciliation.reconciled, true);
-    const pdf = await api('a').get(`/api/monthly-closes/${close.body.id}/pdf`);
-    assert.equal(pdf.status, 200);
-    assert.equal(pdf.headers['content-type'], 'application/pdf');
-    assert.equal((await api('a').post(`/api/periods/${ids.period}/reopen`, { reason: 'x' })).status, 403);
-    const annual = await api('a').post('/api/annual-reports/2026/generate', {});
-    assert.equal(annual.status, 201);
-    assert.equal(annual.body.snapshot.monthsClosed, 1);
-  });
-
-  test('Academia: módulo 1 disponible, módulo 2 bloqueado en backend', async () => {
-    assert.equal((await api('a').get('/api/academy/modules/1')).status, 200);
-    assert.equal((await api('a').get('/api/academy/modules/2')).status, 403);
-    assert.equal((await api('a').post('/api/academy/tools/rendimiento-neto', { input: { capital: 1, returnRate: 1 } })).status, 403);
-  });
-
-  test('Suscripción cancelada bloquea acceso y conserva datos', async () => {
-    await api('full').patch(`/api/admin/clients/${ids.a}/subscription`, { status: 'CANCELLED', reason: 'Prueba' });
-    assert.equal((await api('a').get('/api/dashboard')).status, 403);
-    assert.ok((await prisma.assetPosition.count({ where: { asset: { userId: ids.a } } })) > 0);
-    assert.equal((await api('edit').patch(`/api/admin/clients/${ids.a}/subscription`, { status: 'ACTIVE', reason: 'x' })).status, 403);
+    assert.equal(upd.body.price, null);
+    const content = await request(app).get('/api/public/content');
+    assert.equal(content.status, 200);
+    assert.ok(content.body.sections.length >= 1);
+    assert.ok(content.body.offers.every((o) => o.price === null || typeof o.price === 'number'));
   });
 });

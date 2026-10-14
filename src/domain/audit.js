@@ -1,14 +1,13 @@
-// Calcula diferencias campo por campo para la bitácora administrativa.
 const norm = (v) => {
   if (v === null || v === undefined) return null;
   if (v instanceof Date) return v.toISOString();
-  // Decimal de Prisma (decimal.js): objeto con s/e/d y toFixed.
+
   if (typeof v === 'object' && typeof v.toFixed === 'function' && 'd' in v && 'e' in v) return v.toString();
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 };
 
-const IGNORED = new Set(['createdAt', 'updatedAt', 'userId', 'id']);
+const IGNORED = new Set(['createdAt', 'updatedAt', 'userId', 'id', 'updatedById']);
 
 export function diffFields(before = {}, after = {}) {
   const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
