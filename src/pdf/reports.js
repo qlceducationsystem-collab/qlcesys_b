@@ -9,6 +9,34 @@ const CAT_COLS = [
   { label: '% Cartera', width: 0.1, align: 'right' },
 ];
 
+const BUDGET_LABELS = {
+  VIVIENDA: 'Vivienda', ALIMENTACION: 'Alimentación', SERVICIOS: 'Servicios', TRANSPORTE: 'Transporte', SEGUROS: 'Seguros', EDUCACION: 'Educación',
+  ENTRETENIMIENTO: 'Entretenimiento', VIAJES: 'Viajes', DEUDAS: 'Deudas', OTROS: 'Otros', AHORRO: 'Ahorro', INVERSION: 'Inversión',
+};
+
+function budgetSection(doc, budget) {
+  const v = budget.view;
+  section(doc, 'Presupuesto del mes: planeado vs. real');
+  table(
+    doc,
+    [
+      { label: 'Categoría', width: 0.28 },
+      { label: '% planeado', width: 0.14, align: 'right' },
+      { label: 'Planeado', width: 0.2, align: 'right' },
+      { label: 'Real', width: 0.19, align: 'right' },
+      { label: 'Diferencia', width: 0.19, align: 'right' },
+    ],
+    v.rows.map((r) => [BUDGET_LABELS[r.category] || r.category, pct(r.percent), money(r.planned), money(r.actual), money(r.difference)]),
+  );
+  kpis(doc, [
+    ['Ingreso neto presupuestado', money(v.netIncome)],
+    ['Gastos planeados / reales', `${money(v.expensesPlanned)} / ${money(v.expensesActual)}`],
+    ['Saldo estimado', money(v.estimatedBalance)],
+    ['Ahorro planeado / real', `${money(v.savingsPlanned)} / ${money(v.savingsActual)}`],
+    ['Inversión planeada / real', `${money(v.investmentPlanned)} / ${money(v.investmentActual)}`],
+  ]);
+}
+
 export function monthlyClosePdf(res, close) {
   const s = close.snapshot;
   const doc = createDoc(
@@ -73,6 +101,15 @@ export function monthlyClosePdf(res, close) {
     ['Deuda total', money(s.debts.totalBalance)],
     ['Pagos de deuda', money(s.debts.totalPayment)],
   ]);
+  if (s.budget) budgetSection(doc, s.budget);
+  if (s.emergency?.valid) {
+    section(doc, 'Fondo de emergencia');
+    kpis(doc, [
+      ['Meses cubiertos', s.emergency.monthsCovered.toFixed(2)],
+      ['Reserva objetivo', money(s.emergency.target)],
+      ['Faltante', money(s.emergency.gap)],
+    ]);
+  }
   finish(doc);
 }
 

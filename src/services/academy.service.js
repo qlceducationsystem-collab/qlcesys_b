@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { BLOCK1_MODULES, canChooseRoute, canReadAcademy, isModuleOpen, moduleState } from '../domain/access.js';
+import { ACTIVE_MODULES, BLOCK1_MODULES, BLOCK2_MODULES, canChooseRoute, canReadAcademy, isModuleOpen, moduleState } from '../domain/access.js';
 import { evaluateMarketFilter, professionalOperation, riskExposure, simulateTrade, buildAllocation } from '../domain/learning.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { accessFor } from './access.service.js';
@@ -48,16 +48,18 @@ const stateOf = (ctx, n) => moduleState(n, { access: ctx.access, completed: ctx.
 export async function academyOverview(req) {
   const ctx = await learningContext(req);
   const byModule = new Map(ctx.progress.map((p) => [p.module.month, p]));
-  const block1 = ctx.modules.filter((m) => BLOCK1_MODULES.includes(m.month)).map((m) => ({
+  const view = (m) => ({
     number: m.month,
     title: m.title,
     summary: m.summary,
     state: stateOf(ctx, m.month),
     status: byModule.get(m.month)?.status || 'NOT_STARTED',
     completedAt: byModule.get(m.month)?.completedAt || null,
-  }));
-  const block2 = ctx.modules.filter((m) => m.block === 2).map((m) => ({ number: m.month, title: m.title, summary: m.summary, state: 'COMING_SOON' }));
-  const completedBlock1 = block1.filter((m) => m.state === 'COMPLETED').length;
+  });
+  const block1 = ctx.modules.filter((m) => BLOCK1_MODULES.includes(m.month)).map(view);
+  const block2 = ctx.modules.filter((m) => BLOCK2_MODULES.includes(m.month)).map(view);
+  const completedOf = (list) => list.filter((m) => m.state === 'COMPLETED').length;
+  const completedBlock1 = completedOf(block1);
   return {
     access: ctx.access,
     academyEnabled: canReadAcademy(ctx.access),
@@ -65,14 +67,15 @@ export async function academyOverview(req) {
     routeAvailable: canChooseRoute(ctx.access, ctx.completed),
     filter: { passed: ctx.filterPassed, last: ctx.lastFilter ? { passed: ctx.lastFilter.passed, totalScore: ctx.lastFilter.totalScore, createdAt: ctx.lastFilter.createdAt } : null },
     progressPct: Math.round((completedBlock1 / BLOCK1_MODULES.length) * 100),
-    next: block1.find((m) => m.state === 'AVAILABLE') || null,
+    block2ProgressPct: Math.round((completedOf(block2) / BLOCK2_MODULES.length) * 100),
+    next: [...block1, ...block2].find((m) => m.state === 'AVAILABLE') || null,
     block1,
     block2,
   };
 }
 
 async function openModule(req, number, ctx) {
-  if (!BLOCK1_MODULES.includes(number)) throw notFound('Módulo disponible en una siguiente etapa');
+  if (!ACTIVE_MODULES.includes(number)) throw notFound('Módulo no encontrado');
   const state = stateOf(ctx, number);
   if (!req.asAdmin && !isModuleOpen(state)) throw forbidden(STATE_MESSAGES[state]);
   return state;
@@ -123,6 +126,12 @@ const COMPLETION_RULES = {
   4: async (userId) => (await prisma.educationalSimulation.count({ where: { userId, moduleNumber: 4 } })) > 0 || 'Guarda al menos una simulación del módulo',
   5: async (userId) => (await prisma.educationalSimulation.count({ where: { userId, moduleNumber: 5 } })) > 0 || 'Guarda al menos una simulación del módulo',
   6: async (userId) => (await prisma.educationalSimulation.count({ where: { userId, moduleNumber: 6 } })) > 0 || 'Guarda al menos una simulación del módulo',
+  7: async (userId) => (await prisma.budget.count({ where: { userId } })) > 0 || 'Guarda tu presupuesto mensual antes de completar el módulo',
+  8: async (userId) => (await prisma.emergencyFundPlan.count({ where: { userId } })) > 0 || 'Guarda tu meta de fondo de emergencia',
+  9: async () => true,
+  10: async (userId) => (await prisma.taxAnalysisItem.count({ where: { userId } })) > 0 || 'Registra al menos un negocio o inversión',
+  11: async (userId) => (await prisma.inflationScenario.count({ where: { userId } })) > 0 || 'Guarda al menos un escenario de inflación',
+  12: async (userId) => (await prisma.annualReview.count({ where: { userId } })) > 0 || 'Guarda tu revisión patrimonial anual',
 };
 
 export async function saveProgress(req, number, { status, exercise, snapshot }) {

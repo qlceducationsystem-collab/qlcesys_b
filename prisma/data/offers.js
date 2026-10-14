@@ -5,6 +5,12 @@ const TOOL_NAMES = {
   4: 'Simulador de riesgo y exposición',
   5: 'Simulador de una operación',
   6: 'Simulador de operación profesional',
+  7: 'Presupuesto y control financiero',
+  8: 'Fondo de emergencia y liquidez',
+  9: 'Panel de obligaciones y costo del dinero',
+  10: 'Calculadora de rendimiento neto',
+  11: 'Simulador de poder adquisitivo',
+  12: 'Mi evolución patrimonial',
 };
 
 export const OFFERS = [

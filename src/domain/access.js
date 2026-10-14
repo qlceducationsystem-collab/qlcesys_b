@@ -1,5 +1,9 @@
 export const BLOCK1_MODULES = [1, 2, 3, 4, 5, 6];
+export const BLOCK2_MODULES = [7, 8, 9, 10, 11, 12];
+export const ACTIVE_MODULES = [...BLOCK1_MODULES, ...BLOCK2_MODULES];
 export const MARKET_MODULES = [4, 5, 6];
+
+export const prerequisiteOf = (moduleNumber) => (moduleNumber === 7 ? 3 : moduleNumber - 1);
 
 export const isGrantActive = (grant, now = new Date()) =>
   !!grant?.active &&
@@ -30,7 +34,7 @@ export function moduleState(moduleNumber, { access, completed = [], route = null
   if (isMarket && !filterPassed) return 'LOCKED_FILTER';
   if (!access.full) return 'AVAILABLE';
   if (moduleNumber === 4 && route !== 'MARKETS') return 'LOCKED_ROUTE';
-  if (moduleNumber > 1 && !done.has(moduleNumber - 1)) return 'LOCKED_ORDER';
+  if (moduleNumber > 1 && !done.has(prerequisiteOf(moduleNumber))) return 'LOCKED_ORDER';
   return 'AVAILABLE';
 }
 

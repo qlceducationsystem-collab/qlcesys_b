@@ -57,14 +57,26 @@ export const protectionSchema = z.object({
   notes: optText(),
 });
 
-export const debtSchema = z.object({
-  periodId: id,
+const DEBT_TYPES = ['TARJETA_CREDITO', 'PRESTAMO_PERSONAL', 'CREDITO_AUTOMOTRIZ', 'HIPOTECA', 'CREDITO_NOMINA', 'PRESTAMO_FAMILIAR', 'BNPL', 'DEUDA_NEGOCIO', 'IMPUESTOS', 'OTRA'];
+const blankToNull = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
+const nullableNumber = (min, max) => z.preprocess(blankToNull, z.number({ invalid_type_error: 'Debe ser un número' }).min(min).max(max).nullable());
+
+export const debtFields = z.object({
   name: text(),
   lender: optText(120),
-  annualRate: z.coerce.number().min(0).max(1000),
+  type: z.enum(DEBT_TYPES).default('OTRA'),
+  annualRate: nullableNumber(0, 1000),
   status: z.enum(['ACTIVE', 'PAID']).default('ACTIVE'),
   balance: money,
   payment: money,
+  fees: money.default(0),
+});
+
+export const debtSchema = debtFields.extend({ periodId: id });
+
+export const debtPaymentSchema = z.object({
+  amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
+  newBalance: nullableNumber(0, 1e12).optional(),
 });
 
 export const assetSchema = z.object({
@@ -232,3 +244,76 @@ export const analyticsEventSchema = z.object({
 });
 
 export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });
+
+const BUDGET_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'DEUDAS', 'OTROS', 'AHORRO', 'INVERSION'];
+const yearField = z.coerce.number().int().min(2000).max(2100);
+const monthField = z.coerce.number().int().min(1).max(12);
+
+export const monthQuery = z.object({ year: yearField, month: monthField });
+
+export const budgetSchema = z.object({
+  year: yearField,
+  month: monthField,
+  netIncome: money,
+  lines: z
+    .array(z.object({ category: z.enum(BUDGET_CATEGORIES), percent: z.coerce.number().min(0, 'No puede ser negativo').max(100) }))
+    .min(1)
+    .max(BUDGET_CATEGORIES.length)
+    .refine((lines) => new Set(lines.map((l) => l.category)).size === lines.length, 'Categorías repetidas'),
+});
+
+export const budgetActualSchema = z.object({
+  year: yearField,
+  month: monthField,
+  category: z.enum(BUDGET_CATEGORIES.filter((c) => c !== 'INVERSION')),
+  amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
+  description: text(),
+});
+
+export const emergencyPlanSchema = z.object({
+  targetMonths: z.coerce.number().int().min(1, 'La meta debe ser mayor que cero').max(60),
+  monthlyContribution: money,
+  declaredEssential: nullableNumber(0, 1e12).optional(),
+  useDeclared: z.boolean().default(false),
+});
+
+export const contributionSchema = z.object({
+  destination: z.enum(['FONDO_EMERGENCIA', 'AHORRO']).default('FONDO_EMERGENCIA'),
+  amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
+  description: text(),
+});
+
+const signedMoney = z.coerce.number({ invalid_type_error: 'Debe ser un número' }).min(-1e12).max(1e12);
+const optionalId = z.preprocess((v) => (v === '' || v === undefined ? null : v), id.nullable());
+
+export const taxItemSchema = z.object({
+  name: text(120),
+  type: z.enum(['NEGOCIO', 'INVERSION_FINANCIERA', 'BIEN_INMUEBLE', 'RENTA_ACTIVOS', 'PARTICIPACION_EMPRESA', 'CRIPTOACTIVOS', 'OTRA']),
+  period: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'PERSONALIZADO']),
+  capital: money,
+  grossProfit: signedMoney,
+  commissions: money,
+  otherCosts: money,
+  taxRate: z.coerce.number().min(0, 'Entre 0% y 100%').max(100, 'Entre 0% y 100%'),
+  sourceAssetId: optionalId,
+});
+
+const scenarioRate = z.coerce.number().gt(-100, 'Debe ser mayor que -100%').max(1000);
+
+export const scenarioSchema = z.object({
+  name: text(120),
+  type: z.enum(['AHORRO', 'INVERSION', 'META', 'EFECTIVO', 'OTRO']),
+  capital: money,
+  years: z.coerce.number().int('Usa años completos').min(0).max(100),
+  inflationRate: scenarioRate,
+  nominalRate: scenarioRate,
+  sourceAssetId: optionalId,
+  sourceGoalId: optionalId,
+});
+
+export const patrimonialGoalSchema = z.object({
+  name: optText(120),
+  targetAmount: z.coerce.number().positive('Debe ser mayor a 0').max(1e13),
+});
+
+export const reviewNoteSchema = z.object({ note: z.string().trim().max(5000) });

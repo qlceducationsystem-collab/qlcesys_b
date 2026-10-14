@@ -8,6 +8,7 @@ import { closePeriod, reopenPeriod } from '../services/close.service.js';
 import { getHistory } from '../services/history.service.js';
 import { logAdminChange } from '../services/audit.service.js';
 import { allocationFromPortfolio } from '../domain/learning.js';
+import { patrimonialOverview } from '../services/patrimonialOverview.service.js';
 
 const r = Router();
 
@@ -24,6 +25,11 @@ r.get('/history', validate(historyQuery, 'query'), ah(async (req, res) => res.js
 r.get('/:id/summary', ah(async (req, res) => {
   const { period, summary } = await periods.getPeriodSummary(req.subjectId, req.params.id);
   res.json({ period, summary, allocation: allocationFromPortfolio(summary.portfolio.products) });
+}));
+
+r.get('/:id/patrimonial', ah(async (req, res) => {
+  const { period, summary } = await periods.getPeriodSummary(req.subjectId, req.params.id);
+  res.json(await patrimonialOverview(req.subjectId, period, summary));
 }));
 
 r.patch('/:id/opening', validate(openingSchema), ah(async (req, res) => {

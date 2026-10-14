@@ -1,3 +1,4 @@
+import { debtEstimate } from '../../../shared/patrimonial.js';
 import { num, round2, sum } from '../utils/money.js';
 
 const RECONCILE_TOLERANCE = 0.005;
@@ -151,26 +152,33 @@ export function buildIndicators({ portfolio, cashflow, protection, debts, assets
 
 export function summarizeDebts(debts = []) {
   const items = debts.map((d) => {
-    const balance = round2(num(d.balance));
-    const rate = num(d.annualRate);
+    const estimate = debtEstimate({ balance: d.balance, annualRate: d.annualRate, payment: d.payment, fees: d.fees });
     return {
       id: d.id,
       balanceId: d.balanceId ?? null,
       name: d.name,
       lender: d.lender ?? null,
+      type: d.type ?? 'OTRA',
       status: d.status,
-      annualRate: rate,
-      balance,
-      payment: round2(num(d.payment)),
-
-      monthlyInterest: round2((balance * rate) / 100 / 12),
+      annualRate: estimate.annualRate,
+      rateKnown: estimate.rateKnown,
+      balance: round2(estimate.balance),
+      payment: round2(estimate.payment),
+      fees: round2(estimate.fees),
+      monthlyInterest: estimate.monthlyInterest === null ? null : round2(estimate.monthlyInterest),
+      monthlyCost: round2(estimate.monthlyCost),
+      principalContribution: round2(estimate.principalContribution),
+      paymentBelowCost: estimate.paymentBelowCost,
     };
   });
   return {
     items,
     totalBalance: sum(items, (d) => d.balance),
     totalPayment: sum(items, (d) => d.payment),
+    totalFees: sum(items, (d) => d.fees),
     totalMonthlyInterest: sum(items, (d) => d.monthlyInterest),
+    totalMonthlyCost: sum(items, (d) => d.monthlyCost),
+    ratesIncomplete: items.some((d) => !d.rateKnown),
   };
 }
 

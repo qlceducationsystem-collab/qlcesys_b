@@ -1,3 +1,5 @@
+import { BLOCK_2 } from './academyBlock2.js';
+
 const section = (title, ...paragraphs) => ({ title, paragraphs });
 
 const BLOCK_1 = [
@@ -223,14 +225,5 @@ const BLOCK_1 = [
     },
   },
 ];
-
-const BLOCK_2 = [
-  [7, 'Presupuesto y control financiero', 'Ingresos, gastos y distribución del dinero.'],
-  [8, 'Fondo de emergencia y liquidez', 'Reserva y liquidez para imprevistos.'],
-  [9, 'Deudas y costo del dinero', 'Obligaciones, intereses, costo financiero y capacidad de pago.'],
-  [10, 'Impuestos y costo real', 'Rendimiento bruto, comisiones, costos e impuestos aplicables.'],
-  [11, 'Inflación y poder adquisitivo', 'Crecimiento nominal, crecimiento real y pérdida de poder adquisitivo.'],
-  [12, 'Plan patrimonial anual', 'Integra todo el año y genera el Informe Patrimonial Anual.'],
-].map(([month, title, summary]) => ({ month, title, summary, content: { comingSoon: true } }));
 
 export const MODULES = [...BLOCK_1.map((m) => ({ ...m, block: 1 })), ...BLOCK_2.map((m) => ({ ...m, block: 2 }))];

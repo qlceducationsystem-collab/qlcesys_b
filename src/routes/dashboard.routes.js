@@ -6,6 +6,7 @@ import { getPeriodSummary, latestPeriod } from '../services/period.service.js';
 import { getHistory } from '../services/history.service.js';
 import { academyOverview } from '../services/academy.service.js';
 import { getDiagnosis } from '../services/moduleData.service.js';
+import { patrimonialOverview } from '../services/patrimonialOverview.service.js';
 
 const r = Router();
 
@@ -23,13 +24,15 @@ r.get('/', ah(async (req, res) => {
       orderBy: { scheduledAt: 'asc' },
     }),
   ]);
+  const patrimonial = await patrimonialOverview(userId, current?.period || null, current?.summary || null);
   res.json({
     period: current?.period || null,
+    patrimonial,
     summary: current?.summary || null,
     allocation: current ? allocationFromPortfolio(current.summary.portfolio.products) : null,
     history: history.slice(-12),
     diagnosis: diagnosis.result ? { result: diagnosis.result, profile: diagnosis.profile, savedAt: diagnosis.savedAt } : null,
-    academy: { progressPct: academy.progressPct, next: academy.next, route: academy.route, block1: academy.block1, mode: academy.access.mode },
+    academy: { progressPct: academy.progressPct, block2ProgressPct: academy.block2ProgressPct, next: academy.next, route: academy.route, block1: academy.block1, block2: academy.block2, mode: academy.access.mode },
     nextAppointment,
   });
 }));

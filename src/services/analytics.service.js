@@ -47,14 +47,15 @@ const countBy = (rows, pick) =>
 export async function platformMetrics({ days = 30 } = {}) {
   const since = new Date(Date.now() - days * DAY);
   const now = new Date();
-  const [totalUsers, newUsers, recentEvents, grants, progress, attempts, totalModules] = await Promise.all([
+  const [totalUsers, newUsers, recentEvents, grants, progress, attempts, totalModules, annualReviews] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.user.findMany({ where: { role: 'CLIENT', createdAt: { gte: since } }, select: { createdAt: true } }),
     prisma.analyticsEvent.findMany({ where: { createdAt: { gte: since } }, select: { event: true, createdAt: true, metadata: true, userId: true, sessionId: true } }),
     prisma.accessGrant.findMany({ where: { active: true, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, select: { userId: true, accessType: true } }),
-    prisma.moduleProgress.findMany({ where: { module: { block: 1 } }, select: { userId: true, status: true, module: { select: { month: true } } } }),
+    prisma.moduleProgress.findMany({ select: { userId: true, status: true, module: { select: { month: true, block: true } } } }),
     prisma.paymentAttempt.groupBy({ by: ['status'], _count: { _all: true } }),
-    prisma.academyModule.count({ where: { block: 1 } }),
+    prisma.academyModule.count(),
+    prisma.annualReview.count(),
   ]);
 
   const byEvent = (name) => recentEvents.filter((e) => e.event === name);
@@ -71,6 +72,15 @@ export async function platformMetrics({ days = 30 } = {}) {
     completed: progress.filter((p) => p.module.month === m && p.status === 'COMPLETED').length,
   }));
   const attemptsBy = Object.fromEntries(attempts.map((a) => [a.status, a._count._all]));
+  const block2Users = new Set(progress.filter((p) => p.module.block === 2).map((p) => p.userId));
+  const block2 = {
+    reached: block2Users.size,
+    annualReviews,
+    modules: modules.filter((m) => m.module >= 7).map((m) => ({
+      ...m,
+      completionPct: block2Users.size ? Math.round((m.completed / block2Users.size) * 100) : 0,
+    })),
+  };
 
   return {
     days,
@@ -78,6 +88,7 @@ export async function platformMetrics({ days = 30 } = {}) {
     logins: byEvent('LOGIN').length,
     registrations: byEvent('REGISTER').length,
     modules,
+    block2,
     learners: learners.size,
     averageProgress: avgProgress,
     payments: { approved: attemptsBy.APPROVED || 0, rejected: attemptsBy.REJECTED || 0, pending: attemptsBy.PENDING || 0 },

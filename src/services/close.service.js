@@ -2,6 +2,8 @@ import { prisma } from '../config/prisma.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { assertOpen, getPeriodSummary, latestClose } from './period.service.js';
 import { logAdminChange } from './audit.service.js';
+import { budgetSnapshot } from './budget.service.js';
+import { emergencySnapshot } from './emergency.service.js';
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 export const periodLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
@@ -14,7 +16,11 @@ export async function closePeriod(req, periodId) {
     if (!summary.reconciliation.reconciled) {
       throw badRequest('INFORMACIÓN NO CONCILIADA: corrige la diferencia antes de cerrar el periodo', summary.reconciliation);
     }
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+    const [user, budget, emergency] = await Promise.all([
+      tx.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+      budgetSnapshot(userId, period, tx),
+      emergencySnapshot(userId, period, summary, tx),
+    ]);
     const last = await tx.monthlyClose.findFirst({ where: { periodId }, orderBy: { revision: 'desc' } });
     const revision = (last?.revision || 0) + 1;
     const snapshot = {
@@ -23,6 +29,8 @@ export async function closePeriod(req, periodId) {
       revision,
       closedAt: new Date().toISOString(),
       ...summary,
+      budget,
+      emergency,
       movements: data.movements.map((m) => ({
         type: m.type, amount: Number(m.amount), date: m.date, description: m.description,
       })),

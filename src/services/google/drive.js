@@ -8,7 +8,7 @@ const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const ROOT_NAME = 'QLC Financial Education';
-const KIND_FOLDER = { VIDEO: 'Videos', DOCUMENT: 'Documentos' };
+const KIND_FOLDER = { VIDEO: 'Videos', DOCUMENT: 'Documentos', REPORT: 'Informes anuales' };
 
 async function driveFetch(url, init = {}) {
   const token = await getAccessToken('DRIVE');
@@ -53,7 +53,7 @@ export async function ensureFolder(kind, moduleNumber) {
   return id;
 }
 
-export async function uploadFile({ filePath, name, mimeType, size, kind, moduleNumber }) {
+async function resumableUpload({ name, mimeType, size, kind, moduleNumber, body }) {
   const parent = await ensureFolder(kind, moduleNumber);
   const session = await driveFetch(`${UPLOAD}?uploadType=resumable&fields=id,name,mimeType,size`, {
     method: 'POST',
@@ -64,10 +64,20 @@ export async function uploadFile({ filePath, name, mimeType, size, kind, moduleN
   const res = await driveFetch(location, {
     method: 'PUT',
     headers: { 'Content-Type': mimeType, 'Content-Length': String(size) },
-    body: Readable.toWeb(fs.createReadStream(filePath)),
+    body,
     duplex: 'half',
   });
   return res.json();
+}
+
+export const uploadFile = ({ filePath, size, ...meta }) =>
+  resumableUpload({ ...meta, size, body: Readable.toWeb(fs.createReadStream(filePath)) });
+
+export const uploadBuffer = ({ buffer, ...meta }) => resumableUpload({ ...meta, size: buffer.length, body: buffer });
+
+export async function driveConnected() {
+  const row = await prisma.googleIntegration.findUnique({ where: { service: 'DRIVE' } });
+  return row?.status === 'CONNECTED' && !!row.encryptedRefreshToken;
 }
 
 export async function streamFile(fileId, range, res) {

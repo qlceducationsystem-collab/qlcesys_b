@@ -177,6 +177,56 @@ enum EmailStatus {
   FAILED
 }
 
+enum DebtType {
+  TARJETA_CREDITO
+  PRESTAMO_PERSONAL
+  CREDITO_AUTOMOTRIZ
+  HIPOTECA
+  CREDITO_NOMINA
+  PRESTAMO_FAMILIAR
+  BNPL
+  DEUDA_NEGOCIO
+  IMPUESTOS
+  OTRA
+}
+
+enum SavingDestination {
+  FONDO_EMERGENCIA
+  AHORRO
+}
+
+enum TaxItemType {
+  NEGOCIO
+  INVERSION_FINANCIERA
+  BIEN_INMUEBLE
+  RENTA_ACTIVOS
+  PARTICIPACION_EMPRESA
+  CRIPTOACTIVOS
+  OTRA
+}
+
+enum ResultPeriod {
+  MENSUAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+  PERSONALIZADO
+}
+
+enum ScenarioType {
+  AHORRO
+  INVERSION
+  META
+  EFECTIVO
+  OTRO
+}
+
+enum GoalKind {
+  PATRIMONIO
+  AHORRO
+  OTRA
+}
+
 model User {
   id           String      @id @default(cuid())
   email        String      @unique
@@ -213,6 +263,14 @@ model User {
   paymentAttempts  PaymentAttempt[]
   accessGrants     AccessGrant[]
   analyticsEvents  AnalyticsEvent[]
+  budgets          Budget[]
+  emergencyPlan    EmergencyFundPlan?
+  contributions    SavingContribution[]
+  taxItems         TaxAnalysisItem[]
+  scenarios        InflationScenario[]
+  goals            Goal[]
+  annualReviews    AnnualReview[]
+  reviewNotes      AnnualReviewNote[]
 }
 
 model PasswordResetToken {
@@ -237,15 +295,15 @@ model WebhookEvent {
 }
 
 model FinancialPeriod {
-  id              String       @id @default(cuid())
+  id              String                @id @default(cuid())
   userId          String
   year            Int
   month           Int
-  status          PeriodStatus @default(OPEN)
-  openingNetWorth Decimal?     @db.Decimal(14, 2)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          PeriodStatus          @default(OPEN)
+  openingNetWorth Decimal?              @db.Decimal(14, 2)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   incomes         Income[]
   expenses        Expense[]
   protection      ProtectionRecord[]
@@ -254,23 +312,24 @@ model FinancialPeriod {
   movements       PatrimonialMovement[]
   businessFlows   BusinessFlow[]
   closes          MonthlyClose[]
+  contributions   SavingContribution[]
 
   @@unique([userId, year, month])
 }
 
 model FinancialProfile {
-  id                  String         @id @default(cuid())
-  userId              String         @unique
-  monthlyInvestment   Decimal        @db.Decimal(14, 2)
-  emergencyFund       Decimal        @db.Decimal(14, 2)
-  declaredCash        Decimal        @db.Decimal(14, 2)
-  declaredInvestments Decimal        @db.Decimal(14, 2)
-  declaredOtherAssets Decimal        @db.Decimal(14, 2)
+  id                  String        @id @default(cuid())
+  userId              String        @unique
+  monthlyInvestment   Decimal       @db.Decimal(14, 2)
+  emergencyFund       Decimal       @db.Decimal(14, 2)
+  declaredCash        Decimal       @db.Decimal(14, 2)
+  declaredInvestments Decimal       @db.Decimal(14, 2)
+  declaredOtherAssets Decimal       @db.Decimal(14, 2)
   riskTolerance       RiskTolerance
   mainGoal            FinancialGoal
-  diagnosedAt         DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diagnosedAt         DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Income {
@@ -329,7 +388,8 @@ model Debt {
   userId     String
   name       String
   lender     String?
-  annualRate Decimal       @db.Decimal(7, 4)
+  type       DebtType      @default(OTRA)
+  annualRate Decimal?      @db.Decimal(7, 4)
   status     DebtStatus    @default(ACTIVE)
   source     String?
   createdAt  DateTime      @default(now())
@@ -346,6 +406,7 @@ model DebtBalance {
   periodId  String
   balance   Decimal         @db.Decimal(14, 2)
   payment   Decimal         @db.Decimal(14, 2)
+  fees      Decimal         @default(0) @db.Decimal(14, 2)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   debt      Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
@@ -364,7 +425,7 @@ model AssetCategory {
 }
 
 model Asset {
-  id             String          @id @default(cuid())
+  id             String                @id @default(cuid())
   userId         String
   categoryId     String
   name           String
@@ -375,13 +436,15 @@ model Asset {
   liquidityLevel LiquidityLevel?
   perceivedRisk  PerceivedRisk?
   source         String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category       AssetCategory   @relation(fields: [categoryId], references: [id])
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category       AssetCategory         @relation(fields: [categoryId], references: [id])
   positions      AssetPosition[]
   movements      PatrimonialMovement[]
   flows          BusinessFlow[]
+  taxItems       TaxAnalysisItem[]
+  scenarios      InflationScenario[]
 
   @@index([userId])
   @@index([userId, source])
@@ -580,18 +643,18 @@ model PaymentAttempt {
 }
 
 model AccessGrant {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   userId           String
   offerId          String
-  paymentAttemptId String?        @unique
+  paymentAttemptId String?         @unique
   accessType       OfferType
   moduleNumber     Int?
   startsAt         DateTime
   expiresAt        DateTime?
-  active           Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  offer            ProductOffer   @relation(fields: [offerId], references: [id])
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer            ProductOffer    @relation(fields: [offerId], references: [id])
   paymentAttempt   PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id])
 
   @@index([userId, active])
@@ -695,6 +758,151 @@ model AnalyticsEvent {
 
   @@index([event, createdAt])
   @@index([createdAt])
+}
+
+model Budget {
+  id        String       @id @default(cuid())
+  userId    String
+  year      Int
+  month     Int
+  netIncome Decimal      @db.Decimal(14, 2)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines     BudgetLine[]
+
+  @@unique([userId, year, month])
+}
+
+model BudgetLine {
+  id       String  @id @default(cuid())
+  budgetId String
+  category String
+  percent  Decimal @db.Decimal(7, 4)
+  budget   Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, category])
+}
+
+model EmergencyFundPlan {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  targetMonths        Int
+  monthlyContribution Decimal  @db.Decimal(14, 2)
+  declaredEssential   Decimal? @db.Decimal(14, 2)
+  useDeclared         Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SavingContribution {
+  id          String            @id @default(cuid())
+  userId      String
+  periodId    String
+  destination SavingDestination
+  amount      Decimal           @db.Decimal(14, 2)
+  date        DateTime
+  description String
+  createdAt   DateTime          @default(now())
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period      FinancialPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodId])
+}
+
+model TaxAnalysisItem {
+  id            String       @id @default(cuid())
+  userId        String
+  name          String
+  type          TaxItemType
+  period        ResultPeriod
+  capital       Decimal      @db.Decimal(14, 2)
+  grossProfit   Decimal      @db.Decimal(14, 2)
+  commissions   Decimal      @db.Decimal(14, 2)
+  otherCosts    Decimal      @db.Decimal(14, 2)
+  taxRate       Decimal      @db.Decimal(7, 4)
+  sourceAssetId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAsset   Asset?       @relation(fields: [sourceAssetId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model InflationScenario {
+  id            String       @id @default(cuid())
+  userId        String
+  name          String
+  type          ScenarioType
+  capital       Decimal      @db.Decimal(14, 2)
+  years         Int
+  inflationRate Decimal      @db.Decimal(9, 4)
+  nominalRate   Decimal      @db.Decimal(9, 4)
+  sourceAssetId String?
+  sourceGoalId  String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAsset   Asset?       @relation(fields: [sourceAssetId], references: [id], onDelete: SetNull)
+  sourceGoal    Goal?        @relation(fields: [sourceGoalId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model Goal {
+  id           String              @id @default(cuid())
+  userId       String
+  kind         GoalKind
+  name         String
+  targetAmount Decimal             @db.Decimal(14, 2)
+  targetDate   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenarios    InflationScenario[]
+
+  @@index([userId, kind])
+}
+
+model AnnualReview {
+  id               String   @id @default(cuid())
+  userId           String
+  periodStart      DateTime @db.Date
+  periodEnd        DateTime @db.Date
+  generatedAt      DateTime @default(now())
+  complete         Boolean
+  initialAssets    Decimal? @db.Decimal(14, 2)
+  finalAssets      Decimal? @db.Decimal(14, 2)
+  initialDebts     Decimal? @db.Decimal(14, 2)
+  finalDebts       Decimal? @db.Decimal(14, 2)
+  initialNetWorth  Decimal? @db.Decimal(14, 2)
+  finalNetWorth    Decimal? @db.Decimal(14, 2)
+  variation        Decimal? @db.Decimal(14, 2)
+  variationPercent Decimal? @db.Decimal(12, 4)
+  goalAmount       Decimal? @db.Decimal(14, 2)
+  goalProgress     Decimal? @db.Decimal(12, 4)
+  snapshot         Json
+  driveFileId      String?
+  pdfName          String?
+  pdfMimeType      String?
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodEnd])
+}
+
+model AnnualReviewNote {
+  id          String   @id @default(cuid())
+  userId      String
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  note        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodEnd])
 }
 
 model Appointment {

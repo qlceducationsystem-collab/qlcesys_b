@@ -1,3 +1,4 @@
+import { PassThrough } from 'node:stream';
 import PDFDocument from 'pdfkit';
 
 export const C = { navy: '#0B1426', blue: '#2F6FED', gold: '#C9A54C', silver: '#8A94A6', text: '#1D2433', light: '#EEF1F6', green: '#1E8E5A', red: '#C0392B' };
@@ -8,8 +9,10 @@ export const date = (d) => new Date(d).toLocaleDateString('es-MX', { year: 'nume
 
 export function createDoc(res, filename, title, subtitle) {
   const doc = new PDFDocument({ size: 'LETTER', margin: 48, bufferPages: true, info: { Title: title, Author: 'QLC Financial Education' } });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  }
   doc.pipe(res);
 
   doc.rect(0, 0, doc.page.width, 90).fill(C.navy);
@@ -96,4 +99,21 @@ export function finish(doc) {
     doc.page.margins.bottom = bottom;
   }
   doc.end();
+}
+
+export function pdfBuffer(render) {
+  return new Promise((resolve, reject) => {
+    const stream = new PassThrough();
+    const chunks = [];
+    stream.on('data', (c) => chunks.push(c));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+    render(stream);
+  });
+}
+
+export function paragraph(doc, text, color = C.text) {
+  ensureSpace(doc, 24);
+  doc.fillColor(color).font('Helvetica').fontSize(9).text(text, 48, doc.y, { width: doc.page.width - 96, paragraphGap: 4 });
+  doc.fillColor(C.text);
 }

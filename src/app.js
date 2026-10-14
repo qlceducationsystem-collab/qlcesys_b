@@ -16,6 +16,7 @@ import debtRoutes from './routes/debt.routes.js';
 import closeRoutes from './routes/close.routes.js';
 import annualRoutes from './routes/annual.routes.js';
 import academyRoutes from './routes/academy.routes.js';
+import patrimonialRoutes from './routes/patrimonial.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import { googleRouter, mediaRouter, publicRouter } from './routes/public.routes.js';
 import { businessRouter } from './routes/business.routes.js';
@@ -47,6 +48,7 @@ export function createApp() {
   app.use('/api/payments', authenticate, paymentRoutes);
   app.use('/api/admin', authenticate, requireRole('ADMIN'), adminRoutes);
   app.use('/api/academy', ...subjectAccess, academyRoutes);
+  app.use('/api/academy', ...subjectAccess, patrimonialRoutes);
 
   const priv = (path, router) => app.use(path, ...privateAccess, router);
   priv('/api/dashboard', dashboardRoutes);

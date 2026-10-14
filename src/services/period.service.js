@@ -79,7 +79,7 @@ export async function loadPeriodData(userId, periodId, db = prisma) {
     incomes,
     expenses,
     protection,
-    debts: debtBalances.map((b) => ({ ...b.debt, balance: b.balance, payment: b.payment, balanceId: b.id })),
+    debts: debtBalances.map((b) => ({ ...b.debt, balance: b.balance, payment: b.payment, fees: b.fees, balanceId: b.id })),
     businessFlows: flows.map((f) => ({ ...f, name: f.asset.name })),
   };
 }

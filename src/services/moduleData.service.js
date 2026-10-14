@@ -29,7 +29,7 @@ async function upsertSourcedDebt(tx, { userId, periodId }, { balance, payment })
     if (debt && !(await tx.debtBalance.count({ where: { debtId: debt.id } }))) await tx.debt.delete({ where: { id: debt.id } });
     return;
   }
-  if (!debt) debt = await tx.debt.create({ data: { userId, name: 'Deudas totales (diagnóstico)', annualRate: 0, source: 'M1_DEBT' } });
+  if (!debt) debt = await tx.debt.create({ data: { userId, name: 'Deudas totales (diagnóstico)', annualRate: null, source: 'M1_DEBT' } });
   await tx.debtBalance.upsert({
     where: { debtId_periodId: { debtId: debt.id, periodId } },
     create: { debtId: debt.id, periodId, balance, payment },
