@@ -1,0 +1,475 @@
+// QLC Financial Education — modelo de datos
+// Regla: los valores derivados (ROI, resultados, patrimonio final, conciliación)
+// NO se almacenan; se calculan en src/domain/finance.js.
+// Excepción: MonthlyClose y AnnualReport guardan snapshots históricos inmutables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+}
+
+// Nivel administrativo: visualización, edición o administración completa.
+enum AdminLevel {
+  VIEW
+  EDIT
+  FULL
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  CANCELLED
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum IncomeCategory {
+  SALARIO
+  NEGOCIO
+  RENTAS
+  DIVIDENDOS
+  INTERESES
+  OTROS
+}
+
+enum ExpenseCategory {
+  VIVIENDA
+  ALIMENTACION
+  SERVICIOS
+  TRANSPORTE
+  SEGUROS
+  EDUCACION
+  ENTRETENIMIENTO
+  VIAJES
+  DEUDAS
+  OTROS
+}
+
+// Liquidez, fondo y reservas suman al patrimonio. Los seguros guardan la suma
+// asegurada como cobertura y NO se suman como activo.
+enum ProtectionType {
+  LIQUIDEZ
+  FONDO_EMERGENCIA
+  RESERVA
+  SEGURO_GASTOS_MEDICOS
+  SEGURO_VIDA
+  OTRO_SEGURO
+}
+
+enum DebtStatus {
+  ACTIVE
+  PAID
+}
+
+enum MovementType {
+  APORTACION
+  DEDUCCION
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentChannel {
+  VIDEOLLAMADA
+  LLAMADA
+  WHATSAPP
+  PRESENCIAL
+}
+
+enum ModuleStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role     @default(CLIENT)
+  adminLevel   AdminLevel?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscription   Subscription?
+  payments       Payment[]
+  resetTokens    PasswordResetToken[]
+  periods        FinancialPeriod[]
+  incomes        Income[]
+  expenses       Expense[]
+  protection     ProtectionRecord[]
+  debts          Debt[]
+  assets         Asset[]
+  businessFlows  BusinessFlow[]
+  movements      PatrimonialMovement[]
+  monthlyCloses  MonthlyClose[]          @relation("CloseOwner")
+  annualReports  AnnualReport[]
+  progress       ModuleProgress[]
+  appointments   Appointment[]
+  auditAsAdmin   AdminAuditLog[]         @relation("AuditAdmin")
+  auditAsClient  AdminAuditLog[]         @relation("AuditClient")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  userId           String             @unique
+  plan             String
+  amount           Decimal            @db.Decimal(14, 2)
+  currency         String
+  status           SubscriptionStatus @default(PENDING)
+  mpPreapprovalId  String?            @unique
+  mpPayerId        String?
+  initPoint        String?
+  startDate        DateTime?
+  activatedAt      DateTime?
+  nextBillingDate  DateTime?
+  cancelledAt      DateTime?
+  lastPaymentAt    DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments         Payment[]
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  mpPaymentId    String        @unique
+  amount         Decimal       @db.Decimal(14, 2)
+  currency       String
+  status         PaymentStatus
+  mpStatus       String?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+}
+
+// Registro de notificaciones procesadas (idempotencia de webhooks)
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventKey    String   @unique
+  topic       String
+  resourceId  String
+  processedAt DateTime @default(now())
+}
+
+model FinancialPeriod {
+  id              String       @id @default(cuid())
+  userId          String
+  year            Int
+  month           Int
+  status          PeriodStatus @default(OPEN)
+  // Solo se usa en el primer periodo del usuario; los siguientes toman
+  // el patrimonio final del corte anterior.
+  openingNetWorth Decimal?     @db.Decimal(14, 2)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomes         Income[]
+  expenses        Expense[]
+  protection      ProtectionRecord[]
+  debtBalances    DebtBalance[]
+  positions       AssetPosition[]
+  movements       PatrimonialMovement[]
+  businessFlows   BusinessFlow[]
+  closes          MonthlyClose[]
+
+  @@unique([userId, year, month])
+}
+
+model Income {
+  id          String          @id @default(cuid())
+  userId      String
+  periodId    String
+  category    IncomeCategory
+  description String
+  amount      Decimal         @db.Decimal(14, 2)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period      FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodId])
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  userId      String
+  periodId    String
+  category    ExpenseCategory
+  description String
+  amount      Decimal         @db.Decimal(14, 2)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period      FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodId])
+}
+
+model ProtectionRecord {
+  id        String          @id @default(cuid())
+  userId    String
+  periodId  String
+  type      ProtectionType
+  name      String
+  amount    Decimal         @db.Decimal(14, 2)
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodId])
+}
+
+// Obligación financiera (dato maestro). Saldo y pago por periodo en DebtBalance.
+model Debt {
+  id           String        @id @default(cuid())
+  userId       String
+  name         String
+  lender       String?
+  annualRate   Decimal       @db.Decimal(7, 4)
+  status       DebtStatus    @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balances     DebtBalance[]
+
+  @@index([userId])
+}
+
+model DebtBalance {
+  id         String          @id @default(cuid())
+  debtId     String
+  periodId   String
+  balance    Decimal         @db.Decimal(14, 2)
+  payment    Decimal         @db.Decimal(14, 2)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  debt       Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  period     FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@unique([debtId, periodId])
+}
+
+model AssetCategory {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  riskLevel Int
+  sortOrder Int
+  assets    Asset[]
+}
+
+// Producto de inversión (dato maestro). Capitales por periodo en AssetPosition.
+model Asset {
+  id          String          @id @default(cuid())
+  userId      String
+  categoryId  String
+  name        String
+  institution String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    AssetCategory   @relation(fields: [categoryId], references: [id])
+  positions   AssetPosition[]
+  movements   PatrimonialMovement[]
+  flows       BusinessFlow[]
+
+  @@index([userId])
+}
+
+model AssetPosition {
+  id             String          @id @default(cuid())
+  assetId        String
+  periodId       String
+  initialCapital Decimal         @db.Decimal(14, 2)
+  finalCapital   Decimal         @db.Decimal(14, 2)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  period         FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, periodId])
+}
+
+model PatrimonialMovement {
+  id          String          @id @default(cuid())
+  userId      String
+  periodId    String
+  assetId     String?
+  type        MovementType
+  amount      Decimal         @db.Decimal(14, 2)
+  date        DateTime
+  description String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period      FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([userId, periodId])
+}
+
+// Flujo operativo mensual de un negocio registrado en Mi cartera (categoría NEGOCIOS).
+// Independiente del flujo personal (Ingresos y gastos) para no duplicarlo.
+model BusinessFlow {
+  id        String          @id @default(cuid())
+  userId    String
+  periodId  String
+  assetId   String
+  revenue   Decimal         @db.Decimal(14, 2)
+  costs     Decimal         @db.Decimal(14, 2)
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  asset     Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, periodId])
+  @@index([userId, periodId])
+}
+
+// Snapshot histórico inmutable de un periodo cerrado. Cada reapertura/corrección
+// genera una nueva revisión; las anteriores se conservan.
+model MonthlyClose {
+  id            String          @id @default(cuid())
+  userId        String
+  periodId      String
+  revision      Int             @default(1)
+  year          Int
+  month         Int
+  snapshot      Json
+  closedById    String
+  closedAt      DateTime        @default(now())
+  supersededAt  DateTime?
+  user          User            @relation("CloseOwner", fields: [userId], references: [id], onDelete: Cascade)
+  period        FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, revision])
+  @@index([userId, year])
+}
+
+model AnnualReport {
+  id          String   @id @default(cuid())
+  userId      String
+  year        Int
+  snapshot    Json
+  generatedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+}
+
+model AcademyModule {
+  id        String           @id @default(cuid())
+  month     Int              @unique
+  block     Int
+  title     String
+  summary   String
+  content   Json
+  progress  ModuleProgress[]
+}
+
+model ModuleProgress {
+  id          String        @id @default(cuid())
+  userId      String
+  moduleId    String
+  status      ModuleStatus  @default(IN_PROGRESS)
+  exercise    String?
+  toolData    Json?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module      AcademyModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+}
+
+model Appointment {
+  id          String             @id @default(cuid())
+  userId      String
+  reason      String
+  scheduledAt DateTime
+  durationMin Int                @default(60)
+  channel     AppointmentChannel
+  status      AppointmentStatus  @default(PENDING)
+  notes       String?
+  adminNotes  String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([scheduledAt])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  clientId  String
+  module    String
+  action    String
+  entityId  String?
+  field     String?
+  oldValue  String?
+  newValue  String?
+  reason    String?
+  createdAt DateTime @default(now())
+  admin     User     @relation("AuditAdmin", fields: [adminId], references: [id])
+  client    User     @relation("AuditClient", fields: [clientId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([adminId])
+}

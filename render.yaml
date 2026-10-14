@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: qlc-backend
+    runtime: node
+    plan: starter
+    buildCommand: npm run render:build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: PLAN_NAME
+        value: QLC Financial Education - Membresía mensual
+      - key: PLAN_AMOUNT
+        sync: false
+      - key: PLAN_CURRENCY
+        value: MXN
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADOPAGO_PUBLIC_KEY
+        sync: false
+      - key: MERCADOPAGO_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
