@@ -31,7 +31,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
   };
 
   async function register(key) {
-    const res = await request(app).post('/api/auth/register').send({ name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
     assert.equal(res.status, 201);
     assert.equal(res.body.status, 'SETUP_2FA');
     tokens[key] = (await completeTwoFactor(app, res.body.challengeToken)).token;

@@ -31,11 +31,11 @@ async function startSession(user, sessionId, event) {
 
 const setupChallenge = (user) => ({ status: 'SETUP_2FA', challengeToken: signChallenge(user), user: publicUser(user) });
 
-export async function register({ name, email, password, phone }, { sessionId } = {}) {
+export async function register({ name, email, password, phone, legalVersion }, { sessionId } = {}) {
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) throw conflict('Ya existe una cuenta con ese correo');
   const user = await prisma.user.create({
-    data: { name, email, phone, role: 'CLIENT', passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
+    data: { name, email, phone, role: 'CLIENT', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
   await track('REGISTER', { userId: user.id, sessionId });
   sendEmail('welcome', user.email, { name: user.name });

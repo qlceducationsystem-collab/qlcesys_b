@@ -51,7 +51,9 @@ run('Verificación en dos pasos (integración)', () => {
   after(async () => prisma?.$disconnect());
 
   test('el registro exige configurar 2FA antes de dar acceso', async () => {
-    const res = await request(app).post('/api/auth/register').send({ name: 'Cliente 2FA', email, password: 'Password123!' });
+    const noLegal = await request(app).post('/api/auth/register').send({ name: 'Sin aceptar', email: 'legal-' + email, password: 'Password123!' });
+    assert.equal(noLegal.status, 400);
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: 'Cliente 2FA', email, password: 'Password123!' });
     assert.equal(res.status, 201);
     assert.equal(res.body.status, 'SETUP_2FA');
     assert.equal(res.body.token, undefined);
@@ -65,6 +67,7 @@ run('Verificación en dos pasos (integración)', () => {
     const done = await completeTwoFactor(app, again.body.challengeToken);
     assert.equal(done.activated.body.status, 'OK');
     assert.equal(done.activated.body.user.twoFactorEnabled, true);
+    assert.ok((await prisma.user.findUnique({ where: { email } })).legalAcceptedAt);
     state.secret = done.secret;
     const stored = await prisma.user.findUnique({ where: { email } });
     assert.notEqual(stored.totpSecret, done.secret);
@@ -91,7 +94,7 @@ run('Verificación en dos pasos (integración)', () => {
     assert.equal((await request(app).post('/api/auth/login').send({ email, password: 'NuevaClave123!' })).body.status, 'OK');
     for (let i = 0; i < 5; i += 1) await request(app).post('/api/auth/login/2fa').send({ email, code: '000000' });
     assert.equal((await request(app).post('/api/auth/login/2fa').send({ email, code: nextCode(state.secret, -1) })).status, 429);
-    const noTwoFactor = await request(app).post('/api/auth/register').send({ name: 'Sin 2FA', email: `no-${email}`, password: 'Password123!' });
+    const noTwoFactor = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: 'Sin 2FA', email: `no-${email}`, password: 'Password123!' });
     assert.equal(noTwoFactor.status, 201);
     assert.equal((await request(app).post('/api/auth/reset-password').send({ email: `no-${email}`, code: '123456', password: 'Otra12345!' })).status, 401);
   });

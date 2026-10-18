@@ -10,6 +10,8 @@ export const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
   password: z.string().min(8, 'Mínimo 8 caracteres').max(128),
   phone: z.string().trim().max(30).optional(),
+  acceptLegal: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar los Términos y el Aviso de privacidad' }) }),
+  legalVersion: z.string().trim().min(1).max(20),
 });
 
 export const loginSchema = z.object({

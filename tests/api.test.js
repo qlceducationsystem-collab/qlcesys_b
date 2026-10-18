@@ -27,7 +27,7 @@ run('API (integración)', () => {
   };
 
   async function register(key) {
-    const res = await request(app).post('/api/auth/register').send({ name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!', role: 'ADMIN' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!', role: 'ADMIN' });
     assert.equal(res.status, 201);
     assert.equal(res.body.user.role, 'CLIENT');
     assert.equal(res.body.status, 'SETUP_2FA');

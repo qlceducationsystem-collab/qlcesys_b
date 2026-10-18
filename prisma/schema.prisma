@@ -243,6 +243,8 @@ model User {
   totpLastStep       Int?
   totpFailedAttempts Int         @default(0)
   totpLockedUntil    DateTime?
+  legalAcceptedAt    DateTime?
+  legalVersion       String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
