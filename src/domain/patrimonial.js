@@ -1,7 +1,7 @@
-import { compareMonth, netWorthChange, percentOf, sameMonth, shiftMonth } from '../../../shared/patrimonial.js';
+import { compareMonth, netWorthChange, percentOf, sameMonth, shiftMonth } from '../shared/patrimonial.js';
 import { num } from '../utils/money.js';
 
-export * from '../../../shared/patrimonial.js';
+export * from '../shared/patrimonial.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 export const monthLabel = ({ year, month }) => `${MONTHS[month - 1]} ${year}`;

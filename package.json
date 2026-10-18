@@ -18,7 +18,8 @@
     "prisma:status": "prisma migrate status",
     "prisma:studio": "prisma studio",
     "seed": "node --env-file-if-exists=.env prisma/seed.js",
-    "render:build": "npm ci && prisma generate && prisma migrate deploy && node prisma/seed.js"
+    "render:build": "npm ci && prisma generate && prisma migrate deploy && node prisma/seed.js",
+    "sync:shared": "node scripts/syncShared.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

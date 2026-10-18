@@ -1,4 +1,4 @@
-import { debtEstimate } from '../../../shared/patrimonial.js';
+import { debtEstimate } from '../shared/patrimonial.js';
 import { num, round2, sum } from '../utils/money.js';
 
 const RECONCILE_TOLERANCE = 0.005;
