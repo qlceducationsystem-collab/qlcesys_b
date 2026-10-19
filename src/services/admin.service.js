@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/prisma.js';
-import { grantWindow, summarizeAccess } from '../domain/access.js';
+import { grantWindow, renewalBase, summarizeAccess } from '../domain/access.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { publicUser, SALT_ROUNDS } from './auth.service.js';
 import { logAdminChange, logSystemChange } from './audit.service.js';
@@ -46,8 +46,8 @@ export async function grantAccess(req, clientId, { offerCode, reason }) {
   await getClient(clientId);
   const offer = await prisma.productOffer.findUnique({ where: { code: offerCode } });
   if (!offer) throw notFound('Oferta no encontrada');
-  const current = summarizeAccess(await prisma.accessGrant.findMany({ where: { userId: clientId, active: true } }));
-  const { startsAt, expiresAt } = grantWindow(offer, current.full?.expiresAt || null);
+  const grants = await prisma.accessGrant.findMany({ where: { userId: clientId, active: true } });
+  const { startsAt, expiresAt } = grantWindow(offer, renewalBase(grants, offer));
   const grant = await prisma.accessGrant.create({
     data: { userId: clientId, offerId: offer.id, accessType: offer.type, moduleNumber: offer.moduleNumber, startsAt, expiresAt },
   });
@@ -108,7 +108,7 @@ export async function setAdminLevel(req, adminId, { adminLevel, reason }) {
 export async function updateOffer(adminId, code, data) {
   const before = await prisma.productOffer.findUnique({ where: { code } });
   if (!before) throw notFound('Oferta no encontrada');
-  const payload = { ...data, accessDays: before.type === 'FULL_ANNUAL' ? data.accessDays ?? before.accessDays : null };
+  const payload = { ...data, accessDays: data.accessDays ?? before.accessDays };
   const updated = await prisma.productOffer.update({ where: { code }, data: payload });
   await logSystemChange(adminId, { module: 'PRECIOS', action: 'UPDATE', entityId: code, before: publicOffer(before), after: publicOffer(updated) });
   return publicOffer(updated);

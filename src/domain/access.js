@@ -14,10 +14,16 @@ export function summarizeAccess(grants = [], now = new Date()) {
   const active = grants.filter((g) => isGrantActive(g, now));
   const fullGrants = active.filter((g) => g.accessType === 'FULL_ANNUAL');
   const fullExpiry = fullGrants.reduce((max, g) => (!max || new Date(g.expiresAt) > max ? new Date(g.expiresAt) : max), null);
-  const tools = [...new Set(active.filter((g) => g.accessType === 'TOOL_ONLY').map((g) => g.moduleNumber))].sort((a, b) => a - b);
+  const toolGrants = active.filter((g) => g.accessType === 'TOOL_ONLY');
+  const tools = [...new Set(toolGrants.map((g) => g.moduleNumber))].sort((a, b) => a - b);
+  const toolExpiry = (n) => {
+    const list = toolGrants.filter((g) => g.moduleNumber === n);
+    return list.some((g) => !g.expiresAt) ? null : latestDate(list.map((g) => g.expiresAt));
+  };
   return {
     full: fullGrants.length ? { active: true, expiresAt: fullExpiry } : null,
     tools,
+    toolAccess: tools.map((n) => ({ moduleNumber: n, expiresAt: toolExpiry(n) })),
     hasAny: active.length > 0,
     mode: fullGrants.length ? 'FULL' : tools.length ? 'TOOLS' : 'NONE',
   };
@@ -42,9 +48,20 @@ export const isModuleOpen = (state) => state === 'AVAILABLE' || state === 'COMPL
 
 export const canChooseRoute = (access, completed = []) => !access.full ? access.hasAny : completed.includes(3);
 
-export function grantWindow(offer, existingFullExpiry, now = new Date()) {
-  if (offer.type !== 'FULL_ANNUAL') return { startsAt: now, expiresAt: null };
-  const startsAt = existingFullExpiry && existingFullExpiry > now ? existingFullExpiry : now;
-  const days = offer.accessDays || 365;
+export const DEFAULT_ACCESS_DAYS = { FULL_ANNUAL: 365, TOOL_ONLY: 30 };
+
+function latestDate(dates) {
+  return dates.filter(Boolean).map((d) => new Date(d)).reduce((max, d) => (!max || d > max ? d : max), null);
+}
+
+export function renewalBase(grants, offer, now = new Date()) {
+  const same = grants.filter((g) => g.active && g.accessType === offer.type && (offer.type !== 'TOOL_ONLY' || g.moduleNumber === offer.moduleNumber));
+  const latest = latestDate(same.map((g) => g.expiresAt));
+  return latest && latest > now ? latest : null;
+}
+
+export function grantWindow(offer, existingExpiry, now = new Date()) {
+  const startsAt = existingExpiry && existingExpiry > now ? existingExpiry : now;
+  const days = offer.accessDays || DEFAULT_ACCESS_DAYS[offer.type] || 30;
   return { startsAt, expiresAt: new Date(startsAt.getTime() + days * 86400000) };
 }

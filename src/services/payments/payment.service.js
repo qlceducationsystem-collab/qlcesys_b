@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma.js';
-import { grantWindow, summarizeAccess } from '../../domain/access.js';
+import { grantWindow, renewalBase, summarizeAccess } from '../../domain/access.js';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { track } from '../analytics.service.js';
 import { loadGrants } from '../access.service.js';
@@ -20,7 +20,8 @@ export async function createCheckout(user, offerCode) {
   const offer = await prisma.productOffer.findUnique({ where: { code: offerCode } });
   if (!offer || !offer.active) throw notFound('Esta opción de acceso no está disponible');
   const access = summarizeAccess(await loadGrants(user.id));
-  if (offer.type === 'TOOL_ONLY' && (access.full || access.tools.includes(offer.moduleNumber))) {
+  const permanentTool = access.toolAccess.some((t) => t.moduleNumber === offer.moduleNumber && !t.expiresAt);
+  if (offer.type === 'TOOL_ONLY' && (access.full || permanentTool)) {
     throw conflict('Ya tienes acceso a esta herramienta');
   }
   const provider = activeProvider();
@@ -44,8 +45,8 @@ export async function resolveAttempt(attemptId, status, db = prisma) {
     });
     if (!updated.count) return { attempt: attemptView(attempt), changed: false };
     if (status === 'APPROVED') {
-      const access = summarizeAccess(await loadGrants(attempt.userId, tx));
-      const { startsAt, expiresAt } = grantWindow(attempt.offer, access.full?.expiresAt || null);
+      const grants = await tx.accessGrant.findMany({ where: { userId: attempt.userId, active: true } });
+      const { startsAt, expiresAt } = grantWindow(attempt.offer, renewalBase(grants, attempt.offer));
       await tx.accessGrant.create({
         data: {
           userId: attempt.userId,

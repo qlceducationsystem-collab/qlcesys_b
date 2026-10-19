@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canChooseRoute, grantWindow, moduleState, summarizeAccess } from '../src/domain/access.js';
+import { canChooseRoute, grantWindow, moduleState, renewalBase, summarizeAccess } from '../src/domain/access.js';
 
 const now = new Date('2026-10-14T12:00:00Z');
 const day = 86400000;
@@ -44,5 +44,19 @@ test('Ventana del acceso anual: renovación se suma al vencimiento vigente', () 
   assert.equal(w.expiresAt - w.startsAt, 365 * day);
   const renewal = grantWindow(offer, new Date(+now + 10 * day), now);
   assert.equal(+renewal.startsAt, +now + 10 * day);
-  assert.equal(grantWindow({ type: 'TOOL_ONLY' }, null, now).expiresAt, null);
+  const monthly = grantWindow({ type: 'TOOL_ONLY', accessDays: 30 }, null, now);
+  assert.equal(monthly.expiresAt - monthly.startsAt, 30 * day);
+});
+
+test('Herramientas mensuales: vencen a los 30 días y la renovación se suma por módulo', () => {
+  const tool7 = { type: 'TOOL_ONLY', moduleNumber: 7, accessDays: 30 };
+  const grants = [
+    { active: true, accessType: 'TOOL_ONLY', moduleNumber: 7, startsAt: now, expiresAt: new Date(+now + 12 * day) },
+    { active: true, accessType: 'TOOL_ONLY', moduleNumber: 8, startsAt: now, expiresAt: new Date(+now + 25 * day) },
+  ];
+  assert.equal(+renewalBase(grants, tool7, now), +now + 12 * day);
+  assert.equal(renewalBase(grants, { ...tool7, moduleNumber: 9 }, now), null);
+  const later = new Date(+now + 31 * day);
+  assert.equal(summarizeAccess(grants, later).tools.length, 0);
+  assert.deepEqual(summarizeAccess(grants, now).toolAccess.map((t) => t.moduleNumber), [7, 8]);
 });

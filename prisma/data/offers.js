@@ -26,10 +26,10 @@ export const OFFERS = [
   ...Object.entries(TOOL_NAMES).map(([n, name]) => ({
     code: `TOOL_M${n}`,
     name: `Herramienta M${n} · ${name}`,
-    description: `Pago único por la herramienta del Módulo ${n}.`,
+    description: `Suscripción mensual a la herramienta del Módulo ${n}.`,
     type: 'TOOL_ONLY',
     moduleNumber: Number(n),
-    accessDays: null,
+    accessDays: 30,
     sortOrder: Number(n),
   })),
 ];

@@ -301,4 +301,13 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(metrics.modules.length, 12);
     assert.ok(metrics.block2.annualReviews >= 1);
   });
+
+  test('Herramienta mensual: dura 30 días y la renovación se suma al vencimiento', async () => {
+    const first = await prisma.accessGrant.findFirst({ where: { userId: ids.tool7, moduleNumber: 7 } });
+    assert.equal(Math.round((first.expiresAt - first.startsAt) / 86400000), 30);
+    await buy('tool7', 'TOOL_M7');
+    const grants = await prisma.accessGrant.findMany({ where: { userId: ids.tool7, moduleNumber: 7 }, orderBy: { createdAt: 'asc' } });
+    assert.equal(grants.length, 2);
+    assert.equal(+grants[1].startsAt, +grants[0].expiresAt);
+  });
 });
