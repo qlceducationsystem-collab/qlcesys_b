@@ -63,7 +63,7 @@ export async function resolveAttempt(attemptId, status, db = prisma) {
     await track(`${prefix}PAYMENT_${status}`, {
       userId: attempt.userId,
       metadata: { offer: attempt.offer.code, accessType: attempt.offer.type, source: attempt.provider },
-    }, tx);
+    });
     return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true };
   });
 }

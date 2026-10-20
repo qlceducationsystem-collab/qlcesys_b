@@ -6,7 +6,7 @@ import { validate } from '../middlewares/validate.js';
 import { optionalAuth } from '../middlewares/auth.js';
 import { analyticsEventSchema, leadSchema } from '../validations/schemas.js';
 import { createLead } from '../services/lead.service.js';
-import { publicContent } from '../services/publicContent.service.js';
+import { cachedActiveOffers } from '../services/access.service.js';
 import { PUBLIC_EVENTS, track } from '../services/analytics.service.js';
 import { handleCallback } from '../services/google/oauth.js';
 import { streamWithToken } from '../services/moduleMedia.service.js';
@@ -21,9 +21,9 @@ const leadsLimiter = rateLimit({ windowMs: 60 * 60000, limit: 8, standardHeaders
 
 publicRouter.post('/leads', leadsLimiter, validate(leadSchema), ah(async (req, res) => res.status(201).json(await createLead(req.body))));
 
-publicRouter.get('/content', ah(async (_req, res) => {
-  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-  res.json(await publicContent());
+publicRouter.get('/offers', ah(async (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=3600');
+  res.json({ offers: await cachedActiveOffers() });
 }));
 
 publicRouter.post('/events', eventsLimiter, optionalAuth, validate(analyticsEventSchema), ah(async (req, res) => {

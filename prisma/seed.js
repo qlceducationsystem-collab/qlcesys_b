@@ -3,7 +3,6 @@ import { PrismaClient } from '@prisma/client';
 import { CATEGORIES } from './data/categories.js';
 import { MODULES } from './data/academy.js';
 import { OFFERS } from './data/offers.js';
-import { PUBLIC_SECTIONS } from './data/publicSections.js';
 
 const prisma = new PrismaClient();
 
@@ -19,9 +18,6 @@ async function seedCatalogs() {
 async function seedEditableContent() {
   for (const offer of OFFERS) {
     await prisma.productOffer.upsert({ where: { code: offer.code }, create: offer, update: {} });
-  }
-  for (const [position, section] of PUBLIC_SECTIONS.entries()) {
-    await prisma.publicSection.upsert({ where: { key: section.key }, create: { ...section, position }, update: {} });
   }
 }
 
@@ -43,7 +39,7 @@ async function main() {
   await seedCatalogs();
   await seedEditableContent();
   for (const prefix of ADMIN_ACCOUNTS) await seedAdmin(prefix);
-  console.info(`[seed] ${CATEGORIES.length} categorías, ${MODULES.length} módulos, ${OFFERS.length} ofertas y ${PUBLIC_SECTIONS.length} secciones sincronizadas`);
+  console.info(`[seed] ${CATEGORIES.length} categorías, ${MODULES.length} módulos, ${OFFERS.length} ofertas sincronizadas`);
 }
 
 main()

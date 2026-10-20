@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ah } from '../utils/asyncHandler.js';
 import { validate } from '../middlewares/validate.js';
 import { requireRole } from '../middlewares/auth.js';
-import { getAccess, listOffers } from '../services/access.service.js';
+import { cachedActiveOffers, getAccess } from '../services/access.service.js';
 import * as payments from '../services/payments/payment.service.js';
 import { activeProvider } from '../services/payments/providers.js';
 
@@ -12,7 +12,7 @@ const checkoutSchema = z.object({ offerCode: z.string().trim().min(1).max(40) })
 const resolveSchema = z.object({ outcome: z.enum(['APPROVED', 'REJECTED']) });
 
 r.get('/access', ah(async (req, res) => {
-  const [access, offers] = await Promise.all([getAccess(req.user.id), listOffers()]);
+  const [access, offers] = await Promise.all([getAccess(req.user.id), cachedActiveOffers()]);
   res.json({ access, offers, provider: activeProvider().code });
 }));
 

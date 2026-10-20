@@ -172,14 +172,17 @@ run('API (integración)', () => {
     assert.equal((await api('tools').get('/api/dashboard')).status, 200);
   });
 
-  test('Precios y contenido público administrables; precio nulo se mantiene como por definir', async () => {
+  test('Precios administrables con caché pública; precio nulo se mantiene como por definir', async () => {
     assert.equal((await api('edit').put('/api/admin/pricing/TOOL_M1', { name: 'x', price: 10, currency: 'MXN', active: true })).status, 403);
     const upd = await api('full').put('/api/admin/pricing/TOOL_M1', { name: 'Herramienta M1', price: null, currency: 'MXN', active: true });
     assert.equal(upd.status, 200);
     assert.equal(upd.body.price, null);
-    const content = await request(app).get('/api/public/content');
-    assert.equal(content.status, 200);
-    assert.ok(content.body.sections.length >= 1);
-    assert.ok(content.body.offers.every((o) => o.price === null || typeof o.price === 'number'));
+    const first = await request(app).get('/api/public/offers');
+    assert.equal(first.status, 200);
+    assert.equal(first.body.offers.find((o) => o.code === 'TOOL_M1').price, null);
+    await api('full').put('/api/admin/pricing/TOOL_M1', { name: 'Herramienta M1', price: 490, currency: 'MXN', active: true });
+    const refreshed = await request(app).get('/api/public/offers');
+    assert.equal(refreshed.body.offers.find((o) => o.code === 'TOOL_M1').price, 490);
+    assert.match(refreshed.headers['cache-control'], /max-age=600/);
   });
 });

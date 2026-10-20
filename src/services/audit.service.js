@@ -20,12 +20,3 @@ export async function logSystemChange(adminId, { module, action, entityId, befor
   const rows = auditRows({ adminId, clientId: null, module, action, entityId: entityId || null, reason: reason || null }, action, before, after);
   if (rows.length) await db.adminAuditLog.createMany({ data: rows });
 }
-
-export const logPublicChange = (adminId, key, before, after) =>
-  logSystemChange(adminId, {
-    module: 'CONTENIDO_PUBLICO',
-    action: 'UPDATE',
-    entityId: key,
-    before: { ...before, image: undefined, updatedAt: undefined },
-    after: { ...after, image: undefined, updatedAt: undefined },
-  });

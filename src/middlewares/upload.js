@@ -18,7 +18,6 @@ export const FILE_KINDS = { IMAGE: IMAGE_TYPES, VIDEO: VIDEO_TYPES, DOCUMENT: DO
 
 const filter = (allowed) => (_req, file, cb) => (allowed.includes(file.mimetype) ? cb(null, true) : cb(badRequest('Tipo de archivo no permitido')));
 
-export const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: filter(IMAGE_TYPES) }).single('file');
 
 export const moduleFileUpload = multer({
   storage: multer.diskStorage({ destination: os.tmpdir() }),

@@ -23,6 +23,25 @@ export const publicOffer = (o) => ({
   active: o.active,
 });
 
+const OFFERS_TTL_MS = 12 * 60 * 60 * 1000;
+let offersCache = { data: null, at: 0 };
+
+export const invalidateOffersCache = () => {
+  offersCache = { data: null, at: 0 };
+};
+
+export async function cachedActiveOffers() {
+  if (offersCache.data && Date.now() - offersCache.at < OFFERS_TTL_MS) return offersCache.data;
+  try {
+    const data = await listOffers();
+    offersCache = { data, at: Date.now() };
+    return data;
+  } catch (err) {
+    if (offersCache.data) return offersCache.data;
+    throw err;
+  }
+}
+
 export const listOffers = async ({ includeInactive = false } = {}) =>
   (await prisma.productOffer.findMany({
     where: includeInactive ? {} : { active: true },

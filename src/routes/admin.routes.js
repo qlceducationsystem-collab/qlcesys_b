@@ -6,13 +6,12 @@ import { ah } from '../utils/asyncHandler.js';
 import { notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { requireAdminLevel } from '../middlewares/auth.js';
-import { imageUpload, moduleFileUpload } from '../middlewares/upload.js';
+import { moduleFileUpload } from '../middlewares/upload.js';
 import {
   adminLevelSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
-  leadQuery, leadUpdateSchema, offerUpdateSchema, publicSectionSchema, reasonSchema, reorderSchema,
+  leadQuery, leadUpdateSchema, offerUpdateSchema, reasonSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
-import * as cms from '../services/publicContent.service.js';
 import * as media from '../services/moduleMedia.service.js';
 import * as google from '../services/google/oauth.js';
 import { listOffers } from '../services/access.service.js';
@@ -74,11 +73,6 @@ r.get('/pricing', ah(async (_req, res) => res.json(await listOffers({ includeIna
 r.put('/pricing/:code', FULL, validate(offerUpdateSchema), ah(async (req, res) => res.json(await admin.updateOffer(req.user.id, req.params.code, req.body))));
 r.get('/payments', ah(async (req, res) => res.json(await listAllAttempts({ status: attemptStatus.parse(req.query.status || undefined) }))));
 
-r.get('/public-content', ah(async (_req, res) => res.json(await cms.listSections({ includeInactive: true }))));
-r.put('/public-content/order', EDIT, validate(reorderSchema), ah(async (req, res) => res.json(await cms.reorderSections(req.body.keys))));
-r.put('/public-content/:key', EDIT, validate(publicSectionSchema), ah(async (req, res) => res.json(await cms.updateSection(req.user.id, req.params.key, req.body))));
-r.post('/public-content/:key/image', EDIT, imageUpload, ah(async (req, res) => res.json(await cms.replaceSectionImage(req.user.id, req.params.key, req.file))));
-r.delete('/public-content/:key/image', EDIT, ah(async (req, res) => res.json(await cms.removeSectionImage(req.user.id, req.params.key))));
 
 r.get('/module-media', ah(async (req, res) => res.json(await media.listModuleMedia(req.query.module ? moduleParam.parse(req.query.module) : undefined))));
 r.post('/module-media', EDIT, moduleFileUpload, ah(async (req, res) => {

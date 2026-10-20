@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { env } from '../config/env.js';
 
 export const PUBLIC_EVENTS = ['PUBLIC_PAGE_VIEW', 'PUBLIC_SECTION_VIEW', 'PAYMENT_MODAL_OPEN', 'ACADEMY_OPEN', 'MODULE_OPEN'];
 
@@ -12,20 +13,45 @@ const cleanMetadata = (metadata) => {
   return entries.length ? Object.fromEntries(entries) : undefined;
 };
 
-export async function track(event, { userId, sessionId, path, metadata } = {}, db = prisma) {
+const MAX_BUFFER = 500;
+let buffer = [];
+
+async function writeRows(rows) {
   try {
-    await db.analyticsEvent.create({
-      data: {
-        event,
-        userId: userId || null,
-        sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
-        path: path ? String(path).slice(0, 120) : null,
-        metadata: cleanMetadata(metadata),
-      },
-    });
+    await prisma.analyticsEvent.createMany({ data: rows });
+    return true;
   } catch (err) {
-    console.error('[analytics] evento no registrado:', err.message);
+    console.error('[analytics] eventos no registrados:', err.message);
+    return false;
   }
+}
+
+export async function flushAnalytics() {
+  if (!buffer.length) return 0;
+  const rows = buffer;
+  buffer = [];
+  if (!(await writeRows(rows))) buffer = [...rows, ...buffer].slice(-MAX_BUFFER);
+  return rows.length;
+}
+
+export function startAnalyticsFlush(minutes = env.analyticsFlushMinutes) {
+  if (minutes <= 0) return null;
+  return setInterval(flushAnalytics, minutes * 60000);
+}
+
+export async function track(event, { userId, sessionId, path, metadata } = {}) {
+  const row = {
+    event,
+    userId: userId || null,
+    sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
+    path: path ? String(path).slice(0, 120) : null,
+    metadata: cleanMetadata(metadata),
+    createdAt: new Date(),
+  };
+  if (env.analyticsFlushMinutes <= 0) return writeRows([row]);
+  buffer.push(row);
+  if (buffer.length >= MAX_BUFFER) await flushAnalytics();
+  return true;
 }
 
 const DAY = 86400000;
@@ -45,6 +71,7 @@ const countBy = (rows, pick) =>
     .sort((a, b) => b.count - a.count);
 
 export async function platformMetrics({ days = 30 } = {}) {
+  await flushAnalytics();
   const since = new Date(Date.now() - days * DAY);
   const now = new Date();
   const [totalUsers, newUsers, recentEvents, grants, progress, attempts, totalModules, annualReviews] = await Promise.all([

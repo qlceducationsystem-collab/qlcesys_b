@@ -4,7 +4,7 @@ import { grantWindow, renewalBase, summarizeAccess } from '../domain/access.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { publicUser, SALT_ROUNDS } from './auth.service.js';
 import { logAdminChange, logSystemChange } from './audit.service.js';
-import { publicOffer } from './access.service.js';
+import { invalidateOffersCache, publicOffer } from './access.service.js';
 
 const clientSelect = {
   id: true, name: true, email: true, phone: true, role: true, isActive: true, createdAt: true, lastLoginAt: true, totpEnabledAt: true,
@@ -110,6 +110,7 @@ export async function updateOffer(adminId, code, data) {
   if (!before) throw notFound('Oferta no encontrada');
   const payload = { ...data, accessDays: data.accessDays ?? before.accessDays };
   const updated = await prisma.productOffer.update({ where: { code }, data: payload });
+  invalidateOffersCache();
   await logSystemChange(adminId, { module: 'PRECIOS', action: 'UPDATE', entityId: code, before: publicOffer(before), after: publicOffer(updated) });
   return publicOffer(updated);
 }

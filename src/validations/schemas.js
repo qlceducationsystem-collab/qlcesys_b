@@ -225,25 +225,6 @@ export const offerUpdateSchema = z.object({
 
 export const grantSchema = z.object({ offerCode: text(40), reason: text(500) });
 
-const cta = z.string().trim().max(80).optional().nullable().transform((v) => v || null);
-export const publicSectionSchema = z.object({
-  navLabel: text(40),
-  active: z.boolean(),
-  eyebrow: optText(120),
-  title: text(160),
-  highlight: optText(80),
-  subtitle: optText(300),
-  description: optText(900),
-  secondaryText: optText(600),
-  primaryCtaLabel: cta,
-  primaryCtaTarget: cta,
-  secondaryCtaLabel: cta,
-  secondaryCtaTarget: cta,
-  items: z.array(z.object({ title: text(120), text: optText(400), tag: optText(40) })).max(12).optional().nullable(),
-});
-
-export const reorderSchema = z.object({ keys: z.array(z.string().min(1).max(40)).min(1).max(30) });
-
 export const analyticsEventSchema = z.object({
   event: z.string().min(1).max(40),
   sessionId: z.string().max(64).optional(),
