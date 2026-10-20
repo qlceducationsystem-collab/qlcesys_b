@@ -9,7 +9,7 @@ import { requireAdminLevel } from '../middlewares/auth.js';
 import { imageUpload, moduleFileUpload } from '../middlewares/upload.js';
 import {
   adminLevelSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
-  offerUpdateSchema, publicSectionSchema, reasonSchema, reorderSchema,
+  leadQuery, leadUpdateSchema, offerUpdateSchema, publicSectionSchema, reasonSchema, reorderSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
 import * as cms from '../services/publicContent.service.js';
@@ -21,6 +21,7 @@ import { platformMetrics } from '../services/analytics.service.js';
 import { sendEmail } from '../services/email.service.js';
 import { logAdminChange } from '../services/audit.service.js';
 import { resetTwoFactor } from '../services/auth.service.js';
+import * as leads from '../services/lead.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
@@ -41,6 +42,9 @@ r.post('/clients/:id/grants/:grantId/revoke', FULL, validate(reasonSchema), ah(a
   res.json({ ok: true });
 }));
 r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req, req.params.id, req.body))));
+r.get('/leads', validate(leadQuery, 'query'), ah(async (req, res) => res.json(await leads.listLeads(req.validQuery))));
+r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req, req.params.id, req.body))));
+
 r.post('/clients/:id/reset-2fa', FULL, validate(reasonSchema), ah(async (req, res) => {
   await resetTwoFactor(req, req.params.id, req.body.reason);
   res.json({ ok: true });

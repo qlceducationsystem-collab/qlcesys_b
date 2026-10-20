@@ -221,6 +221,19 @@ enum ScenarioType {
   OTRO
 }
 
+enum LeadInterest {
+  EDUCACION_FINANCIERA
+  TRADING_ACADEMY
+  COPYTRADING
+  GENERAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
 enum GoalKind {
   PATRIMONIO
   AHORRO
@@ -911,6 +924,23 @@ model AnnualReviewNote {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, periodEnd])
+}
+
+model Lead {
+  id         String       @id @default(cuid())
+  name       String
+  email      String
+  phone      String?
+  interest   LeadInterest
+  message    String?
+  status     LeadStatus   @default(NEW)
+  sourcePath String?
+  adminNotes String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([status, createdAt])
+  @@index([interest, createdAt])
 }
 
 model Appointment {

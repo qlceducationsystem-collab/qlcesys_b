@@ -325,3 +325,26 @@ export const patrimonialGoalSchema = z.object({
 });
 
 export const reviewNoteSchema = z.object({ note: z.string().trim().max(5000) });
+
+const LEAD_INTERESTS = ['EDUCACION_FINANCIERA', 'TRADING_ACADEMY', 'COPYTRADING', 'GENERAL'];
+
+export const leadSchema = z.object({
+  name: text(120),
+  email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
+  phone: z.string().trim().max(30).optional().nullable().transform((v) => v || null),
+  interest: z.enum(LEAD_INTERESTS),
+  message: optText(1000),
+  sourcePath: z.string().trim().max(120).optional().nullable(),
+  sessionId: z.string().max(64).optional(),
+  acceptPrivacy: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar el Aviso de privacidad' }) }),
+});
+
+export const leadUpdateSchema = z.object({
+  status: z.enum(['NEW', 'CONTACTED', 'CLOSED']),
+  adminNotes: optText(1000),
+});
+
+export const leadQuery = z.object({
+  status: z.enum(['NEW', 'CONTACTED', 'CLOSED']).optional(),
+  interest: z.enum(LEAD_INTERESTS).optional(),
+});

@@ -4,7 +4,8 @@ import { env } from '../config/env.js';
 import { ah } from '../utils/asyncHandler.js';
 import { validate } from '../middlewares/validate.js';
 import { optionalAuth } from '../middlewares/auth.js';
-import { analyticsEventSchema } from '../validations/schemas.js';
+import { analyticsEventSchema, leadSchema } from '../validations/schemas.js';
+import { createLead } from '../services/lead.service.js';
 import { publicContent } from '../services/publicContent.service.js';
 import { PUBLIC_EVENTS, track } from '../services/analytics.service.js';
 import { handleCallback } from '../services/google/oauth.js';
@@ -15,6 +16,10 @@ export const googleRouter = Router();
 export const mediaRouter = Router();
 
 const eventsLimiter = rateLimit({ windowMs: 60000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, skip: () => env.isTest });
+
+const leadsLimiter = rateLimit({ windowMs: 60 * 60000, limit: 8, standardHeaders: 'draft-7', legacyHeaders: false, skip: () => env.isTest, message: { error: 'Demasiadas solicitudes, intenta más tarde' } });
+
+publicRouter.post('/leads', leadsLimiter, validate(leadSchema), ah(async (req, res) => res.status(201).json(await createLead(req.body))));
 
 publicRouter.get('/content', ah(async (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
