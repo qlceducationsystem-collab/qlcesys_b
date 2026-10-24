@@ -963,7 +963,7 @@ model Appointment {
 
 model AdminAuditLog {
   id        String   @id @default(cuid())
-  adminId   String
+  adminId   String?
   clientId  String?
   module    String
   action    String
@@ -973,7 +973,7 @@ model AdminAuditLog {
   newValue  String?
   reason    String?
   createdAt DateTime @default(now())
-  admin     User     @relation("AuditAdmin", fields: [adminId], references: [id])
+  admin     User?    @relation("AuditAdmin", fields: [adminId], references: [id], onDelete: SetNull)
   client    User?    @relation("AuditClient", fields: [clientId], references: [id])
 
   @@index([clientId, createdAt])

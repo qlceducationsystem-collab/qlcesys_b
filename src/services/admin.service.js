@@ -85,7 +85,9 @@ export async function listAudit({ clientId, page = 1 }) {
   return { items, total, page, pages: Math.max(1, Math.ceil(total / take)) };
 }
 
-export const listAdmins = async () => (await prisma.user.findMany({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' } })).map(publicUser);
+const toAdmin = (u) => ({ ...publicUser(u), isActive: u.isActive, lastLoginAt: u.lastLoginAt });
+
+export const listAdmins = async () => (await prisma.user.findMany({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' } })).map(toAdmin);
 
 export async function createAdmin(adminId, { name, email, password, adminLevel }) {
   if (await prisma.user.findUnique({ where: { email } })) throw conflict('Ya existe una cuenta con ese correo');
@@ -96,10 +98,34 @@ export async function createAdmin(adminId, { name, email, password, adminLevel }
   return publicUser(user);
 }
 
-export async function setAdminLevel(req, adminId, { adminLevel, reason }) {
-  if (adminId === req.user.id) throw badRequest('No puedes cambiar tu propio nivel');
+async function otherAdmin(req, adminId, message) {
+  if (adminId === req.user.id) throw badRequest(message);
   const admin = await prisma.user.findFirst({ where: { id: adminId, role: 'ADMIN' } });
   if (!admin) throw notFound('Administrador no encontrado');
+  return admin;
+}
+
+export async function setAdminActive(req, adminId, { isActive, reason }) {
+  const admin = await otherAdmin(req, adminId, 'No puedes inactivar tu propia cuenta');
+  const updated = await prisma.user.update({ where: { id: adminId }, data: { isActive } });
+  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'UPDATE', entityId: adminId, before: { isActive: admin.isActive }, after: { isActive }, reason });
+  return toAdmin(updated);
+}
+
+export async function setAdminPassword(req, adminId, { password, reason }) {
+  await otherAdmin(req, adminId, 'Cambia tu propia contraseña desde Seguridad de la cuenta');
+  await prisma.user.update({ where: { id: adminId }, data: { passwordHash: await bcrypt.hash(password, SALT_ROUNDS) } });
+  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'RESET_PASSWORD', entityId: adminId, reason });
+}
+
+export async function deleteAdmin(req, adminId, reason) {
+  const admin = await otherAdmin(req, adminId, 'No puedes eliminar tu propia cuenta');
+  await prisma.user.delete({ where: { id: adminId } });
+  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'DELETE', entityId: adminId, before: { email: admin.email, adminLevel: admin.adminLevel }, reason });
+}
+
+export async function setAdminLevel(req, adminId, { adminLevel, reason }) {
+  const admin = await otherAdmin(req, adminId, 'No puedes cambiar tu propio nivel');
   const updated = await prisma.user.update({ where: { id: adminId }, data: { adminLevel } });
   await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'UPDATE', entityId: adminId, before: { adminLevel: admin.adminLevel }, after: { adminLevel }, reason });
   return publicUser(updated);

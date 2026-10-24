@@ -8,7 +8,7 @@ import { validate } from '../middlewares/validate.js';
 import { requireAdminLevel } from '../middlewares/auth.js';
 import { moduleFileUpload } from '../middlewares/upload.js';
 import {
-  adminLevelSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
+  adminLevelSchema, adminPasswordSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
   leadQuery, leadUpdateSchema, offerUpdateSchema, reasonSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
@@ -103,5 +103,14 @@ r.post('/integrations/gmail/test', FULL, ah(async (req, res) => res.json(await s
 r.get('/admins', FULL, ah(async (_req, res) => res.json(await admin.listAdmins())));
 r.post('/admins', FULL, validate(createAdminSchema), ah(async (req, res) => res.status(201).json(await admin.createAdmin(req.user.id, req.body))));
 r.patch('/admins/:id/level', FULL, validate(adminLevelSchema), ah(async (req, res) => res.json(await admin.setAdminLevel(req, req.params.id, req.body))));
+r.patch('/admins/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setAdminActive(req, req.params.id, req.body))));
+r.post('/admins/:id/password', FULL, validate(adminPasswordSchema), ah(async (req, res) => {
+  await admin.setAdminPassword(req, req.params.id, req.body);
+  res.json({ message: 'Contraseña actualizada' });
+}));
+r.delete('/admins/:id', FULL, validate(reasonSchema), ah(async (req, res) => {
+  await admin.deleteAdmin(req, req.params.id, req.body.reason);
+  res.json({ ok: true });
+}));
 
 export default r;

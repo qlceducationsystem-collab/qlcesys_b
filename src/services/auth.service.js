@@ -122,9 +122,10 @@ export async function me(userId) {
   return publicUser(await prisma.user.findUnique({ where: { id: userId } }));
 }
 
-export async function changePassword(userId, { currentPassword, newPassword }) {
+export async function changePassword(userId, { code, newPassword }) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) throw badRequest('La contraseña actual no es correcta');
+  if (!user.totpEnabledAt) throw badRequest('Activa primero la verificación en dos pasos');
+  await verifyUserCode(user, code);
   await prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, SALT_ROUNDS) } });
 }
 

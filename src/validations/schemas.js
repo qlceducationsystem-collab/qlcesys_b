@@ -27,10 +27,9 @@ export const codeLoginSchema = z.object({ email: emailField, code: totpCode });
 export const challengeSchema = z.object({ challengeToken: challenge });
 export const activateTwoFactorSchema = z.object({ challengeToken: challenge, code: totpCode });
 export const resetWithCodeSchema = z.object({ email: emailField, code: totpCode, password: z.string().min(8, 'Mínimo 8 caracteres').max(128) });
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(128),
-  newPassword: z.string().min(8, 'Mínimo 8 caracteres').max(128),
-});
+const newPassword = z.string().min(8, 'Mínimo 8 caracteres').max(128);
+
+export const changePasswordSchema = z.object({ code: totpCode, newPassword });
 
 export const periodSchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
@@ -147,6 +146,8 @@ export const appointmentAdminSchema = z.object({
 export const reasonSchema = z.object({ reason: text(500) });
 
 export const adminUserSchema = z.object({ isActive: z.boolean(), reason: text(500) });
+
+export const adminPasswordSchema = z.object({ password: newPassword, reason: text(500) });
 
 export const openingSchema = z.object({ openingNetWorth: money.nullable() });
 export const yearParam = z.object({ year: z.coerce.number().int().min(2000).max(2100) });
