@@ -3,8 +3,6 @@ import { ACTIVE_MODULES, BLOCK1_MODULES, BLOCK2_MODULES, canChooseRoute, canRead
 import { evaluateMarketFilter, professionalOperation, riskExposure, simulateTrade, buildAllocation } from '../domain/learning.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { accessFor } from './access.service.js';
-import { track } from './analytics.service.js';
-import { logAdminChange } from './audit.service.js';
 
 const STATE_MESSAGES = {
   LOCKED_ACCESS: 'Necesitas el acceso completo o la herramienta de este módulo',
@@ -90,7 +88,6 @@ export async function getModule(req, number) {
   });
   const progress = ctx.progress.find((p) => p.module.month === number);
   const full = canReadAcademy(ctx.access);
-  if (!req.asAdmin) await track('MODULE_OPEN', { userId: req.subjectId, metadata: { module: number } });
   const content = mod.content || {};
   return {
     number,
@@ -149,10 +146,6 @@ export async function saveProgress(req, number, { status, exercise, snapshot }) 
   const data = { status: finalStatus, completedAt, ...(exercise !== undefined ? { exercise } : {}) };
   const row = await prisma.moduleProgress.upsert({ where, create: { userId, moduleId: mod.id, ...data }, update: data });
   if (snapshot) await prisma.moduleSubmission.create({ data: { userId, moduleNumber: number, data: { type: 'SNAPSHOT' }, result: snapshot } });
-  if (finalStatus === 'COMPLETED' && before?.status !== 'COMPLETED' && !req.asAdmin) {
-    await track('MODULE_COMPLETE', { userId, metadata: { module: number } });
-  }
-  await logAdminChange(req, { module: `MODULO_${number}`, action: before ? 'UPDATE' : 'CREATE', entityId: row.id, before, after: row });
   return row;
 }
 
@@ -165,8 +158,6 @@ export async function chooseRoute(req, route) {
     create: { userId, route, routeChosenAt: new Date() },
     update: { route, routeChosenAt: new Date() },
   });
-  await track('ROUTE_SELECTED', { userId, metadata: { route } });
-  await logAdminChange(req, { module: 'RUTA', action: 'UPDATE', before: { route: ctx.route }, after: { route } });
   return row;
 }
 
@@ -175,7 +166,6 @@ export async function submitMarketFilter(req, answers) {
   if (!req.asAdmin && !ctx.access.hasAny) throw forbidden('Necesitas un acceso activo');
   const result = evaluateMarketFilter(answers);
   const row = await prisma.marketRouteAssessment.create({ data: { userId: req.subjectId, answers, ...result } });
-  await track('MARKET_FILTER', { userId: req.subjectId, metadata: { passed: result.passed } });
   return { ...result, createdAt: row.createdAt };
 }
 

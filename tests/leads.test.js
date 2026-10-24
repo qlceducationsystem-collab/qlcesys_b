@@ -51,6 +51,5 @@ run('Solicitudes de información (integración)', () => {
     assert.equal((await request(app).patch(`/api/admin/leads/${item.id}`).set('Authorization', `Bearer ${tokens.leadview}`).send({ status: 'CONTACTED' })).status, 403);
     const updated = await request(app).patch(`/api/admin/leads/${item.id}`).set('Authorization', `Bearer ${tokens.leadedit}`).send({ status: 'CONTACTED', adminNotes: 'Llamada agendada' });
     assert.equal(updated.body.status, 'CONTACTED');
-    assert.ok(await prisma.adminAuditLog.count({ where: { module: 'SOLICITUDES', entityId: item.id } }));
   });
 });

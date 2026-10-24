@@ -5,11 +5,9 @@ import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { assetSchema, periodQuery } from '../validations/schemas.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
-import { logAdminChange } from '../services/audit.service.js';
 import { capitalResult } from '../domain/finance.js';
 
 const r = Router();
-const MODULE = 'CARTERA';
 
 async function categoryId(code) {
   const cat = await prisma.assetCategory.findUnique({ where: { code } });
@@ -25,16 +23,6 @@ async function ownedPosition(req) {
   if (!pos) throw notFound('Producto no encontrado');
   return pos;
 }
-
-const flat = (pos) => ({
-  name: pos.asset.name,
-  institution: pos.asset.institution,
-  notes: pos.asset.notes,
-  categoryId: pos.asset.categoryId,
-  initialCapital: pos.initialCapital,
-  finalCapital: pos.finalCapital,
-  periodId: pos.periodId,
-});
 
 r.get('/categories', ah(async (_req, res) => res.json(await prisma.assetCategory.findMany({ orderBy: { sortOrder: 'asc' } }))));
 
@@ -68,9 +56,7 @@ r.post('/positions', validate(assetSchema), ah(async (req, res) => {
   const catId = await categoryId(categoryCode);
   const pos = await prisma.$transaction(async (tx) => {
     const asset = await tx.asset.create({ data: { userId: req.subjectId, categoryId: catId, name, institution, notes } });
-    const created = await tx.assetPosition.create({ data: { assetId: asset.id, periodId, initialCapital, finalCapital } });
-    await logAdminChange(req, { module: MODULE, action: 'CREATE', entityId: created.id, after: req.body }, tx);
-    return created;
+    return tx.assetPosition.create({ data: { assetId: asset.id, periodId, initialCapital, finalCapital } });
   });
   res.status(201).json(pos);
 }));
@@ -82,13 +68,11 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   const catId = await categoryId(categoryCode);
   const updated = await prisma.$transaction(async (tx) => {
     await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes } });
-    const p = await tx.assetPosition.update({
+    return tx.assetPosition.update({
       where: { id: pos.id },
       data: { initialCapital, finalCapital },
       include: { asset: true },
     });
-    await logAdminChange(req, { module: MODULE, action: 'UPDATE', entityId: pos.id, before: flat(pos), after: flat(p) }, tx);
-    return p;
   });
   res.json(updated);
 }));
@@ -98,10 +82,8 @@ r.delete('/positions/:positionId', ah(async (req, res) => {
   await getOpenPeriod(req.subjectId, pos.periodId);
   await prisma.$transaction(async (tx) => {
     await tx.assetPosition.delete({ where: { id: pos.id } });
-
     const remaining = await tx.assetPosition.count({ where: { assetId: pos.assetId } });
     if (!remaining) await tx.asset.delete({ where: { id: pos.assetId } });
-    await logAdminChange(req, { module: MODULE, action: 'DELETE', entityId: pos.id, before: flat(pos) }, tx);
   });
   res.status(204).end();
 }));

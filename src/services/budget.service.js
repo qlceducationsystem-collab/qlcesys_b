@@ -2,7 +2,6 @@ import { prisma } from '../config/prisma.js';
 import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView } from '../domain/patrimonial.js';
 import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
-import { logAdminChange } from './audit.service.js';
 import { createContribution } from './emergency.service.js';
 
 const ORDER = new Map(BUDGET_CATEGORIES.map((c, i) => [c, i]));
@@ -70,7 +69,6 @@ export async function saveBudget(req, { year, month, netIncome, lines }) {
   const view = budgetView({ netIncome, lines });
   if (!view.complete) throw badRequest(percentMessage(view.percentGap), { percentTotal: view.percentTotal, percentGap: view.percentGap });
   await assertMonthEditable(userId, { year, month });
-  const before = await findBudget(userId, { year, month });
   await prisma.$transaction(async (tx) => {
     const budget = await tx.budget.upsert({
       where: { userId_year_month: { userId, year, month } },
@@ -79,13 +77,6 @@ export async function saveBudget(req, { year, month, netIncome, lines }) {
     });
     await tx.budgetLine.deleteMany({ where: { budgetId: budget.id } });
     await tx.budgetLine.createMany({ data: lines.map((l) => ({ budgetId: budget.id, category: l.category, percent: l.percent })) });
-    await logAdminChange(req, {
-      module: 'MODULO_7',
-      action: before ? 'UPDATE' : 'CREATE',
-      entityId: budget.id,
-      before: before && { netIncome: num(before.netIncome), lines: before.lines.map((l) => `${l.category}:${num(l.percent)}`).join(',') },
-      after: { netIncome, lines: lines.map((l) => `${l.category}:${l.percent}`).join(',') },
-    }, tx);
   });
   return getBudget(userId, { year, month });
 }
@@ -97,10 +88,7 @@ export async function recordActual(req, { year, month, category, amount, descrip
   if (category === 'AHORRO') {
     await createContribution(req, period, { destination: 'AHORRO', amount, description });
   } else {
-    await prisma.$transaction(async (tx) => {
-      const expense = await tx.expense.create({ data: { userId, periodId: period.id, category, description, amount, source: 'M7_BUDGET' } });
-      await logAdminChange(req, { module: 'GASTOS', action: 'CREATE', entityId: expense.id, after: expense }, tx);
-    });
+    await prisma.expense.create({ data: { userId, periodId: period.id, category, description, amount, source: 'M7_BUDGET' } });
   }
   return getBudget(userId, { year, month });
 }

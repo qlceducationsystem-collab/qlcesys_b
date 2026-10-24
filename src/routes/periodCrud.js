@@ -5,9 +5,8 @@ import { notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { periodQuery } from '../validations/schemas.js';
 import { getOpenPeriod, getOwnedPeriod } from '../services/period.service.js';
-import { logAdminChange } from '../services/audit.service.js';
 
-export function periodCrudRouter({ model, schema, module, beforeWrite, orderBy = { createdAt: 'asc' } }) {
+export function periodCrudRouter({ model, schema, beforeWrite, orderBy = { createdAt: 'asc' } }) {
   const r = Router();
   const delegate = () => prisma[model];
 
@@ -25,12 +24,7 @@ export function periodCrudRouter({ model, schema, module, beforeWrite, orderBy =
   r.post('/', validate(schema), ah(async (req, res) => {
     await getOpenPeriod(req.subjectId, req.body.periodId);
     if (beforeWrite) await beforeWrite(req);
-    const row = await prisma.$transaction(async (tx) => {
-      const created = await tx[model].create({ data: { ...req.body, userId: req.subjectId } });
-      await logAdminChange(req, { module, action: 'CREATE', entityId: created.id, after: created }, tx);
-      return created;
-    });
-    res.status(201).json(row);
+    res.status(201).json(await delegate().create({ data: { ...req.body, userId: req.subjectId } }));
   }));
 
   r.put('/:id', validate(schema), ah(async (req, res) => {
@@ -38,21 +32,13 @@ export function periodCrudRouter({ model, schema, module, beforeWrite, orderBy =
     await getOpenPeriod(req.subjectId, before.periodId);
     if (req.body.periodId !== before.periodId) await getOpenPeriod(req.subjectId, req.body.periodId);
     if (beforeWrite) await beforeWrite(req);
-    const row = await prisma.$transaction(async (tx) => {
-      const updated = await tx[model].update({ where: { id: before.id }, data: req.body });
-      await logAdminChange(req, { module, action: 'UPDATE', entityId: before.id, before, after: updated }, tx);
-      return updated;
-    });
-    res.json(row);
+    res.json(await delegate().update({ where: { id: before.id }, data: req.body }));
   }));
 
   r.delete('/:id', ah(async (req, res) => {
     const before = await findOwned(req);
     await getOpenPeriod(req.subjectId, before.periodId);
-    await prisma.$transaction(async (tx) => {
-      await tx[model].delete({ where: { id: before.id } });
-      await logAdminChange(req, { module, action: 'DELETE', entityId: before.id, before }, tx);
-    });
+    await delegate().delete({ where: { id: before.id } });
     res.status(204).end();
   }));
 

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { buildAnnualReport } from '../src/domain/annual.js';
 import { buildPeriodSummary } from '../src/domain/finance.js';
-import { diffFields } from '../src/domain/audit.js';
 import { verifyWebhookSignature } from '../src/services/payments/mercadopago.client.js';
 
 const RF = { code: 'RENTA_FIJA', name: 'Renta fija', sortOrder: 1 };
@@ -36,11 +35,6 @@ test('Informe anual consolida meses cerrados y separa movimientos de rentabilida
   assert.equal(r.products[0].result, 20);
   assert.ok(r.observations.some((o) => o.includes('Informe parcial')));
   assert.equal(buildAnnualReport(2026, []), null);
-});
-
-test('Bitácora: diff campo por campo con valor anterior y nuevo', () => {
-  const changes = diffFields({ name: 'Casa A', finalCapital: '2000000.00', updatedAt: 1 }, { name: 'Casa A', finalCapital: 2150000, updatedAt: 2 });
-  assert.deepEqual(changes, [{ field: 'finalCapital', oldValue: '2000000.00', newValue: '2150000' }]);
 });
 
 test('Firma de webhook de Mercado Pago (x-signature)', () => {

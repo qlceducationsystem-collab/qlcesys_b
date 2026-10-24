@@ -9,7 +9,7 @@ import { requireAdminLevel } from '../middlewares/auth.js';
 import { moduleFileUpload } from '../middlewares/upload.js';
 import {
   adminLevelSchema, adminPasswordSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
-  leadQuery, leadUpdateSchema, offerUpdateSchema, reasonSchema,
+  leadQuery, leadUpdateSchema, offerUpdateSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
 import * as media from '../services/moduleMedia.service.js';
@@ -18,14 +18,12 @@ import { listOffers } from '../services/access.service.js';
 import { listAllAttempts } from '../services/payments/payment.service.js';
 import { platformMetrics } from '../services/analytics.service.js';
 import { sendEmail } from '../services/email.service.js';
-import { logAdminChange } from '../services/audit.service.js';
 import { resetTwoFactor } from '../services/auth.service.js';
 import * as leads from '../services/lead.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
 const EDIT = requireAdminLevel('EDIT');
-const auditQuery = z.object({ clientId: z.string().max(40).optional(), page: z.coerce.number().int().min(1).default(1) });
 const appointmentStatus = z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).optional();
 const attemptStatus = z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional();
 const service = (req) => z.enum(['DRIVE', 'GMAIL']).parse(String(req.params.service).toUpperCase());
@@ -35,21 +33,19 @@ r.get('/analytics', ah(async (req, res) => res.json(await platformMetrics({ days
 
 r.get('/clients', ah(async (req, res) => res.json(await admin.listClients({ q: req.query.q }))));
 r.get('/clients/:id', ah(async (req, res) => res.json(await admin.getClient(req.params.id))));
-r.post('/clients/:id/grants', FULL, validate(grantSchema), ah(async (req, res) => res.status(201).json(await admin.grantAccess(req, req.params.id, req.body))));
-r.post('/clients/:id/grants/:grantId/revoke', FULL, validate(reasonSchema), ah(async (req, res) => {
-  await admin.revokeGrant(req, req.params.id, req.params.grantId, req.body.reason);
+r.post('/clients/:id/grants', FULL, validate(grantSchema), ah(async (req, res) => res.status(201).json(await admin.grantAccess(req.params.id, req.body))));
+r.post('/clients/:id/grants/:grantId/revoke', FULL, ah(async (req, res) => {
+  await admin.revokeGrant(req.params.id, req.params.grantId);
   res.json({ ok: true });
 }));
-r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req, req.params.id, req.body))));
+r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req.params.id, req.body))));
 r.get('/leads', validate(leadQuery, 'query'), ah(async (req, res) => res.json(await leads.listLeads(req.validQuery))));
-r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req, req.params.id, req.body))));
+r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req.params.id, req.body))));
 
-r.post('/clients/:id/reset-2fa', FULL, validate(reasonSchema), ah(async (req, res) => {
-  await resetTwoFactor(req, req.params.id, req.body.reason);
+r.post('/clients/:id/reset-2fa', FULL, ah(async (req, res) => {
+  await resetTwoFactor(req.params.id);
   res.json({ ok: true });
 }));
-
-r.get('/audit', ah(async (req, res) => res.json(await admin.listAudit(auditQuery.parse(req.query)))));
 
 r.get('/appointments', ah(async (req, res) => {
   const status = appointmentStatus.parse(req.query.status || undefined);
@@ -62,15 +58,15 @@ r.get('/appointments', ah(async (req, res) => {
 }));
 
 r.patch('/appointments/:id', EDIT, validate(appointmentAdminSchema), ah(async (req, res) => {
-  const before = await prisma.appointment.findUnique({ where: { id: req.params.id } });
-  if (!before) throw notFound('Cita no encontrada');
-  const after = await prisma.appointment.update({ where: { id: before.id }, data: req.body });
-  await logAdminChange(req, { module: 'ASESORIA', action: 'UPDATE', entityId: before.id, before, after, clientId: before.userId });
-  res.json(after);
+  const appointment = await prisma.appointment.update({ where: { id: req.params.id }, data: req.body }).catch((err) => {
+    if (err.code === 'P2025') throw notFound('Cita no encontrada');
+    throw err;
+  });
+  res.json(appointment);
 }));
 
 r.get('/pricing', ah(async (_req, res) => res.json(await listOffers({ includeInactive: true }))));
-r.put('/pricing/:code', FULL, validate(offerUpdateSchema), ah(async (req, res) => res.json(await admin.updateOffer(req.user.id, req.params.code, req.body))));
+r.put('/pricing/:code', FULL, validate(offerUpdateSchema), ah(async (req, res) => res.json(await admin.updateOffer(req.params.code, req.body))));
 r.get('/payments', ah(async (req, res) => res.json(await listAllAttempts({ status: attemptStatus.parse(req.query.status || undefined) }))));
 
 
@@ -101,15 +97,15 @@ r.delete('/integrations/:service', FULL, ah(async (req, res) => {
 r.post('/integrations/gmail/test', FULL, ah(async (req, res) => res.json(await sendEmail('test', req.user.email, { name: req.user.name }))));
 
 r.get('/admins', FULL, ah(async (_req, res) => res.json(await admin.listAdmins())));
-r.post('/admins', FULL, validate(createAdminSchema), ah(async (req, res) => res.status(201).json(await admin.createAdmin(req.user.id, req.body))));
+r.post('/admins', FULL, validate(createAdminSchema), ah(async (req, res) => res.status(201).json(await admin.createAdmin(req.body))));
 r.patch('/admins/:id/level', FULL, validate(adminLevelSchema), ah(async (req, res) => res.json(await admin.setAdminLevel(req, req.params.id, req.body))));
 r.patch('/admins/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setAdminActive(req, req.params.id, req.body))));
 r.post('/admins/:id/password', FULL, validate(adminPasswordSchema), ah(async (req, res) => {
   await admin.setAdminPassword(req, req.params.id, req.body);
   res.json({ message: 'Contraseña actualizada' });
 }));
-r.delete('/admins/:id', FULL, validate(reasonSchema), ah(async (req, res) => {
-  await admin.deleteAdmin(req, req.params.id, req.body.reason);
+r.delete('/admins/:id', FULL, ah(async (req, res) => {
+  await admin.deleteAdmin(req, req.params.id);
   res.json({ ok: true });
 }));
 

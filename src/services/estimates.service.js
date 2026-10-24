@@ -2,7 +2,6 @@ import { prisma } from '../config/prisma.js';
 import { inflationScenario, inflationTotals, taxConsolidated, taxItem } from '../domain/patrimonial.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
-import { logAdminChange } from './audit.service.js';
 import { getPeriodSummary, latestPeriod } from './period.service.js';
 
 const TAX_FIELDS = ['name', 'type', 'period', 'capital', 'grossProfit', 'commissions', 'otherCosts', 'taxRate', 'sourceAssetId'];
@@ -19,7 +18,7 @@ async function assertOwnedGoal(userId, goalId) {
   if (!(await prisma.goal.count({ where: { id: goalId, userId } }))) throw badRequest('La meta seleccionada no pertenece a tu cuenta');
 }
 
-function crud({ model, fields, module, validateRefs, view }) {
+function crud({ model, validateRefs, view }) {
   const owned = async (userId, id) => {
     const row = await prisma[model].findFirst({ where: { id, userId } });
     if (!row) throw notFound('Registro no encontrado');
@@ -29,20 +28,17 @@ function crud({ model, fields, module, validateRefs, view }) {
     async create(req, data) {
       await validateRefs(req.subjectId, data);
       const row = await prisma[model].create({ data: { ...data, userId: req.subjectId } });
-      await logAdminChange(req, { module, action: 'CREATE', entityId: row.id, after: pickFields(row, fields) });
       return view(row);
     },
     async update(req, id, data) {
-      const before = await owned(req.subjectId, id);
+      await owned(req.subjectId, id);
       await validateRefs(req.subjectId, data);
       const row = await prisma[model].update({ where: { id }, data });
-      await logAdminChange(req, { module, action: 'UPDATE', entityId: id, before: pickFields(before, fields), after: pickFields(row, fields) });
       return view(row);
     },
     async remove(req, id) {
-      const before = await owned(req.subjectId, id);
+      await owned(req.subjectId, id);
       await prisma[model].delete({ where: { id } });
-      await logAdminChange(req, { module, action: 'DELETE', entityId: id, before: pickFields(before, fields) });
     },
   };
 }
@@ -59,16 +55,12 @@ const scenarioView = (row) => {
 
 export const taxItems = crud({
   model: 'taxAnalysisItem',
-  fields: TAX_FIELDS,
-  module: 'MODULO_10',
   validateRefs: (userId, d) => assertOwnedAsset(userId, d.sourceAssetId),
   view: taxView,
 });
 
 export const scenarios = crud({
   model: 'inflationScenario',
-  fields: SCENARIO_FIELDS,
-  module: 'MODULO_11',
   validateRefs: async (userId, d) => {
     await assertOwnedAsset(userId, d.sourceAssetId);
     await assertOwnedGoal(userId, d.sourceGoalId);
@@ -118,6 +110,5 @@ export async function savePatrimonialGoal(req, { name, targetAmount }) {
   const row = existing
     ? await prisma.goal.update({ where: { id: existing.id }, data })
     : await prisma.goal.create({ data: { userId, kind: 'PATRIMONIO', ...data } });
-  await logAdminChange(req, { module: 'METAS', action: existing ? 'UPDATE' : 'CREATE', entityId: row.id, before: goalView(existing), after: goalView(row) });
   return goalView(row);
 }

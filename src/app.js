@@ -30,7 +30,7 @@ export function createApp() {
   app.use(
     cors({
       origin: (origin, cb) => cb(null, !origin || env.frontendUrls.includes(origin)),
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Id', 'X-Session-Id'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Id'],
       exposedHeaders: ['Content-Disposition'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     }),

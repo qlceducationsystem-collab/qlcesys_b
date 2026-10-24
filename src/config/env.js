@@ -38,7 +38,6 @@ export const env = {
     redirectUri: trimUrl(process.env.GOOGLE_REDIRECT_URI) || `${backendUrl}/api/google/callback`,
   },
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || '',
-  analyticsFlushMinutes: process.env.NODE_ENV === 'test' ? 0 : Math.max(0, Number(process.env.ANALYTICS_FLUSH_MINUTES ?? 30)),
   keepAlive: {
     enabled: process.env.KEEP_ALIVE ? process.env.KEEP_ALIVE === 'true' : isProd,
     url: trimUrl(process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL),

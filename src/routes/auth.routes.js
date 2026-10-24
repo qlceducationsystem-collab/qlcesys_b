@@ -7,13 +7,12 @@ import * as schemas from '../validations/schemas.js';
 import * as auth from '../services/auth.service.js';
 
 const r = Router();
-const ctx = (req) => ({ sessionId: req.headers['x-session-id'] });
 
-r.post('/register', authLimiter, validate(schemas.registerSchema), ah(async (req, res) => res.status(201).json(await auth.register(req.body, ctx(req)))));
-r.post('/login', authLimiter, validate(schemas.loginSchema), ah(async (req, res) => res.json(await auth.login(req.body, ctx(req)))));
-r.post('/login/2fa', authLimiter, validate(schemas.codeLoginSchema), ah(async (req, res) => res.json(await auth.loginWithCode(req.body, ctx(req)))));
+r.post('/register', authLimiter, validate(schemas.registerSchema), ah(async (req, res) => res.status(201).json(await auth.register(req.body))));
+r.post('/login', authLimiter, validate(schemas.loginSchema), ah(async (req, res) => res.json(await auth.login(req.body))));
+r.post('/login/2fa', authLimiter, validate(schemas.codeLoginSchema), ah(async (req, res) => res.json(await auth.loginWithCode(req.body))));
 r.post('/2fa/setup', authLimiter, validate(schemas.challengeSchema), ah(async (req, res) => res.json(await auth.beginSetup(req.body))));
-r.post('/2fa/activate', authLimiter, validate(schemas.activateTwoFactorSchema), ah(async (req, res) => res.json(await auth.activateTwoFactor(req.body, ctx(req)))));
+r.post('/2fa/activate', authLimiter, validate(schemas.activateTwoFactorSchema), ah(async (req, res) => res.json(await auth.activateTwoFactor(req.body))));
 r.get('/me', authenticate, ah(async (req, res) => res.json({ user: await auth.me(req.user.id) })));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 

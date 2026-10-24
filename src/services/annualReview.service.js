@@ -4,7 +4,6 @@ import { annualReviewPdf, reviewFilename } from '../pdf/annualReview.js';
 import { pdfBuffer } from '../pdf/layout.js';
 import { conflict, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
-import { logAdminChange } from './audit.service.js';
 import { patrimonialGoal } from './estimates.service.js';
 import { getPeriodSummary, latestClose } from './period.service.js';
 import { driveConnected, uploadBuffer } from './google/drive.js';
@@ -56,13 +55,11 @@ export async function saveNote(req, note) {
   const userId = req.subjectId;
   const window = annualWindow();
   const key = { userId, periodEnd: toDate(window.endDate) };
-  const before = await prisma.annualReviewNote.findUnique({ where: { userId_periodEnd: key } });
   const row = await prisma.annualReviewNote.upsert({
     where: { userId_periodEnd: key },
     create: { ...key, periodStart: toDate(window.startDate), note },
     update: { note },
   });
-  await logAdminChange(req, { module: 'MODULO_12', action: before ? 'UPDATE' : 'CREATE', entityId: row.id, before: before && { note: before.note }, after: { note } });
   return noteView(row);
 }
 
@@ -104,7 +101,6 @@ export async function saveReview(req) {
       snapshot: { ...report, saved: null },
     },
   });
-  await logAdminChange(req, { module: 'MODULO_12', action: 'CREATE', entityId: review.id, after: { periodStart: report.window.startDate, periodEnd: report.window.endDate } });
   const stored = await storeInDrive(review, report);
   return reviewView(stored || review);
 }

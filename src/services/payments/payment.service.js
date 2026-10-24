@@ -1,7 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { grantWindow, renewalBase, summarizeAccess } from '../../domain/access.js';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
-import { track } from '../analytics.service.js';
 import { loadGrants } from '../access.service.js';
 import { activeProvider, providerByCode } from './providers.js';
 
@@ -59,11 +58,6 @@ export async function resolveAttempt(attemptId, status, db = prisma) {
         },
       });
     }
-    const prefix = attempt.provider === 'MOCK' ? 'MOCK_' : '';
-    await track(`${prefix}PAYMENT_${status}`, {
-      userId: attempt.userId,
-      metadata: { offer: attempt.offer.code, accessType: attempt.offer.type, source: attempt.provider },
-    });
     return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true };
   });
 }

@@ -47,8 +47,6 @@ services:
         value: "true"
       - key: KEEP_ALIVE_INTERVAL_MINUTES
         value: "5"
-      - key: ANALYTICS_FLUSH_MINUTES
-        value: "30"
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

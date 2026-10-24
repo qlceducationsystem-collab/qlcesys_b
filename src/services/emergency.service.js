@@ -2,7 +2,6 @@ import { prisma } from '../config/prisma.js';
 import { emergencyFund, ESSENTIAL_CATEGORIES, isEssentialCategory } from '../domain/patrimonial.js';
 import { notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
-import { logAdminChange } from './audit.service.js';
 import { assertOpen, ensureWorkingPeriod, getPeriodSummary, latestPeriod } from './period.service.js';
 
 const DEFAULT_TARGET_MONTHS = 3;
@@ -96,9 +95,7 @@ export async function savePlan(req, input) {
     declaredEssential: input.declaredEssential ?? null,
     useDeclared: input.useDeclared && input.declaredEssential !== null && input.declaredEssential !== undefined,
   };
-  const before = await prisma.emergencyFundPlan.findUnique({ where: { userId } });
-  const row = await prisma.emergencyFundPlan.upsert({ where: { userId }, create: { userId, ...data }, update: data });
-  await logAdminChange(req, { module: 'MODULO_8', action: before ? 'UPDATE' : 'CREATE', entityId: row.id, before: planView(before), after: planView(row) });
+  await prisma.emergencyFundPlan.upsert({ where: { userId }, create: { userId, ...data }, update: data });
   return getEmergency(userId);
 }
 
@@ -120,7 +117,6 @@ export async function createContribution(req, period, { destination, amount, des
   return prisma.$transaction(async (tx) => {
     const row = await tx.savingContribution.create({ data: { userId, periodId: period.id, destination, amount, description, date: new Date() } });
     await adjustRecord(tx, userId, period.id, destination, num(amount));
-    await logAdminChange(req, { module: 'APORTACIONES', action: 'CREATE', entityId: row.id, after: { destination, amount, description } }, tx);
     return row;
   });
 }
@@ -139,7 +135,6 @@ export async function deleteContribution(req, id) {
   await prisma.$transaction(async (tx) => {
     await tx.savingContribution.delete({ where: { id } });
     await adjustRecord(tx, userId, row.periodId, row.destination, -num(row.amount));
-    await logAdminChange(req, { module: 'APORTACIONES', action: 'DELETE', entityId: id, before: { destination: row.destination, amount: num(row.amount) } }, tx);
   });
   return getEmergency(userId);
 }

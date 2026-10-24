@@ -8,13 +8,11 @@ import {
 import * as academy from '../services/academy.service.js';
 import * as moduleData from '../services/moduleData.service.js';
 import { createMediaLink } from '../services/moduleMedia.service.js';
-import { track } from '../services/analytics.service.js';
 
 const r = Router();
 const moduleNumber = (req) => z.coerce.number().int().min(1).max(12).parse(req.params.n);
 
 r.get('/', ah(async (req, res) => {
-  if (!req.asAdmin) await track('ACADEMY_OPEN', { userId: req.subjectId });
   res.json(await academy.academyOverview(req));
 }));
 

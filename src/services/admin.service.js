@@ -3,7 +3,6 @@ import { prisma } from '../config/prisma.js';
 import { grantWindow, renewalBase, summarizeAccess } from '../domain/access.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { publicUser, SALT_ROUNDS } from './auth.service.js';
-import { logAdminChange, logSystemChange } from './audit.service.js';
 import { invalidateOffersCache, publicOffer } from './access.service.js';
 
 const clientSelect = {
@@ -42,101 +41,75 @@ export async function getClient(id) {
   return { ...toClient(row), grants: grants.map((g) => ({ id: g.id, offer: g.offer.name, accessType: g.accessType, moduleNumber: g.moduleNumber, startsAt: g.startsAt, expiresAt: g.expiresAt, active: g.active, paymentAttemptId: g.paymentAttemptId })) };
 }
 
-export async function grantAccess(req, clientId, { offerCode, reason }) {
-  await getClient(clientId);
+async function assertClient(clientId) {
+  const client = await prisma.user.findFirst({ where: { id: clientId, role: 'CLIENT' }, select: { id: true } });
+  if (!client) throw notFound('Cliente no encontrado');
+}
+
+export async function grantAccess(clientId, { offerCode }) {
+  await assertClient(clientId);
   const offer = await prisma.productOffer.findUnique({ where: { code: offerCode } });
   if (!offer) throw notFound('Oferta no encontrada');
   const grants = await prisma.accessGrant.findMany({ where: { userId: clientId, active: true } });
   const { startsAt, expiresAt } = grantWindow(offer, renewalBase(grants, offer));
-  const grant = await prisma.accessGrant.create({
+  return prisma.accessGrant.create({
     data: { userId: clientId, offerId: offer.id, accessType: offer.type, moduleNumber: offer.moduleNumber, startsAt, expiresAt },
   });
-  await logAdminChange(req, { module: 'ACCESOS', action: 'CREATE', entityId: grant.id, after: { offerCode, startsAt, expiresAt }, reason, clientId });
-  return grant;
 }
 
-export async function revokeGrant(req, clientId, grantId, reason) {
-  const grant = await prisma.accessGrant.findFirst({ where: { id: grantId, userId: clientId } });
-  if (!grant) throw notFound('Acceso no encontrado');
-  await prisma.accessGrant.update({ where: { id: grantId }, data: { active: false } });
-  await logAdminChange(req, { module: 'ACCESOS', action: 'UPDATE', entityId: grantId, before: { active: true }, after: { active: false }, reason, clientId });
+export async function revokeGrant(clientId, grantId) {
+  const { count } = await prisma.accessGrant.updateMany({ where: { id: grantId, userId: clientId }, data: { active: false } });
+  if (!count) throw notFound('Acceso no encontrado');
 }
 
-export async function setClientActive(req, clientId, { isActive, reason }) {
-  const before = await getClient(clientId);
-  const after = await prisma.user.update({ where: { id: clientId }, data: { isActive } });
-  await logAdminChange(req, { module: 'USUARIOS', action: 'UPDATE', entityId: clientId, before: { isActive: before.isActive }, after: { isActive: after.isActive }, reason, clientId });
-  return publicUser(after);
-}
-
-export async function listAudit({ clientId, page = 1 }) {
-  const take = 50;
-  const where = clientId ? { clientId } : {};
-  const [items, total] = await Promise.all([
-    prisma.adminAuditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * take,
-      take,
-      include: { admin: { select: { name: true, email: true } }, client: { select: { name: true, email: true } } },
-    }),
-    prisma.adminAuditLog.count({ where }),
-  ]);
-  return { items, total, page, pages: Math.max(1, Math.ceil(total / take)) };
+export async function setClientActive(clientId, { isActive }) {
+  await assertClient(clientId);
+  return publicUser(await prisma.user.update({ where: { id: clientId }, data: { isActive } }));
 }
 
 const toAdmin = (u) => ({ ...publicUser(u), isActive: u.isActive, lastLoginAt: u.lastLoginAt });
 
 export const listAdmins = async () => (await prisma.user.findMany({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' } })).map(toAdmin);
 
-export async function createAdmin(adminId, { name, email, password, adminLevel }) {
+export async function createAdmin({ name, email, password, adminLevel }) {
   if (await prisma.user.findUnique({ where: { email } })) throw conflict('Ya existe una cuenta con ese correo');
   const user = await prisma.user.create({
     data: { name, email, role: 'ADMIN', adminLevel, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
-  await logSystemChange(adminId, { module: 'ADMINISTRADORES', action: 'CREATE', entityId: user.id, after: { email, adminLevel } });
   return publicUser(user);
 }
 
-async function otherAdmin(req, adminId, message) {
+async function assertOtherAdmin(req, adminId, message) {
   if (adminId === req.user.id) throw badRequest(message);
-  const admin = await prisma.user.findFirst({ where: { id: adminId, role: 'ADMIN' } });
+  const admin = await prisma.user.findFirst({ where: { id: adminId, role: 'ADMIN' }, select: { id: true } });
   if (!admin) throw notFound('Administrador no encontrado');
-  return admin;
 }
 
-export async function setAdminActive(req, adminId, { isActive, reason }) {
-  const admin = await otherAdmin(req, adminId, 'No puedes inactivar tu propia cuenta');
-  const updated = await prisma.user.update({ where: { id: adminId }, data: { isActive } });
-  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'UPDATE', entityId: adminId, before: { isActive: admin.isActive }, after: { isActive }, reason });
-  return toAdmin(updated);
+export async function setAdminActive(req, adminId, { isActive }) {
+  await assertOtherAdmin(req, adminId, 'No puedes inactivar tu propia cuenta');
+  return toAdmin(await prisma.user.update({ where: { id: adminId }, data: { isActive } }));
 }
 
-export async function setAdminPassword(req, adminId, { password, reason }) {
-  await otherAdmin(req, adminId, 'Cambia tu propia contraseña desde Seguridad de la cuenta');
+export async function setAdminPassword(req, adminId, { password }) {
+  await assertOtherAdmin(req, adminId, 'Cambia tu propia contraseña desde Seguridad de la cuenta');
   await prisma.user.update({ where: { id: adminId }, data: { passwordHash: await bcrypt.hash(password, SALT_ROUNDS) } });
-  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'RESET_PASSWORD', entityId: adminId, reason });
 }
 
-export async function deleteAdmin(req, adminId, reason) {
-  const admin = await otherAdmin(req, adminId, 'No puedes eliminar tu propia cuenta');
+export async function deleteAdmin(req, adminId) {
+  await assertOtherAdmin(req, adminId, 'No puedes eliminar tu propia cuenta');
   await prisma.user.delete({ where: { id: adminId } });
-  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'DELETE', entityId: adminId, before: { email: admin.email, adminLevel: admin.adminLevel }, reason });
 }
 
-export async function setAdminLevel(req, adminId, { adminLevel, reason }) {
-  const admin = await otherAdmin(req, adminId, 'No puedes cambiar tu propio nivel');
-  const updated = await prisma.user.update({ where: { id: adminId }, data: { adminLevel } });
-  await logSystemChange(req.user.id, { module: 'ADMINISTRADORES', action: 'UPDATE', entityId: adminId, before: { adminLevel: admin.adminLevel }, after: { adminLevel }, reason });
-  return publicUser(updated);
+export async function setAdminLevel(req, adminId, { adminLevel }) {
+  await assertOtherAdmin(req, adminId, 'No puedes cambiar tu propio nivel');
+  return publicUser(await prisma.user.update({ where: { id: adminId }, data: { adminLevel } }));
 }
 
-export async function updateOffer(adminId, code, data) {
+export async function updateOffer(code, data) {
   const before = await prisma.productOffer.findUnique({ where: { code } });
   if (!before) throw notFound('Oferta no encontrada');
   const payload = { ...data, accessDays: data.accessDays ?? before.accessDays };
   const updated = await prisma.productOffer.update({ where: { code }, data: payload });
   invalidateOffersCache();
-  await logSystemChange(adminId, { module: 'PRECIOS', action: 'UPDATE', entityId: code, before: publicOffer(before), after: publicOffer(updated) });
   return publicOffer(updated);
 }

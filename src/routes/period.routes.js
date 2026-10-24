@@ -2,11 +2,10 @@ import { Router } from 'express';
 import { ah } from '../utils/asyncHandler.js';
 import { validate } from '../middlewares/validate.js';
 import { requireAdminLevel } from '../middlewares/auth.js';
-import { historyQuery, openingSchema, periodSchema, reasonSchema } from '../validations/schemas.js';
+import { historyQuery, openingSchema, periodSchema } from '../validations/schemas.js';
 import * as periods from '../services/period.service.js';
 import { closePeriod, reopenPeriod } from '../services/close.service.js';
 import { getHistory } from '../services/history.service.js';
-import { logAdminChange } from '../services/audit.service.js';
 import { allocationFromPortfolio } from '../domain/learning.js';
 import { patrimonialOverview } from '../services/patrimonialOverview.service.js';
 
@@ -16,7 +15,6 @@ r.get('/', ah(async (req, res) => res.json(await periods.listPeriods(req.subject
 
 r.post('/', validate(periodSchema), ah(async (req, res) => {
   const period = await periods.createPeriod(req.subjectId, req.body);
-  await logAdminChange(req, { module: 'PERIODOS', action: 'CREATE', entityId: period.id, after: req.body });
   res.status(201).json(period);
 }));
 
@@ -33,19 +31,11 @@ r.get('/:id/patrimonial', ah(async (req, res) => {
 }));
 
 r.patch('/:id/opening', validate(openingSchema), ah(async (req, res) => {
-  const before = await periods.getOwnedPeriod(req.subjectId, req.params.id);
-  const updated = await periods.updateOpening(req.subjectId, req.params.id, req.body.openingNetWorth);
-  await logAdminChange(req, {
-    module: 'PATRIMONIO', action: 'UPDATE', entityId: updated.id,
-    before: { openingNetWorth: before.openingNetWorth }, after: { openingNetWorth: updated.openingNetWorth },
-  });
-  res.json(updated);
+  res.json(await periods.updateOpening(req.subjectId, req.params.id, req.body.openingNetWorth));
 }));
 
 r.post('/:id/close', ah(async (req, res) => res.status(201).json(await closePeriod(req, req.params.id))));
 
-r.post('/:id/reopen', requireAdminLevel('FULL'), validate(reasonSchema), ah(async (req, res) => {
-  res.json(await reopenPeriod(req, req.params.id, req.body.reason));
-}));
+r.post('/:id/reopen', requireAdminLevel('FULL'), ah(async (req, res) => res.json(await reopenPeriod(req, req.params.id))));
 
 export default r;

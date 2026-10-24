@@ -1,7 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { assertOpen, getPeriodSummary, latestClose } from './period.service.js';
-import { logAdminChange } from './audit.service.js';
 import { budgetSnapshot } from './budget.service.js';
 import { emergencySnapshot } from './emergency.service.js';
 
@@ -39,12 +38,11 @@ export async function closePeriod(req, periodId) {
       data: { userId, periodId, revision, year: period.year, month: period.month, snapshot, closedById: req.user.id },
     });
     await tx.financialPeriod.update({ where: { id: periodId }, data: { status: 'CLOSED' } });
-    await logAdminChange(req, { module: 'CORTES', action: 'CLOSE_PERIOD', entityId: close.id, after: { periodId, revision } }, tx);
     return close;
   });
 }
 
-export async function reopenPeriod(req, periodId, reason) {
+export async function reopenPeriod(req, periodId) {
   return prisma.$transaction(async (tx) => {
     const period = await tx.financialPeriod.findFirst({ where: { id: periodId, userId: req.subjectId } });
     if (!period) throw notFound('Periodo no encontrado');
@@ -52,11 +50,6 @@ export async function reopenPeriod(req, periodId, reason) {
     const close = await latestClose(periodId, tx);
     if (close) await tx.monthlyClose.update({ where: { id: close.id }, data: { supersededAt: new Date() } });
     await tx.financialPeriod.update({ where: { id: periodId }, data: { status: 'OPEN' } });
-    await logAdminChange(
-      req,
-      { module: 'CORTES', action: 'UPDATE', entityId: periodId, before: { status: 'CLOSED' }, after: { status: 'OPEN' }, reason },
-      tx,
-    );
     return { ok: true };
   });
 }

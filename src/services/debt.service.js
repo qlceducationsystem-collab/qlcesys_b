@@ -2,9 +2,6 @@ import { prisma } from '../config/prisma.js';
 import { debtTotals } from '../domain/patrimonial.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { getOpenPeriod, getPeriodSummary } from './period.service.js';
-import { logAdminChange } from './audit.service.js';
-
-const MODULE = 'DEUDAS';
 
 const flat = (b) => ({
   name: b.debt.name,
@@ -41,9 +38,7 @@ export async function createDebt(req, periodId, data) {
   await getOpenPeriod(req.subjectId, periodId);
   return prisma.$transaction(async (tx) => {
     const debt = await tx.debt.create({ data: { userId: req.subjectId, ...debtFields(data) } });
-    const created = await tx.debtBalance.create({ data: { debtId: debt.id, periodId, ...balanceFields(data) } });
-    await logAdminChange(req, { module: MODULE, action: 'CREATE', entityId: created.id, after: { ...data, periodId } }, tx);
-    return created;
+    return tx.debtBalance.create({ data: { debtId: debt.id, periodId, ...balanceFields(data) } });
   });
 }
 
@@ -52,9 +47,7 @@ export async function updateDebt(req, balanceId, data) {
   await getOpenPeriod(req.subjectId, bal.periodId);
   return prisma.$transaction(async (tx) => {
     await tx.debt.update({ where: { id: bal.debtId }, data: debtFields(data) });
-    const updated = await tx.debtBalance.update({ where: { id: bal.id }, data: balanceFields(data), include: { debt: true } });
-    await logAdminChange(req, { module: MODULE, action: 'UPDATE', entityId: bal.id, before: flat(bal), after: flat(updated) }, tx);
-    return updated;
+    return tx.debtBalance.update({ where: { id: bal.id }, data: balanceFields(data), include: { debt: true } });
   });
 }
 
@@ -64,7 +57,6 @@ export async function deleteDebt(req, balanceId) {
   await prisma.$transaction(async (tx) => {
     await tx.debtBalance.delete({ where: { id: bal.id } });
     if (!(await tx.debtBalance.count({ where: { debtId: bal.debtId } }))) await tx.debt.delete({ where: { id: bal.debtId } });
-    await logAdminChange(req, { module: MODULE, action: 'DELETE', entityId: bal.id, before: flat(bal) }, tx);
   });
 }
 
@@ -89,7 +81,6 @@ export async function confirmPayment(req, balanceId, { amount, newBalance }) {
     if (newBalance !== undefined && newBalance !== null) {
       updated = await tx.debtBalance.update({ where: { id: bal.id }, data: { balance: newBalance }, include: { debt: true } });
     }
-    await logAdminChange(req, { module: MODULE, action: 'CONFIRM_PAYMENT', entityId: bal.id, after: { amount, newBalance: newBalance ?? null, expenseId: expense.id } }, tx);
     return { expense, balance: flat(updated) };
   });
 }

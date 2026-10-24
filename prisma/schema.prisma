@@ -274,8 +274,6 @@ model User {
   annualReports    AnnualReport[]
   progress         ModuleProgress[]
   appointments     Appointment[]
-  auditAsAdmin     AdminAuditLog[]         @relation("AuditAdmin")
-  auditAsClient    AdminAuditLog[]         @relation("AuditClient")
   financialProfile FinancialProfile?
   learningState    LearningState?
   routeAssessments MarketRouteAssessment[]
@@ -961,21 +959,3 @@ model Appointment {
   @@index([scheduledAt])
 }
 
-model AdminAuditLog {
-  id        String   @id @default(cuid())
-  adminId   String?
-  clientId  String?
-  module    String
-  action    String
-  entityId  String?
-  field     String?
-  oldValue  String?
-  newValue  String?
-  reason    String?
-  createdAt DateTime @default(now())
-  admin     User?    @relation("AuditAdmin", fields: [adminId], references: [id], onDelete: SetNull)
-  client    User?    @relation("AuditClient", fields: [clientId], references: [id])
-
-  @@index([clientId, createdAt])
-  @@index([adminId])
-}

@@ -3,7 +3,6 @@ import { allocationFromPortfolio, diagnose, PLACEHOLDERS, placeholderAmounts, PR
 import { badRequest, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { ensureWorkingPeriod, getPeriodSummary, latestPeriod } from './period.service.js';
-import { logAdminChange } from './audit.service.js';
 
 const categoryId = async (tx, code) => {
   const cat = await tx.assetCategory.findUnique({ where: { code } });
@@ -108,7 +107,6 @@ export async function saveDiagnosis(req, input) {
   const result = diagnose(input);
   const scope = { userId, periodId: period.id };
   await prisma.$transaction(async (tx) => {
-    const before = await tx.financialProfile.findUnique({ where: { userId } });
     const profileData = {
       monthlyInvestment: input.monthlyInvestment,
       emergencyFund: input.emergencyFund,
@@ -125,7 +123,6 @@ export async function saveDiagnosis(req, input) {
     await upsertSourcedDebt(tx, scope, { balance: input.totalDebt, payment: input.debtPayment });
     await syncPlaceholders(tx, userId, period.id);
     await tx.moduleSubmission.create({ data: { userId, moduleNumber: 1, data: input, result } });
-    await logAdminChange(req, { module: 'MODULO_1', action: before ? 'UPDATE' : 'CREATE', before: profileView(before), after: profileData }, tx);
   });
   return { result, periodId: period.id };
 }
@@ -169,7 +166,6 @@ export async function addProduct(req, data) {
     });
     await tx.assetPosition.create({ data: { assetId: asset.id, periodId: period.id, initialCapital: data.capital, finalCapital: data.capital } });
     await syncPlaceholders(tx, userId, period.id);
-    await logAdminChange(req, { module: 'MODULO_2', action: 'CREATE', entityId: asset.id, after: data }, tx);
     return asset;
   });
 }
@@ -184,14 +180,13 @@ export async function updateProduct(req, assetId, data) {
   const userId = req.subjectId;
   const period = await ensureWorkingPeriod(userId);
   return prisma.$transaction(async (tx) => {
-    const before = await ownedProduct(tx, userId, assetId);
+    await ownedProduct(tx, userId, assetId);
     const asset = await tx.asset.update({
       where: { id: assetId },
       data: { ...assetFields(data), categoryId: await categoryId(tx, PRODUCT_CATEGORY[data.productType]) },
     });
     await setPositionCapital(tx, assetId, period.id, data.capital);
     await syncPlaceholders(tx, userId, period.id);
-    await logAdminChange(req, { module: 'MODULO_2', action: 'UPDATE', entityId: assetId, before: assetFields(before), after: assetFields(asset) }, tx);
     return asset;
   });
 }
@@ -200,10 +195,9 @@ export async function deleteProduct(req, assetId) {
   const userId = req.subjectId;
   const period = await ensureWorkingPeriod(userId);
   await prisma.$transaction(async (tx) => {
-    const before = await ownedProduct(tx, userId, assetId);
+    await ownedProduct(tx, userId, assetId);
     await removePosition(tx, assetId, period.id);
     await syncPlaceholders(tx, userId, period.id);
-    await logAdminChange(req, { module: 'MODULO_2', action: 'DELETE', entityId: assetId, before: assetFields(before) }, tx);
   });
 }
 

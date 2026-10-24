@@ -121,15 +121,14 @@ run('API (integración)', () => {
     assert.equal(await prisma.asset.count({ where: { id: ids.asset } }), 1);
   });
 
-  test('Admin VIEW solo consulta; admin EDIT modifica los mismos registros con auditoría', async () => {
+  test('Admin VIEW solo consulta; admin EDIT modifica los mismos registros', async () => {
     const h = { 'X-Client-Id': ids.a };
     assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
     const body = { name: 'CETES', productType: 'RENTA_FIJA', capital: 45000, horizon: 'CORTO', liquidityLevel: 'ALTA', perceivedRisk: 'BAJO' };
     assert.equal((await api('view').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
     assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, { ...body, name: 'CETES 28 días' }, h)).status, 200);
-    const log = await prisma.adminAuditLog.findFirst({ where: { clientId: ids.a, module: 'MODULO_2', field: 'name' } });
-    assert.equal(log.newValue, 'CETES 28 días');
     const products = (await api('a').get('/api/academy/products')).body.products;
+    assert.equal(products[0].name, 'CETES 28 días');
     assert.equal(products[0].capital, 45000);
   });
 

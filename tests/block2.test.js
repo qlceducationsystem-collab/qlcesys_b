@@ -289,7 +289,6 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(history[0].finalNetWorth, 340000);
     assert.equal((await api('q').get(`/api/academy/annual-review/history/${saved.body.id}/pdf`)).status, 403);
     assert.equal((await api('full', ids.q).get(`/api/academy/annual-review/history/${saved.body.id}/pdf`)).status, 404);
-    assert.ok(await prisma.adminAuditLog.count({ where: { clientId: userId, module: 'MODULO_12' } }) > 0);
   });
 
   test('Admin VIEW no escribe en M7–M12; el panel muestra el progreso del Bloque 2', async () => {

@@ -119,7 +119,7 @@ export const progressSchema = z.object({
   exercise: optText(5000),
 });
 
-export const adminLevelSchema = z.object({ adminLevel: z.enum(['VIEW', 'EDIT', 'FULL']), reason: text(500) });
+export const adminLevelSchema = z.object({ adminLevel: z.enum(['VIEW', 'EDIT', 'FULL']) });
 
 export const createAdminSchema = z.object({
   name: text(120),
@@ -143,11 +143,9 @@ export const appointmentAdminSchema = z.object({
   adminNotes: optText(),
 });
 
-export const reasonSchema = z.object({ reason: text(500) });
+export const adminUserSchema = z.object({ isActive: z.boolean() });
 
-export const adminUserSchema = z.object({ isActive: z.boolean(), reason: text(500) });
-
-export const adminPasswordSchema = z.object({ password: newPassword, reason: text(500) });
+export const adminPasswordSchema = z.object({ password: newPassword });
 
 export const openingSchema = z.object({ openingNetWorth: money.nullable() });
 export const yearParam = z.object({ year: z.coerce.number().int().min(2000).max(2100) });
@@ -224,14 +222,7 @@ export const offerUpdateSchema = z.object({
   active: z.boolean(),
 });
 
-export const grantSchema = z.object({ offerCode: text(40), reason: text(500) });
-
-export const analyticsEventSchema = z.object({
-  event: z.string().min(1).max(40),
-  sessionId: z.string().max(64).optional(),
-  path: z.string().max(120).optional(),
-  metadata: z.record(z.union([z.string().max(60), z.number(), z.boolean()])).optional(),
-});
+export const grantSchema = z.object({ offerCode: text(40) });
 
 export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });
 
@@ -317,7 +308,6 @@ export const leadSchema = z.object({
   interest: z.enum(LEAD_INTERESTS),
   message: optText(1000),
   sourcePath: z.string().trim().max(120).optional().nullable(),
-  sessionId: z.string().max(64).optional(),
   acceptPrivacy: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar el Aviso de privacidad' }) }),
 });
 

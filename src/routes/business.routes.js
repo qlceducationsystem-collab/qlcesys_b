@@ -6,7 +6,6 @@ import { businessFlowSchema } from '../validations/schemas.js';
 export const businessRouter = periodCrudRouter({
   model: 'businessFlow',
   schema: businessFlowSchema,
-  module: 'NEGOCIOS',
   beforeWrite: async (req) => {
     const asset = await prisma.asset.findFirst({
       where: { id: req.body.assetId, userId: req.subjectId, category: { code: 'NEGOCIOS' } },
