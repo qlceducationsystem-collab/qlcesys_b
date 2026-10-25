@@ -316,6 +316,10 @@ export const leadUpdateSchema = z.object({
   adminNotes: optText(1000),
 });
 
+export const exerciseReplySchema = z.object({ reply: z.string().trim().min(1).max(5000) });
+
+export const exerciseQuery = z.object({ status: z.enum(['PENDING', 'ANSWERED']).optional() });
+
 export const leadQuery = z.object({
   status: z.enum(['NEW', 'CONTACTED', 'CLOSED']).optional(),
   interest: z.enum(LEAD_INTERESTS).optional(),

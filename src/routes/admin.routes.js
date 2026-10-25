@@ -9,7 +9,7 @@ import { requireAdminLevel } from '../middlewares/auth.js';
 import { moduleFileUpload } from '../middlewares/upload.js';
 import {
   adminLevelSchema, adminPasswordSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
-  leadQuery, leadUpdateSchema, offerUpdateSchema,
+  exerciseQuery, exerciseReplySchema, leadQuery, leadUpdateSchema, offerUpdateSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
 import * as media from '../services/moduleMedia.service.js';
@@ -20,6 +20,7 @@ import { platformMetrics } from '../services/analytics.service.js';
 import { sendEmail } from '../services/email.service.js';
 import { resetTwoFactor } from '../services/auth.service.js';
 import * as leads from '../services/lead.service.js';
+import * as exercises from '../services/exerciseInbox.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
@@ -41,6 +42,8 @@ r.post('/clients/:id/grants/:grantId/revoke', FULL, ah(async (req, res) => {
 r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req.params.id, req.body))));
 r.get('/leads', validate(leadQuery, 'query'), ah(async (req, res) => res.json(await leads.listLeads(req.validQuery))));
 r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req.params.id, req.body))));
+r.get('/exercises', validate(exerciseQuery, 'query'), ah(async (req, res) => res.json(await exercises.listExercises(req.validQuery))));
+r.patch('/exercises/:id', EDIT, validate(exerciseReplySchema), ah(async (req, res) => res.json(await exercises.replyExercise(req.params.id, req.body))));
 
 r.post('/clients/:id/reset-2fa', FULL, ah(async (req, res) => {
   await resetTwoFactor(req.params.id);

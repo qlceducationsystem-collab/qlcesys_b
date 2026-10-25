@@ -98,6 +98,8 @@ export async function getModule(req, number) {
     mode: full ? 'ACADEMY' : 'TOOL_ONLY',
     status: progress?.status || 'NOT_STARTED',
     exercise: progress?.exercise || null,
+    adminReply: progress?.adminReply || null,
+    adminReplyAt: progress?.adminReplyAt || null,
     completedAt: progress?.completedAt || null,
     tool: content.tool,
     essentials: content.essentials || [],
@@ -143,7 +145,8 @@ export async function saveProgress(req, number, { status, exercise, snapshot }) 
   const before = await prisma.moduleProgress.findUnique({ where });
   const completedAt = status === 'COMPLETED' ? before?.completedAt || new Date() : before?.completedAt || null;
   const finalStatus = before?.status === 'COMPLETED' ? 'COMPLETED' : status;
-  const data = { status: finalStatus, completedAt, ...(exercise !== undefined ? { exercise } : {}) };
+  const changed = exercise !== undefined && (exercise || '') !== (before?.exercise || '');
+  const data = { status: finalStatus, completedAt, ...(exercise !== undefined ? { exercise } : {}), ...(changed && !req.asAdmin ? { exerciseAt: new Date() } : {}) };
   const row = await prisma.moduleProgress.upsert({ where, create: { userId, moduleId: mod.id, ...data }, update: data });
   if (snapshot) await prisma.moduleSubmission.create({ data: { userId, moduleNumber: number, data: { type: 'SNAPSHOT' }, result: snapshot } });
   return row;
