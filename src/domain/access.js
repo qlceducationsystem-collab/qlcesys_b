@@ -10,14 +10,16 @@ export const isGrantActive = (grant, now = new Date()) =>
   new Date(grant.startsAt) <= now &&
   (!grant.expiresAt || new Date(grant.expiresAt) > now);
 
+export const grantTools = (grant) => (grant.moduleNumber ? [grant.moduleNumber] : ACTIVE_MODULES);
+
 export function summarizeAccess(grants = [], now = new Date()) {
   const active = grants.filter((g) => isGrantActive(g, now));
   const fullGrants = active.filter((g) => g.accessType === 'FULL_ANNUAL');
   const fullExpiry = fullGrants.reduce((max, g) => (!max || new Date(g.expiresAt) > max ? new Date(g.expiresAt) : max), null);
   const toolGrants = active.filter((g) => g.accessType === 'TOOL_ONLY');
-  const tools = [...new Set(toolGrants.map((g) => g.moduleNumber))].sort((a, b) => a - b);
+  const tools = [...new Set(toolGrants.flatMap(grantTools))].sort((a, b) => a - b);
   const toolExpiry = (n) => {
-    const list = toolGrants.filter((g) => g.moduleNumber === n);
+    const list = toolGrants.filter((g) => grantTools(g).includes(n));
     return list.some((g) => !g.expiresAt) ? null : latestDate(list.map((g) => g.expiresAt));
   };
   return {

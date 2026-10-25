@@ -102,7 +102,7 @@ const BLOCK_1 = [
         section(
           'De productos a cartera',
           'Los productos se agrupan por categoría y la herramienta calcula qué porcentaje representa cada una. Ahora puedes ver tu cartera, no solamente saber cuánto dinero tienes.',
-          'Tener cuatro inversiones no significa necesariamente estar diversificado: cuatro activos digitales pueden concentrar la misma clase de riesgo. Número de productos no es igual a diversificación real.',
+          'Tener cuatro inversiones no significa necesariamente estar diversificado. Por ejemplo, cuatro activos digitales pueden concentrar la misma clase de riesgo. Número de productos no es igual a diversificación real.',
         ),
         section(
           'Allocation',

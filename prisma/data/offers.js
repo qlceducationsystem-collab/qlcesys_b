@@ -23,13 +23,15 @@ export const OFFERS = [
     accessDays: 365,
     sortOrder: 0,
   },
-  ...Object.entries(TOOL_NAMES).map(([n, name]) => ({
-    code: `TOOL_M${n}`,
-    name: `Herramienta M${n} · ${name}`,
-    description: `Suscripción mensual a la herramienta del Módulo ${n}.`,
+  {
+    code: 'TOOLS_ALL',
+    name: 'Solo herramientas · M1–M12',
+    description: 'Suscripción mensual a las 12 herramientas en un solo pago, sin la academia.',
     type: 'TOOL_ONLY',
-    moduleNumber: Number(n),
+    moduleNumber: null,
     accessDays: 30,
-    sortOrder: Number(n),
-  })),
+    sortOrder: 1,
+  },
 ];
+
+export const LEGACY_TOOL_OFFERS = Object.keys(TOOL_NAMES).map((n) => `TOOL_M${n}`);

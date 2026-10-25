@@ -16,6 +16,13 @@ test('Acceso anual activo, vencido y herramientas sueltas', () => {
   assert.equal(summarizeAccess([{ ...tool(1), active: false }], now).hasAny, false);
 });
 
+test('Paquete de herramientas: una sola compra abre M1–M12', () => {
+  const t = summarizeAccess([{ ...tool(null), expiresAt: new Date(+now + 30 * day) }], now);
+  assert.deepEqual(t.tools, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.equal(t.mode, 'TOOLS');
+  assert.equal(t.toolAccess.length, 12);
+});
+
 test('Progresión del bloque 1 con acceso completo', () => {
   const access = summarizeAccess([full], now);
   assert.equal(moduleState(1, { access }), 'AVAILABLE');

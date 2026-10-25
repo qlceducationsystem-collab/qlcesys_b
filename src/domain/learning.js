@@ -47,6 +47,7 @@ export const PRODUCT_CATEGORY = {
   BIENES_RAICES: 'BIENES_RAICES',
   NEGOCIO: 'NEGOCIOS',
   ACTIVO_DIGITAL: 'ACTIVOS_DIGITALES',
+  ALTO_RIESGO: 'ALTO_RIESGO',
   LIQUIDEZ: 'LIQUIDEZ',
 };
 
@@ -56,7 +57,7 @@ export const PLACEHOLDERS = {
     category: 'PENDIENTE_DESGLOSE',
     name: 'Inversiones por desglosar (diagnóstico)',
     field: 'declaredInvestments',
-    covers: ['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'ACTIVO_DIGITAL'],
+    covers: ['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'ACTIVO_DIGITAL', 'ALTO_RIESGO'],
   },
   M1_OTHER_ASSETS: { category: 'OTROS_ACTIVOS', name: 'Bienes y otros activos (diagnóstico)', field: 'declaredOtherAssets', covers: ['BIENES_RAICES', 'NEGOCIO'] },
 };

@@ -70,7 +70,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     await createAdmin('view', 'VIEW');
     await buy('p', 'FULL_ANNUAL');
     await buy('q', 'FULL_ANNUAL');
-    await buy('tool7', 'TOOL_M7');
+    await buy('tool7', 'TOOLS_ALL');
   });
 
   after(async () => prisma?.$disconnect());
@@ -102,7 +102,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(toolOnly.status, 200);
     assert.equal(toolOnly.body.mode, 'TOOL_ONLY');
     assert.equal(toolOnly.body.lesson, null);
-    assert.equal((await api('tool7').get('/api/academy/emergency')).status, 403);
+    assert.equal((await api('tool7').get('/api/academy/emergency')).status, 200);
   });
 
   test('M7 valida 100%, lee movimientos reales sin duplicarlos y no convierte el plan en realidad', async () => {
@@ -301,11 +301,11 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.ok(metrics.block2.annualReviews >= 1);
   });
 
-  test('Herramienta mensual: dura 30 días y la renovación se suma al vencimiento', async () => {
-    const first = await prisma.accessGrant.findFirst({ where: { userId: ids.tool7, moduleNumber: 7 } });
+  test('Paquete de herramientas: dura 30 días y la renovación se suma al vencimiento', async () => {
+    const first = await prisma.accessGrant.findFirst({ where: { userId: ids.tool7, accessType: 'TOOL_ONLY' } });
     assert.equal(Math.round((first.expiresAt - first.startsAt) / 86400000), 30);
-    await buy('tool7', 'TOOL_M7');
-    const grants = await prisma.accessGrant.findMany({ where: { userId: ids.tool7, moduleNumber: 7 }, orderBy: { createdAt: 'asc' } });
+    await buy('tool7', 'TOOLS_ALL');
+    const grants = await prisma.accessGrant.findMany({ where: { userId: ids.tool7, accessType: 'TOOL_ONLY' }, orderBy: { createdAt: 'asc' } });
     assert.equal(grants.length, 2);
     assert.equal(+grants[1].startsAt, +grants[0].expiresAt);
   });

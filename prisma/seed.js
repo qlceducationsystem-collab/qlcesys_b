@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { CATEGORIES } from './data/categories.js';
 import { MODULES } from './data/academy.js';
-import { OFFERS } from './data/offers.js';
+import { LEGACY_TOOL_OFFERS, OFFERS } from './data/offers.js';
 
 const prisma = new PrismaClient();
 
@@ -19,6 +19,7 @@ async function seedEditableContent() {
   for (const offer of OFFERS) {
     await prisma.productOffer.upsert({ where: { code: offer.code }, create: offer, update: {} });
   }
+  await prisma.productOffer.updateMany({ where: { code: { in: LEGACY_TOOL_OFFERS }, active: true }, data: { active: false } });
 }
 
 const ADMIN_ACCOUNTS = ['ADMIN', 'OWNER_ADMIN'];

@@ -170,7 +170,7 @@ export const diagnosisSchema = z.object({
 
 export const productSchema = z.object({
   name: text(120),
-  productType: enumOf(['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'BIENES_RAICES', 'NEGOCIO', 'ACTIVO_DIGITAL', 'LIQUIDEZ']),
+  productType: enumOf(['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'BIENES_RAICES', 'NEGOCIO', 'ACTIVO_DIGITAL', 'ALTO_RIESGO', 'LIQUIDEZ']),
   capital: z.coerce.number().positive('Captura un monto mayor a 0').max(1e12),
   horizon: enumOf(['CORTO', 'MEDIANO', 'LARGO']),
   liquidityLevel: enumOf(['ALTA', 'MEDIA', 'BAJA']),

@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma.js';
-import { grantWindow, renewalBase, summarizeAccess } from '../../domain/access.js';
+import { grantTools, grantWindow, renewalBase, summarizeAccess } from '../../domain/access.js';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { loadGrants } from '../access.service.js';
 import { activeProvider, providerByCode } from './providers.js';
@@ -19,9 +19,9 @@ export async function createCheckout(user, offerCode) {
   const offer = await prisma.productOffer.findUnique({ where: { code: offerCode } });
   if (!offer || !offer.active) throw notFound('Esta opción de acceso no está disponible');
   const access = summarizeAccess(await loadGrants(user.id));
-  const permanentTool = access.toolAccess.some((t) => t.moduleNumber === offer.moduleNumber && !t.expiresAt);
+  const permanentTool = grantTools(offer).every((n) => access.toolAccess.some((t) => t.moduleNumber === n && !t.expiresAt));
   if (offer.type === 'TOOL_ONLY' && (access.full || permanentTool)) {
-    throw conflict('Ya tienes acceso a esta herramienta');
+    throw conflict('Ya tienes acceso a las herramientas');
   }
   const provider = activeProvider();
   const attempt = await prisma.paymentAttempt.create({

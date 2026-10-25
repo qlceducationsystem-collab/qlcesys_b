@@ -161,27 +161,27 @@ run('API (integración)', () => {
     assert.equal(await prisma.educationalSimulation.count({ where: { userId: ids.a } }), 3);
   });
 
-  test('Solo herramientas: herramienta comprada sin academia; las demás bloqueadas', async () => {
-    await buy('tools', 'TOOL_M3');
+  test('Solo herramientas: un pago abre las 12 herramientas sin academia', async () => {
+    await buy('tools', 'TOOLS_ALL');
     const m3 = await api('tools').get('/api/academy/modules/3');
     assert.equal(m3.status, 200);
     assert.equal(m3.body.mode, 'TOOL_ONLY');
     assert.equal(m3.body.lesson, null);
-    assert.equal((await api('tools').get('/api/academy/modules/1')).status, 403);
+    assert.equal((await api('tools').get('/api/academy/modules/12')).status, 200);
     assert.equal((await api('tools').get('/api/dashboard')).status, 200);
   });
 
   test('Precios administrables con caché pública; precio nulo se mantiene como por definir', async () => {
-    assert.equal((await api('edit').put('/api/admin/pricing/TOOL_M1', { name: 'x', price: 10, currency: 'MXN', active: true })).status, 403);
-    const upd = await api('full').put('/api/admin/pricing/TOOL_M1', { name: 'Herramienta M1', price: null, currency: 'MXN', active: true });
+    assert.equal((await api('edit').put('/api/admin/pricing/TOOLS_ALL', { name: 'x', price: 10, currency: 'MXN', active: true })).status, 403);
+    const upd = await api('full').put('/api/admin/pricing/TOOLS_ALL', { name: 'Solo herramientas', price: null, currency: 'MXN', active: true });
     assert.equal(upd.status, 200);
     assert.equal(upd.body.price, null);
     const first = await request(app).get('/api/public/offers');
     assert.equal(first.status, 200);
-    assert.equal(first.body.offers.find((o) => o.code === 'TOOL_M1').price, null);
-    await api('full').put('/api/admin/pricing/TOOL_M1', { name: 'Herramienta M1', price: 490, currency: 'MXN', active: true });
+    assert.equal(first.body.offers.find((o) => o.code === 'TOOLS_ALL').price, null);
+    await api('full').put('/api/admin/pricing/TOOLS_ALL', { name: 'Solo herramientas', price: 490, currency: 'MXN', active: true });
     const refreshed = await request(app).get('/api/public/offers');
-    assert.equal(refreshed.body.offers.find((o) => o.code === 'TOOL_M1').price, 490);
+    assert.equal(refreshed.body.offers.find((o) => o.code === 'TOOLS_ALL').price, 490);
     assert.match(refreshed.headers['cache-control'], /max-age=600/);
   });
 });
