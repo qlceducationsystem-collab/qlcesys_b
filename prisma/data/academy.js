@@ -137,8 +137,8 @@ const BLOCK_1 = [
       lesson: [
         section(
           'Riesgo y exposición',
-          'Con $1,000 de capital y 10x de apalancamiento, la exposición nominal es de $10,000. Un movimiento de 2% a favor produce aproximadamente +$200; en contra, −$200.',
-          'Sin apalancamiento el mismo 2% equivale a ±$20; con 50x a ±$1,000. El movimiento del mercado no cambió: lo que cambió fue la exposición.',
+          'Con 1,000 USD de capital y 10x de apalancamiento, la exposición nominal es de 10,000 USD. Un movimiento de 2% a favor produce aproximadamente +200 USD; en contra, −200 USD.',
+          'Sin apalancamiento el mismo 2% equivale a ±20 USD; con 50x a ±1,000 USD. El movimiento del mercado no cambió: lo que cambió fue la exposición.',
         ),
         section(
           'Volatilidad y drawdown',
@@ -146,11 +146,11 @@ const BLOCK_1 = [
         ),
         section(
           'Simulación ≠ situación real',
-          'Si simulas $1,000 con 50x, eso no significa que realmente tengas $50,000 expuestos. La plataforma guarda el ejercicio como resultado educativo, separado de tu patrimonio.',
+          'Si simulas 1,000 USD con 50x, eso no significa que realmente tengas 50,000 USD expuestos. La plataforma guarda el ejercicio como resultado educativo, separado de tu patrimonio.',
         ),
       ],
       exercise: {
-        prompt: 'Utiliza $1,000 de margen y compara qué ocurre con 1x, 10x y 50x ante un movimiento adverso de 2%.',
+        prompt: 'Utiliza 1,000 USD de margen y compara qué ocurre con 1x, 10x y 50x ante un movimiento adverso de 2%.',
         steps: ['Simula el escenario con cada apalancamiento.', 'Guarda al menos una simulación.', 'Responde: ¿qué cambió realmente, el mercado o la exposición?'],
       },
     },
@@ -178,12 +178,12 @@ const BLOCK_1 = [
         ),
         section(
           'Ejemplo completo',
-          'Con $1,000, LONG, 10x, entrada $100,000 y salida $102,000: exposición $10,000, movimiento +2%, resultado bruto +$200, costos simulados (0.10%) −$10, resultado neto +$190, es decir +19% sobre tus $1,000.',
-          'Si la salida fuera $98,000 en LONG, el resultado bruto sería −$200 y el neto −$210 (−21% sobre el margen).',
+          'Con 1,000 USD, LONG, 10x, entrada 100,000 USD y salida 102,000 USD: exposición 10,000 USD, movimiento +2%, resultado bruto +200 USD, costos simulados (0.10%) −10 USD, resultado neto +190 USD, es decir +19% sobre tus 1,000 USD.',
+          'Si la salida fuera 98,000 USD en LONG, el resultado bruto sería −200 USD y el neto −210 USD (−21% sobre el margen).',
         ),
       ],
       exercise: {
-        prompt: 'Con $1,000, entrada $100,000 y salida $102,000 prueba 1x, 10x y 50x. ¿Qué cambió realmente: el movimiento del mercado o la exposición de la operación?',
+        prompt: 'Con 1,000 USD, entrada 100,000 USD y salida 102,000 USD prueba 1x, 10x y 50x. ¿Qué cambió realmente: el movimiento del mercado o la exposición de la operación?',
         steps: ['Simula el escenario con 1x, 10x y 50x.', 'Simula también un escenario adverso.', 'Guarda tus simulaciones y responde la pregunta.'],
       },
     },
@@ -210,7 +210,7 @@ const BLOCK_1 = [
         section(
           'Fórmulas',
           'Riesgo monetario por operación = capital operativo × riesgo por operación (%). Riesgo acumulado teórico (%) = riesgo por operación × número de operaciones. Riesgo monetario acumulado = riesgo monetario por operación × número de operaciones. Exposición nominal máxima teórica = capital operativo × apalancamiento.',
-          'Con $10,000, 1% por operación, 5 operaciones y 5x: $100 por operación, 5% acumulado, $500 acumulados y $50,000 de exposición teórica.',
+          'Con 10,000 USD, 1% por operación, 5 operaciones y 5x: 100 USD por operación, 5% acumulado, 500 USD acumulados y 50,000 USD de exposición teórica.',
         ),
         section(
           'Automatización y monitoreo',
@@ -219,7 +219,7 @@ const BLOCK_1 = [
         ),
       ],
       exercise: {
-        prompt: 'Con $10,000 y 1% de riesgo por operación compara 1, 5 y 10 operaciones. ¿Por qué un sistema profesional necesita conocer la exposición total y no solo el riesgo de cada operación?',
+        prompt: 'Con 10,000 USD y 1% de riesgo por operación compara 1, 5 y 10 operaciones. ¿Por qué un sistema profesional necesita conocer la exposición total y no solo el riesgo de cada operación?',
         steps: ['Simula los tres escenarios.', 'Guarda al menos una simulación.', 'Registra tu respuesta y completa la Ruta de Mercados.'],
       },
     },
