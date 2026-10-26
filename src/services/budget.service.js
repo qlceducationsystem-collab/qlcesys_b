@@ -1,14 +1,24 @@
 import { prisma } from '../config/prisma.js';
-import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView } from '../domain/patrimonial.js';
+import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView, DIAGNOSIS_PENDING, isCustomCategory } from '../domain/patrimonial.js';
 import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { createContribution } from './emergency.service.js';
+import { absorbDiagnosisExpense, isDiagnosisExpense } from './moduleData.service.js';
 
 const ADJUST_SOURCE = 'M7_ADJUST';
+const INVEST_ADJUST = 'Aportación registrada desde el presupuesto (M7)';
+const customSource = (category) => `M7_${category}`;
+const customAdjustSource = (category) => `M7_ADJUST_${category}`;
+const customKey = (source) => source?.match(/^M7_(?:ADJUST_)?(CUSTOM:.+)$/)?.[1] || null;
+const bucketOf = (row) => (isDiagnosisExpense(row) ? DIAGNOSIS_PENDING : customKey(row.source) || row.category);
+const expenseCategoryOf = (category) => (isCustomCategory(category) ? 'OTROS' : category);
+const adjustSourceOf = (category) => (isCustomCategory(category) ? customAdjustSource(category) : ADJUST_SOURCE);
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
 const ORDER = new Map(BUDGET_CATEGORIES.map((c, i) => [c, i]));
-const sortLines = (lines) => [...lines].sort((a, b) => ORDER.get(a.category) - ORDER.get(b.category));
+const CUSTOM_ORDER = ORDER.get('OTROS') + 0.5;
+const orderOf = (category) => (ORDER.has(category) ? ORDER.get(category) : CUSTOM_ORDER);
+const sortLines = (lines) => [...lines].sort((a, b) => orderOf(a.category) - orderOf(b.category));
 const DEFAULT_LINES = BUDGET_DEFAULTS.map(([category, percent]) => ({ category, percent }));
 
 const findPeriod = (userId, { year, month }, db = prisma) => db.financialPeriod.findFirst({ where: { userId, year, month } });
@@ -19,12 +29,17 @@ const findBudget = (userId, { year, month }, db = prisma) =>
 export async function monthActuals(userId, periodId, db = prisma) {
   if (!periodId) return {};
   const [expenses, contributions, investments] = await Promise.all([
-    db.expense.groupBy({ by: ['category'], where: { userId, periodId }, _sum: { amount: true } }),
+    db.expense.groupBy({ by: ['category', 'source'], where: { userId, periodId }, _sum: { amount: true } }),
     db.savingContribution.aggregate({ where: { userId, periodId }, _sum: { amount: true } }),
     db.patrimonialMovement.aggregate({ where: { userId, periodId, type: 'APORTACION' }, _sum: { amount: true } }),
   ]);
+  const byBucket = {};
+  for (const e of expenses) {
+    const key = bucketOf(e);
+    byBucket[key] = (byBucket[key] || 0) + num(e._sum.amount);
+  }
   return {
-    ...Object.fromEntries(expenses.map((e) => [e.category, num(e._sum.amount)])),
+    ...byBucket,
     AHORRO: num(contributions._sum.amount),
     INVERSION: num(investments._sum.amount),
   };
@@ -49,6 +64,17 @@ export async function getBudget(userId, month, db = prisma) {
     actuals,
     view: budgetView({ netIncome, lines, actuals }),
   };
+}
+
+export async function budgetHistory(userId) {
+  const budgets = await prisma.budget.findMany({ where: { userId }, orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 24, include: { lines: true } });
+  return budgets.map((b) => ({
+    year: b.year,
+    month: b.month,
+    netIncome: num(b.netIncome),
+    updatedAt: b.updatedAt,
+    lines: sortLines(b.lines.map((l) => ({ category: l.category, percent: num(l.percent) }))),
+  }));
 }
 
 export async function budgetSnapshot(userId, period, db = prisma) {
@@ -84,42 +110,76 @@ export async function saveBudget(req, { year, month, netIncome, lines }) {
   return getBudget(userId, { year, month });
 }
 
+async function requirePeriod(userId, month) {
+  const period = await assertMonthEditable(userId, month);
+  if (!period) throw badRequest('Ese mes aún no tiene periodo en Ingresos y gastos. Créalo antes de registrar movimientos reales.');
+  return period;
+}
+
 export async function recordActual(req, { year, month, category, amount, description }) {
   const userId = req.subjectId;
-  const period = await assertMonthEditable(userId, { year, month });
-  if (!period) throw badRequest('Ese mes aún no tiene periodo en Ingresos y gastos. Créalo antes de registrar movimientos reales.');
+  const period = await requirePeriod(userId, { year, month });
   if (category === 'AHORRO') {
     await createContribution(req, period, { destination: 'AHORRO', amount, description });
   } else {
-    await prisma.expense.create({ data: { userId, periodId: period.id, category, description, amount, source: 'M7_BUDGET' } });
+    const expenseCategory = expenseCategoryOf(category);
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.create({ data: { userId, periodId: period.id, category: expenseCategory, description, amount, source: isCustomCategory(category) ? customSource(category) : 'M7_BUDGET' } });
+      await absorbDiagnosisExpense(tx, { userId, periodId: period.id, category: expenseCategory, delta: amount });
+    });
   }
   return getBudget(userId, { year, month });
 }
 
-export async function setActual(req, { year, month, category, amount }) {
-  const userId = req.subjectId;
-  const period = await assertMonthEditable(userId, { year, month });
-  if (!period) throw badRequest('Ese mes aún no tiene periodo en Ingresos y gastos. Créalo antes de registrar movimientos reales.');
-  if (category === 'AHORRO') {
-    const current = num((await prisma.savingContribution.aggregate({ where: { userId, periodId: period.id }, _sum: { amount: true } }))._sum.amount);
-    if (amount < current) throw badRequest(`Ya registraste ${mxn.format(current)} de ahorro este mes. Para reducirlo elimina aportaciones en el Módulo 8 · Fondo de emergencia.`);
-    if (amount > current) await createContribution(req, period, { destination: 'AHORRO', amount: amount - current, description: 'Ajuste desde el presupuesto (M7)' });
-    return getBudget(userId, { year, month });
+async function setSaving(req, period, amount) {
+  const current = num((await prisma.savingContribution.aggregate({ where: { userId: req.subjectId, periodId: period.id }, _sum: { amount: true } }))._sum.amount);
+  if (amount < current) throw badRequest(`Ya registraste ${mxn.format(current)} de ahorro este mes. Para reducirlo elimina aportaciones en el Módulo 8 · Fondo de emergencia.`);
+  if (amount > current) await createContribution(req, period, { destination: 'AHORRO', amount: amount - current, description: 'Ajuste desde el presupuesto (M7)' });
+}
+
+async function setInvestment(userId, period, amount) {
+  const movements = await prisma.patrimonialMovement.findMany({ where: { userId, periodId: period.id, type: 'APORTACION' } });
+  const adjust = movements.find((m) => !m.assetId && m.description === INVEST_ADJUST);
+  const recorded = movements.filter((m) => m !== adjust).reduce((acc, m) => acc + num(m.amount), 0);
+  const difference = Math.round((amount - recorded) * 100) / 100;
+  if (difference < 0) throw badRequest(`En Movimientos ya hay ${mxn.format(recorded)} en aportaciones este mes. Para bajar el importe real, edita esos movimientos.`);
+  if (difference === 0) {
+    if (adjust) await prisma.patrimonialMovement.delete({ where: { id: adjust.id } });
+  } else if (adjust) {
+    await prisma.patrimonialMovement.update({ where: { id: adjust.id }, data: { amount: difference } });
+  } else {
+    await prisma.patrimonialMovement.create({
+      data: { userId, periodId: period.id, type: 'APORTACION', amount: difference, description: INVEST_ADJUST, date: new Date(Date.UTC(period.year, period.month - 1, 1, 12)) },
+    });
   }
-  const where = { userId, periodId: period.id, category };
-  const [others, adjust] = await Promise.all([
-    prisma.expense.aggregate({ where: { ...where, NOT: { source: ADJUST_SOURCE } }, _sum: { amount: true } }),
-    prisma.expense.findFirst({ where: { ...where, source: ADJUST_SOURCE } }),
-  ]);
-  const recorded = num(others._sum.amount);
+}
+
+async function setExpense(userId, period, category, amount) {
+  const expenseCategory = expenseCategoryOf(category);
+  const adjustSource = adjustSourceOf(category);
+  const rows = (await prisma.expense.findMany({ where: { userId, periodId: period.id, category: expenseCategory } })).filter((r) => bucketOf(r) === category);
+  const adjust = rows.find((r) => r.source === adjustSource);
+  const recorded = rows.filter((r) => r !== adjust).reduce((acc, r) => acc + num(r.amount), 0);
   const difference = Math.round((amount - recorded) * 100) / 100;
   if (difference < 0) throw badRequest(`En Ingresos y gastos ya hay ${mxn.format(recorded)} registrados en esta categoría. Para bajar el importe real, edita esos movimientos.`);
-  if (difference === 0) {
-    if (adjust) await prisma.expense.delete({ where: { id: adjust.id } });
-  } else if (adjust) {
-    await prisma.expense.update({ where: { id: adjust.id }, data: { amount: difference } });
-  } else {
-    await prisma.expense.create({ data: { ...where, description: 'Ajuste desde el presupuesto (M7)', amount: difference, source: ADJUST_SOURCE } });
-  }
+  const previous = adjust ? num(adjust.amount) : 0;
+  await prisma.$transaction(async (tx) => {
+    if (difference === 0) {
+      if (adjust) await tx.expense.delete({ where: { id: adjust.id } });
+    } else if (adjust) {
+      await tx.expense.update({ where: { id: adjust.id }, data: { amount: difference } });
+    } else {
+      await tx.expense.create({ data: { userId, periodId: period.id, category: expenseCategory, description: 'Ajuste desde el presupuesto (M7)', amount: difference, source: adjustSource } });
+    }
+    await absorbDiagnosisExpense(tx, { userId, periodId: period.id, category: expenseCategory, delta: difference - previous });
+  });
+}
+
+export async function setActual(req, { year, month, category, amount }) {
+  const userId = req.subjectId;
+  const period = await requirePeriod(userId, { year, month });
+  if (category === 'AHORRO') await setSaving(req, period, amount);
+  else if (category === 'INVERSION') await setInvestment(userId, period, amount);
+  else await setExpense(userId, period, category, amount);
   return getBudget(userId, { year, month });
 }

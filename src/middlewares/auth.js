@@ -20,6 +20,20 @@ export function verifyChallenge(token) {
   }
 }
 
+const EMAIL_PURPOSE = 'email-verify';
+
+export const signEmailToken = (email, hash, minutes) => jwt.sign({ purpose: EMAIL_PURPOSE, email, h: hash }, env.jwtSecret, { expiresIn: `${minutes}m` });
+
+export function verifyEmailToken(token) {
+  try {
+    const payload = jwt.verify(String(token || ''), env.jwtSecret);
+    if (payload.purpose !== EMAIL_PURPOSE) throw new Error('purpose');
+    return payload;
+  } catch {
+    throw badRequest('El código de verificación expiró. Solicita uno nuevo.');
+  }
+}
+
 const bearer = (req) => {
   const header = req.headers.authorization || '';
   return header.startsWith('Bearer ') ? header.slice(7) : null;

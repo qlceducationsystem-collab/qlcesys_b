@@ -130,7 +130,9 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(housing.actual, 9000);
     assert.equal(housing.difference, -1500);
     assert.equal(housing.status, 'OVER');
-    assert.equal(view.rows.find((r) => r.category === 'DEUDAS').actual, 3000);
+    assert.equal(view.rows.find((r) => r.category === 'DEUDAS').actual, 0);
+    assert.equal(view.diagnosisPending, 16000);
+    assert.equal(view.unbudgeted.length, 0);
     assert.equal(await prisma.expense.count({ where: { userId: ids.p } }), expensesCount);
 
     const saving = await api('p').post('/api/academy/budget/actuals', { ...state.month, category: 'AHORRO', amount: 2000, description: 'Ahorro del mes' });
@@ -175,8 +177,9 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(card.monthlyInterest, 980);
     assert.equal(card.monthlyCost, 1130);
     assert.equal(card.principalContribution, 2370);
-    assert.equal(list.totals.payments, 6500);
-    assert.ok(Math.abs(list.totals.paymentToIncome - (6500 / 30000) * 100) < 1e-9);
+    assert.equal(list.totals.payments, 3500);
+    assert.equal(list.items.some((d) => d.name === 'Deudas por desglosar (diagnóstico)'), false);
+    assert.ok(Math.abs(list.totals.paymentToIncome - (3500 / 30000) * 100) < 1e-9);
     const unknown = await api('p').post('/api/academy/obligations', { name: 'Préstamo familiar', type: 'PRESTAMO_FAMILIAR', balance: 5000, annualRate: '', payment: 500, fees: 0 });
     assert.equal(unknown.status, 201);
     const unknownView = (await api('p').get('/api/academy/obligations')).body.items.find((d) => d.balanceId === unknown.body.id);
@@ -189,7 +192,8 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     const expenses = await prisma.expense.count({ where: { userId: ids.p, category: 'DEUDAS' } });
     const paid = await api('p').post(`/api/academy/obligations/${state.balanceId}/payments`, { amount: 3500, newBalance: 25870 });
     assert.equal(paid.status, 201);
-    assert.equal(await prisma.expense.count({ where: { userId: ids.p, category: 'DEUDAS' } }), expenses + 1);
+    assert.equal(await prisma.expense.count({ where: { userId: ids.p, category: 'DEUDAS' } }), expenses);
+    assert.equal(await prisma.expense.count({ where: { userId: ids.p, source: 'M1_DEBT_PAYMENT' } }), 0);
     assert.equal(Number((await prisma.debtBalance.findUnique({ where: { id: state.balanceId } })).balance), 25870);
     assert.equal((await api('q').put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 403);
     assert.equal((await api('full', ids.q).put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 404);

@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { allocationFromPortfolio, diagnose, PLACEHOLDERS, placeholderAmounts, PRODUCT_CATEGORY } from '../domain/learning.js';
 import { badRequest, notFound } from '../utils/httpError.js';
-import { num } from '../utils/money.js';
+import { num, round2 } from '../utils/money.js';
 import { ensureWorkingPeriod, getPeriodSummary, latestPeriod } from './period.service.js';
 
 const categoryId = async (tx, code) => {
@@ -20,19 +20,73 @@ async function upsertSourced(tx, model, { userId, periodId, source }, data) {
   else await tx[model].create({ data: { userId, periodId, source, ...data } });
 }
 
+export const DIAGNOSIS_EXPENSE_SOURCES = ['M1_EXPENSES', 'M1_DEBT_PAYMENT'];
+export const DIAGNOSIS_DEBT_SOURCE = 'M1_DEBT';
+const diagnosisSource = (category) => (category === 'DEUDAS' ? 'M1_DEBT_PAYMENT' : 'M1_EXPENSES');
+export const isDiagnosisExpense = (row) => DIAGNOSIS_EXPENSE_SOURCES.includes(row?.source);
+const detailedWhere = { OR: [{ source: null }, { source: { notIn: DIAGNOSIS_EXPENSE_SOURCES } }] };
+
+export async function absorbDiagnosisExpense(db, { userId, periodId, category, delta }) {
+  if (!delta) return;
+  const placeholder = await db.expense.findFirst({ where: { userId, periodId, source: diagnosisSource(category) } });
+  if (!placeholder) return;
+  const amount = round2(Math.max(0, num(placeholder.amount) - delta));
+  if (amount > 0) await db.expense.update({ where: { id: placeholder.id }, data: { amount } });
+  else await db.expense.delete({ where: { id: placeholder.id } });
+}
+
+export async function absorbExpenseChange(db, userId, before, after) {
+  if (before && !isDiagnosisExpense(before)) await absorbDiagnosisExpense(db, { userId, periodId: before.periodId, category: before.category, delta: -num(before.amount) });
+  if (after && !isDiagnosisExpense(after)) await absorbDiagnosisExpense(db, { userId, periodId: after.periodId, category: after.category, delta: num(after.amount) });
+}
+
+async function syncDiagnosisExpenses(tx, scope, { expenses, debtPayment }) {
+  const rows = await tx.expense.groupBy({ by: ['category'], where: { ...scope, ...detailedWhere }, _sum: { amount: true } });
+  const detailed = (debts) => rows.filter((r) => (r.category === 'DEUDAS') === debts).reduce((acc, r) => acc + num(r._sum.amount), 0);
+  await upsertSourced(tx, 'expense', { ...scope, source: 'M1_EXPENSES' }, { category: 'OTROS', description: 'Gastos mensuales por desglosar (diagnóstico)', amount: round2(Math.max(0, num(expenses) - detailed(false))) });
+  await upsertSourced(tx, 'expense', { ...scope, source: 'M1_DEBT_PAYMENT' }, { category: 'DEUDAS', description: 'Pago mensual de deudas por desglosar (diagnóstico)', amount: round2(Math.max(0, num(debtPayment) - detailed(true))) });
+}
+
+const DIAGNOSIS_DEBT_NAME = 'Deudas por desglosar (diagnóstico)';
+const diagnosisDebtBalance = (db, userId, periodId) => db.debtBalance.findFirst({ where: { periodId, debt: { userId, source: DIAGNOSIS_DEBT_SOURCE } }, include: { debt: true } });
+const renameDiagnosisDebt = async (db, debt) => {
+  if (debt.name !== DIAGNOSIS_DEBT_NAME) await db.debt.update({ where: { id: debt.id }, data: { name: DIAGNOSIS_DEBT_NAME } });
+};
+
+export async function absorbDiagnosisDebt(db, { userId, periodId, balance = 0, payment = 0 }) {
+  if (!balance && !payment) return;
+  const placeholder = await diagnosisDebtBalance(db, userId, periodId);
+  if (!placeholder) return;
+  const data = { balance: round2(Math.max(0, num(placeholder.balance) - balance)), payment: round2(Math.max(0, num(placeholder.payment) - payment)) };
+  if (data.balance > 0 || data.payment > 0) {
+    await db.debtBalance.update({ where: { id: placeholder.id }, data });
+    await renameDiagnosisDebt(db, placeholder.debt);
+    return;
+  }
+  await db.debtBalance.delete({ where: { id: placeholder.id } });
+  if (!(await db.debtBalance.count({ where: { debtId: placeholder.debtId } }))) await db.debt.delete({ where: { id: placeholder.debtId } });
+}
+
 async function upsertSourcedDebt(tx, { userId, periodId }, { balance, payment }) {
-  let debt = await tx.debt.findFirst({ where: { userId, source: 'M1_DEBT' } });
+  const others = await tx.debtBalance.aggregate({
+    where: { periodId, debt: { userId, OR: [{ source: null }, { source: { not: DIAGNOSIS_DEBT_SOURCE } }] } },
+    _sum: { balance: true, payment: true },
+  });
+  const pendingBalance = round2(Math.max(0, num(balance) - num(others._sum.balance)));
+  const pendingPayment = round2(Math.max(0, num(payment) - num(others._sum.payment)));
+  let debt = await tx.debt.findFirst({ where: { userId, source: DIAGNOSIS_DEBT_SOURCE } });
   const current = debt ? await tx.debtBalance.findUnique({ where: { debtId_periodId: { debtId: debt.id, periodId } } }) : null;
-  if (num(balance) <= 0 && num(payment) <= 0) {
+  if (pendingBalance <= 0 && pendingPayment <= 0) {
     if (current) await tx.debtBalance.delete({ where: { id: current.id } });
     if (debt && !(await tx.debtBalance.count({ where: { debtId: debt.id } }))) await tx.debt.delete({ where: { id: debt.id } });
     return;
   }
-  if (!debt) debt = await tx.debt.create({ data: { userId, name: 'Deudas totales (diagnóstico)', annualRate: null, source: 'M1_DEBT' } });
+  if (!debt) debt = await tx.debt.create({ data: { userId, name: DIAGNOSIS_DEBT_NAME, annualRate: null, source: DIAGNOSIS_DEBT_SOURCE } });
+  else await renameDiagnosisDebt(tx, debt);
   await tx.debtBalance.upsert({
     where: { debtId_periodId: { debtId: debt.id, periodId } },
-    create: { debtId: debt.id, periodId, balance, payment },
-    update: { balance, payment },
+    create: { debtId: debt.id, periodId, balance: pendingBalance, payment: pendingPayment },
+    update: { balance: pendingBalance, payment: pendingPayment },
   });
 }
 
@@ -118,8 +172,7 @@ export async function saveDiagnosis(req, input) {
     };
     await tx.financialProfile.upsert({ where: { userId }, create: { userId, ...profileData }, update: profileData });
     await upsertSourced(tx, 'income', { ...scope, source: 'M1_INCOME' }, { category: 'OTROS', description: 'Ingreso mensual (diagnóstico)', amount: input.income });
-    await upsertSourced(tx, 'expense', { ...scope, source: 'M1_EXPENSES' }, { category: 'OTROS', description: 'Gastos mensuales (diagnóstico)', amount: input.expenses });
-    await upsertSourced(tx, 'expense', { ...scope, source: 'M1_DEBT_PAYMENT' }, { category: 'DEUDAS', description: 'Pago mensual de deudas (diagnóstico)', amount: input.debtPayment });
+    await syncDiagnosisExpenses(tx, scope, input);
     await upsertSourcedDebt(tx, scope, { balance: input.totalDebt, payment: input.debtPayment });
     await syncPlaceholders(tx, userId, period.id);
     await tx.moduleSubmission.create({ data: { userId, moduleNumber: 1, data: input, result } });

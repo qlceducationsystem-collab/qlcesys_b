@@ -12,6 +12,12 @@ export const registerSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   acceptLegal: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar los Términos y el Aviso de privacidad' }) }),
   legalVersion: z.string().trim().min(1).max(20),
+  emailToken: z.string().max(2000).optional(),
+  emailCode: z.string().trim().regex(/^\d{6}$/, 'El código tiene 6 dígitos').optional(),
+});
+
+export const emailCodeSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
 });
 
 export const loginSchema = z.object({
@@ -227,6 +233,8 @@ export const grantSchema = z.object({ offerCode: text(40) });
 export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });
 
 const BUDGET_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'DEUDAS', 'OTROS', 'AHORRO', 'INVERSION'];
+const customBudgetCategory = z.string().trim().regex(/^CUSTOM:\S.{0,39}$/, 'Nombre de categoría inválido');
+const budgetCategory = (exclude = []) => z.union([z.enum(BUDGET_CATEGORIES.filter((c) => !exclude.includes(c))), customBudgetCategory]);
 const yearField = z.coerce.number().int().min(2000).max(2100);
 const monthField = z.coerce.number().int().min(1).max(12);
 
@@ -237,16 +245,16 @@ export const budgetSchema = z.object({
   month: monthField,
   netIncome: money,
   lines: z
-    .array(z.object({ category: z.enum(BUDGET_CATEGORIES), percent: z.coerce.number().min(0, 'No puede ser negativo').max(100) }))
+    .array(z.object({ category: budgetCategory(), percent: z.coerce.number().min(0, 'No puede ser negativo').max(100) }))
     .min(1)
-    .max(BUDGET_CATEGORIES.length)
+    .max(40)
     .refine((lines) => new Set(lines.map((l) => l.category)).size === lines.length, 'Categorías repetidas'),
 });
 
 export const budgetActualSchema = z.object({
   year: yearField,
   month: monthField,
-  category: z.enum(BUDGET_CATEGORIES.filter((c) => c !== 'INVERSION')),
+  category: budgetCategory(['INVERSION']),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
   description: text(),
 });
@@ -254,7 +262,7 @@ export const budgetActualSchema = z.object({
 export const budgetActualSetSchema = z.object({
   year: yearField,
   month: monthField,
-  category: z.enum(BUDGET_CATEGORIES.filter((c) => c !== 'INVERSION')),
+  category: budgetCategory(),
   amount: z.coerce.number().min(0, 'No puede ser negativo').max(1e12),
 });
 
@@ -330,4 +338,21 @@ export const exerciseQuery = z.object({ status: z.enum(['PENDING', 'ANSWERED']).
 export const leadQuery = z.object({
   status: z.enum(['NEW', 'CONTACTED', 'CLOSED']).optional(),
   interest: z.enum(LEAD_INTERESTS).optional(),
+});
+
+const metric = (max) => z.coerce.number().min(0).max(max);
+const optionalUrl = z.preprocess((v) => (v === '' || v === undefined ? null : v), z.string().trim().url('URL inválida').max(500).nullable());
+
+export const loginNoticeSchema = z.object({
+  active: z.boolean(),
+  metrics: z.object({
+    returnPct: z.coerce.number().min(-100).max(100000),
+    days: metric(100000),
+    wins: metric(1000000),
+    losses: metric(1000000),
+    hitRate: metric(100),
+    drawdown: metric(100),
+  }),
+  bitgetUrl: optionalUrl,
+  infoUrl: optionalUrl,
 });

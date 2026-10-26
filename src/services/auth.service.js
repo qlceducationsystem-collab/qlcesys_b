@@ -1,18 +1,42 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
-import { signChallenge, signToken, verifyChallenge } from '../middlewares/auth.js';
+import { signChallenge, signEmailToken, signToken, verifyChallenge, verifyEmailToken } from '../middlewares/auth.js';
 import { HttpError, badRequest, conflict, notFound, unauthorized } from '../utils/httpError.js';
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 import { generateSecret, matchStep, otpauthUrl } from '../utils/totp.js';
 import { trackLogin } from './analytics.service.js';
-import { sendEmail } from './email.service.js';
+import { emailReady, sendEmail } from './email.service.js';
 
 export const SALT_ROUNDS = 12;
 const ISSUER = 'QLC Financial Education';
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
+const EMAIL_CODE_MINUTES = 10;
+
+const codeHash = (email, code) => crypto.createHmac('sha256', env.jwtSecret).update(`${email}:${code}`).digest('hex');
+
+export async function sendRegisterCode({ email }) {
+  if (!(await emailReady())) return { required: false };
+  if (await prisma.user.findUnique({ where: { email } })) throw conflict('Ya existe una cuenta con ese correo');
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  const result = await sendEmail('verifyEmail', email, { code, minutes: EMAIL_CODE_MINUTES });
+  if (!result.sent) throw new HttpError(502, 'No pudimos enviar el código a tu correo. Revisa la dirección e intenta de nuevo.');
+  return { required: true, emailToken: signEmailToken(email, codeHash(email, code), EMAIL_CODE_MINUTES), minutes: EMAIL_CODE_MINUTES };
+}
+
+async function assertEmailVerified({ email, emailToken, emailCode }) {
+  if (!(await emailReady())) return;
+  if (!emailToken || !emailCode) throw badRequest('Confirma tu correo con el código que te enviamos.');
+  const payload = verifyEmailToken(emailToken);
+  const expected = Buffer.from(payload.h || '', 'hex');
+  const actual = Buffer.from(codeHash(email, emailCode), 'hex');
+  if (payload.email !== email || expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    throw badRequest('Código de verificación de correo incorrecto');
+  }
+}
 
 export const publicUser = ({ id, email, name, role, adminLevel, phone, createdAt, totpEnabledAt }) => ({
   id, email, name, role, adminLevel, phone, createdAt, twoFactorEnabled: !!totpEnabledAt,
@@ -30,9 +54,10 @@ async function startSession(user) {
 
 const setupChallenge = (user) => ({ status: 'SETUP_2FA', challengeToken: signChallenge(user), user: publicUser(user) });
 
-export async function register({ name, email, password, phone, legalVersion }) {
+export async function register({ name, email, password, phone, legalVersion, emailToken, emailCode }) {
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) throw conflict('Ya existe una cuenta con ese correo');
+  await assertEmailVerified({ email, emailToken, emailCode });
   const user = await prisma.user.create({
     data: { name, email, phone, role: 'CLIENT', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });

@@ -19,6 +19,12 @@ export const BUDGET_CATEGORIES = [...BUDGET_EXPENSE_CATEGORIES, ...TARGET_CATEGO
 export const ESSENTIAL_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'DEUDAS'];
 export const isEssentialCategory = (category) => ESSENTIAL_CATEGORIES.includes(category);
 const PERCENT_TOLERANCE = 0.005;
+export const CUSTOM_PREFIX = 'CUSTOM:';
+export const CUSTOM_NAME_MAX = 40;
+export const DIAGNOSIS_PENDING = 'DIAGNOSTICO_PENDIENTE';
+export const isCustomCategory = (category) => typeof category === 'string' && category.startsWith(CUSTOM_PREFIX);
+export const customCategory = (name) => `${CUSTOM_PREFIX}${String(name).trim().replace(/\s+/g, ' ').slice(0, CUSTOM_NAME_MAX)}`;
+export const customName = (category) => category.slice(CUSTOM_PREFIX.length);
 
 export function budgetLine({ category, percent }, netIncome, actual) {
   const planned = (toNumber(netIncome) * toNumber(percent)) / 100;
@@ -31,6 +37,7 @@ export function budgetLine({ category, percent }, netIncome, actual) {
 
 export function budgetView({ netIncome, lines = [], actuals = {} }) {
   const income = toNumber(netIncome);
+  const pending = toNumber(actuals[DIAGNOSIS_PENDING]);
   const rows = lines.map((l) => budgetLine(l, income, actuals[l.category]));
   const expenses = rows.filter((r) => r.kind === 'EXPENSE');
   const pick = (category) => rows.find((r) => r.category === category);
@@ -56,11 +63,12 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
     savingsActual: pick('AHORRO')?.actual ?? 0,
     investmentPlanned: pick('INVERSION')?.planned ?? 0,
     investmentActual: pick('INVERSION')?.actual ?? 0,
-    totalActual: totalActual + unbudgetedExpenses,
-    expensesActualTotal: expensesActual + unbudgetedExpenses,
-    estimatedBalance: income - totalActual - unbudgetedExpenses,
+    totalActual: totalActual + unbudgetedExpenses + pending,
+    expensesActualTotal: expensesActual + unbudgetedExpenses + pending,
+    estimatedBalance: income - totalActual - unbudgetedExpenses - pending,
     unbudgeted,
     unbudgetedExpenses,
+    diagnosisPending: pending,
   };
 }
 
@@ -109,6 +117,24 @@ export function debtEstimate({ balance, annualRate, payment, fees }) {
     principalContribution,
     incomplete: !rateKnown,
     paymentBelowCost: principalContribution < 0,
+  };
+}
+
+export function debtPayment({ balance, annualRate, fees, amount }) {
+  const outstanding = toNumber(balance);
+  const paid = toNumber(amount);
+  const rateKnown = !isBlank(annualRate);
+  const interest = rateKnown ? (outstanding * toNumber(annualRate)) / 100 / 12 : 0;
+  const charges = toNumber(fees);
+  const principal = Math.min(outstanding, Math.max(0, paid - interest - charges));
+  return {
+    amount: paid,
+    rateKnown,
+    interest,
+    fees: charges,
+    principal,
+    previousBalance: outstanding,
+    newBalance: Math.round((outstanding - principal) * 100) / 100,
   };
 }
 

@@ -1,3 +1,4 @@
+import { customName, isCustomCategory } from '../domain/patrimonial.js';
 import { createDoc, date, finish, kpis, money, pct, section, statusBanner, table } from './layout.js';
 
 const CAT_COLS = [
@@ -26,7 +27,7 @@ function budgetSection(doc, budget) {
       { label: 'Real', width: 0.19, align: 'right' },
       { label: 'Diferencia', width: 0.19, align: 'right' },
     ],
-    v.rows.map((r) => [BUDGET_LABELS[r.category] || r.category, pct(r.percent), money(r.planned), money(r.actual), money(r.difference)]),
+    v.rows.map((r) => [BUDGET_LABELS[r.category] || (isCustomCategory(r.category) ? customName(r.category) : r.category), pct(r.percent), money(r.planned), money(r.actual), money(r.difference)]),
   );
   kpis(doc, [
     ['Ingreso neto presupuestado', money(v.netIncome)],

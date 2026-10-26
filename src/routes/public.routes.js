@@ -6,6 +6,7 @@ import { validate } from '../middlewares/validate.js';
 import { leadSchema } from '../validations/schemas.js';
 import { createLead } from '../services/lead.service.js';
 import { cachedActiveOffers } from '../services/access.service.js';
+import { getLoginNotice } from '../services/loginNotice.service.js';
 import { handleCallback } from '../services/google/oauth.js';
 import { streamWithToken } from '../services/moduleMedia.service.js';
 
@@ -20,6 +21,11 @@ publicRouter.post('/leads', leadsLimiter, validate(leadSchema), ah(async (req, r
 publicRouter.get('/offers', ah(async (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=3600');
   res.json({ offers: await cachedActiveOffers() });
+}));
+
+publicRouter.get('/notice', ah(async (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.json(await getLoginNotice());
 }));
 
 googleRouter.get('/callback', async (req, res) => {

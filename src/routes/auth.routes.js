@@ -8,6 +8,7 @@ import * as auth from '../services/auth.service.js';
 
 const r = Router();
 
+r.post('/register/email-code', authLimiter, validate(schemas.emailCodeSchema), ah(async (req, res) => res.json(await auth.sendRegisterCode(req.body))));
 r.post('/register', authLimiter, validate(schemas.registerSchema), ah(async (req, res) => res.status(201).json(await auth.register(req.body))));
 r.post('/login', authLimiter, validate(schemas.loginSchema), ah(async (req, res) => res.json(await auth.login(req.body))));
 r.post('/login/2fa', authLimiter, validate(schemas.codeLoginSchema), ah(async (req, res) => res.json(await auth.loginWithCode(req.body))));
