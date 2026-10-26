@@ -40,6 +40,14 @@ describe('M7 · presupuesto', () => {
     assert.equal(v.savingsActual, 2000);
     assert.equal(v.estimatedBalance, 30000 - 14000);
   });
+
+  test('gastos reales fuera del presupuesto también se descuentan del saldo estimado', () => {
+    const v = budgetView({ netIncome: 100000, lines: defaults, actuals: { DEUDAS: 20000, OTROS: 60000 } });
+    assert.deepEqual(v.unbudgeted, [{ category: 'OTROS', actual: 60000 }]);
+    assert.equal(v.unbudgetedExpenses, 60000);
+    assert.equal(v.expensesActualTotal, 80000);
+    assert.equal(v.estimatedBalance, 20000);
+  });
 });
 
 describe('M8 · fondo de emergencia', () => {

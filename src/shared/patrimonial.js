@@ -18,7 +18,7 @@ export const BUDGET_EXPENSE_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS
 export const BUDGET_CATEGORIES = [...BUDGET_EXPENSE_CATEGORIES, ...TARGET_CATEGORIES];
 export const ESSENTIAL_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'DEUDAS'];
 export const isEssentialCategory = (category) => ESSENTIAL_CATEGORIES.includes(category);
-const PERCENT_TOLERANCE = 0.0001;
+const PERCENT_TOLERANCE = 0.005;
 
 export function budgetLine({ category, percent }, netIncome, actual) {
   const planned = (toNumber(netIncome) * toNumber(percent)) / 100;
@@ -40,6 +40,8 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
   const expensesPlanned = total(expenses, (r) => r.planned);
   const expensesActual = total(expenses, (r) => r.actual);
   const totalActual = total(rows, (r) => r.actual);
+  const unbudgeted = BUDGET_EXPENSE_CATEGORIES.filter((c) => !budgeted.has(c) && toNumber(actuals[c]) > 0).map((c) => ({ category: c, actual: toNumber(actuals[c]) }));
+  const unbudgetedExpenses = total(unbudgeted, (u) => u.actual);
   return {
     netIncome: income,
     rows,
@@ -54,9 +56,11 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
     savingsActual: pick('AHORRO')?.actual ?? 0,
     investmentPlanned: pick('INVERSION')?.planned ?? 0,
     investmentActual: pick('INVERSION')?.actual ?? 0,
-    totalActual,
-    estimatedBalance: income - totalActual,
-    unbudgetedExpenses: BUDGET_EXPENSE_CATEGORIES.filter((c) => !budgeted.has(c)).reduce((acc, c) => acc + toNumber(actuals[c]), 0),
+    totalActual: totalActual + unbudgetedExpenses,
+    expensesActualTotal: expensesActual + unbudgetedExpenses,
+    estimatedBalance: income - totalActual - unbudgetedExpenses,
+    unbudgeted,
+    unbudgetedExpenses,
   };
 }
 

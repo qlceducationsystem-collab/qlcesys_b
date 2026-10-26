@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ah } from '../utils/asyncHandler.js';
 import { validate } from '../middlewares/validate.js';
 import {
-  budgetActualSchema, budgetSchema, contributionSchema, debtFields, debtPaymentSchema, emergencyPlanSchema,
+  budgetActualSchema, budgetActualSetSchema, budgetSchema, contributionSchema, debtFields, debtPaymentSchema, emergencyPlanSchema,
   monthQuery, patrimonialGoalSchema, reviewNoteSchema, scenarioSchema, taxItemSchema,
 } from '../validations/schemas.js';
 import { assertToolOpen } from '../services/academy.service.js';
@@ -23,6 +23,7 @@ const tool = (n) => ah(async (req, res, next) => {
 r.get('/budget', tool(7), validate(monthQuery, 'query'), ah(async (req, res) => res.json(await budget.getBudget(req.subjectId, req.validQuery))));
 r.put('/budget', tool(7), validate(budgetSchema), ah(async (req, res) => res.json(await budget.saveBudget(req, req.body))));
 r.post('/budget/actuals', tool(7), validate(budgetActualSchema), ah(async (req, res) => res.status(201).json(await budget.recordActual(req, req.body))));
+r.put('/budget/actuals', tool(7), validate(budgetActualSetSchema), ah(async (req, res) => res.json(await budget.setActual(req, req.body))));
 
 r.get('/emergency', tool(8), ah(async (req, res) => res.json(await emergency.getEmergency(req.subjectId))));
 r.put('/emergency', tool(8), validate(emergencyPlanSchema), ah(async (req, res) => res.json(await emergency.savePlan(req, req.body))));

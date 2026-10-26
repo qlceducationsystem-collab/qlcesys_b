@@ -251,6 +251,13 @@ export const budgetActualSchema = z.object({
   description: text(),
 });
 
+export const budgetActualSetSchema = z.object({
+  year: yearField,
+  month: monthField,
+  category: z.enum(BUDGET_CATEGORIES.filter((c) => c !== 'INVERSION')),
+  amount: z.coerce.number().min(0, 'No puede ser negativo').max(1e12),
+});
+
 export const emergencyPlanSchema = z.object({
   targetMonths: z.coerce.number().int().min(1, 'La meta debe ser mayor que cero').max(60),
   monthlyContribution: money,

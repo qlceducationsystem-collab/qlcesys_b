@@ -4,6 +4,9 @@ import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { createContribution } from './emergency.service.js';
 
+const ADJUST_SOURCE = 'M7_ADJUST';
+const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+
 const ORDER = new Map(BUDGET_CATEGORIES.map((c, i) => [c, i]));
 const sortLines = (lines) => [...lines].sort((a, b) => ORDER.get(a.category) - ORDER.get(b.category));
 const DEFAULT_LINES = BUDGET_DEFAULTS.map(([category, percent]) => ({ category, percent }));
@@ -89,6 +92,34 @@ export async function recordActual(req, { year, month, category, amount, descrip
     await createContribution(req, period, { destination: 'AHORRO', amount, description });
   } else {
     await prisma.expense.create({ data: { userId, periodId: period.id, category, description, amount, source: 'M7_BUDGET' } });
+  }
+  return getBudget(userId, { year, month });
+}
+
+export async function setActual(req, { year, month, category, amount }) {
+  const userId = req.subjectId;
+  const period = await assertMonthEditable(userId, { year, month });
+  if (!period) throw badRequest('Ese mes aún no tiene periodo en Ingresos y gastos. Créalo antes de registrar movimientos reales.');
+  if (category === 'AHORRO') {
+    const current = num((await prisma.savingContribution.aggregate({ where: { userId, periodId: period.id }, _sum: { amount: true } }))._sum.amount);
+    if (amount < current) throw badRequest(`Ya registraste ${mxn.format(current)} de ahorro este mes. Para reducirlo elimina aportaciones en el Módulo 8 · Fondo de emergencia.`);
+    if (amount > current) await createContribution(req, period, { destination: 'AHORRO', amount: amount - current, description: 'Ajuste desde el presupuesto (M7)' });
+    return getBudget(userId, { year, month });
+  }
+  const where = { userId, periodId: period.id, category };
+  const [others, adjust] = await Promise.all([
+    prisma.expense.aggregate({ where: { ...where, NOT: { source: ADJUST_SOURCE } }, _sum: { amount: true } }),
+    prisma.expense.findFirst({ where: { ...where, source: ADJUST_SOURCE } }),
+  ]);
+  const recorded = num(others._sum.amount);
+  const difference = Math.round((amount - recorded) * 100) / 100;
+  if (difference < 0) throw badRequest(`En Ingresos y gastos ya hay ${mxn.format(recorded)} registrados en esta categoría. Para bajar el importe real, edita esos movimientos.`);
+  if (difference === 0) {
+    if (adjust) await prisma.expense.delete({ where: { id: adjust.id } });
+  } else if (adjust) {
+    await prisma.expense.update({ where: { id: adjust.id }, data: { amount: difference } });
+  } else {
+    await prisma.expense.create({ data: { ...where, description: 'Ajuste desde el presupuesto (M7)', amount: difference, source: ADJUST_SOURCE } });
   }
   return getBudget(userId, { year, month });
 }
