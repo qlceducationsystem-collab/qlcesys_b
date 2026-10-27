@@ -17,13 +17,12 @@ export function diagnose(input) {
   const investments = num(input.investments);
   const otherAssets = num(input.otherAssets);
   const totalDebt = num(input.totalDebt);
-  const emergencyFund = num(input.emergencyFund);
 
   const savings = round2(income - expenses - debtPayment);
   const savingRate = pctOf(savings, income);
   const totalAssets = round2(cash + investments + otherAssets);
   const netWorth = round2(totalAssets - totalDebt);
-  const liquidityMonths = expenses === 0 ? null : round2(emergencyFund / expenses);
+  const liquidityMonths = expenses === 0 ? null : round2(cash / expenses);
   const savingLevel = savingRate === null ? null : SAVING_LEVELS.find((l) => savingRate >= l.min);
 
   return {

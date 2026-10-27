@@ -203,7 +203,7 @@ export async function getDiagnosis(userId) {
     prisma.financialProfile.findUnique({ where: { userId } }),
     prisma.moduleSubmission.findFirst({ where: { userId, moduleNumber: 1 }, orderBy: { createdAt: 'desc' } }),
   ]);
-  return { profile: profileView(profile), input: submission?.data || null, result: submission?.result || null, savedAt: submission?.createdAt || null };
+  return { profile: profileView(profile), input: submission?.data || null, result: submission ? { ...submission.result, ...diagnose(submission.data) } : null, savedAt: submission?.createdAt || null };
 }
 
 export async function saveDiagnosis(req, input) {

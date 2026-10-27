@@ -20,6 +20,11 @@ test('M1: diagnóstico con el ejemplo del documento', () => {
   assert.equal(r.freeCashFlow, 2000);
 });
 
+test('M1: los meses de liquidez usan el efectivo y liquidez disponible, no el ingreso ni el fondo declarado', () => {
+  const r = diagnose({ income: 100000, expenses: 60000, debtPayment: 20000, monthlyInvestment: 0, cash: 318000, investments: 0, otherAssets: 0, totalDebt: 0, emergencyFund: 100000 });
+  assert.equal(r.liquidityMonths, 5.3);
+});
+
 test('M1: casos límite sin ingresos, sin gastos y patrimonio negativo', () => {
   const r = diagnose({ income: 0, expenses: 0, debtPayment: 0, monthlyInvestment: 0, cash: 0, investments: 0, otherAssets: 0, totalDebt: 1000, emergencyFund: 0 });
   assert.equal(r.savingRate, null);
