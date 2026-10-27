@@ -90,6 +90,57 @@ async function upsertSourcedDebt(tx, { userId, periodId }, { balance, payment })
   });
 }
 
+const RECONCILE_KEY = 'fix:diagnosis-breakdown-v1';
+
+async function setPlaceholderExpense(tx, row, amount) {
+  if (!row) return;
+  if (amount > 0) await tx.expense.update({ where: { id: row.id }, data: { amount } });
+  else await tx.expense.delete({ where: { id: row.id } });
+}
+
+async function reconcilePeriod(tx, userId, periodId, declared) {
+  const scope = { userId, periodId };
+  const [placeholders, detailed, debt, others] = await Promise.all([
+    tx.expense.findMany({ where: { ...scope, source: { in: DIAGNOSIS_EXPENSE_SOURCES } } }),
+    tx.expense.groupBy({ by: ['category'], where: { ...scope, ...detailedWhere }, _sum: { amount: true } }),
+    diagnosisDebtBalance(tx, userId, periodId),
+    tx.debtBalance.aggregate({ where: { periodId, debt: { userId, OR: [{ source: null }, { source: { not: DIAGNOSIS_DEBT_SOURCE } }] } }, _sum: { balance: true, payment: true } }),
+  ]);
+  const detailedOf = (debts) => detailed.filter((r) => (r.category === 'DEUDAS') === debts).reduce((acc, r) => acc + num(r._sum.amount), 0);
+  await setPlaceholderExpense(tx, placeholders.find((r) => r.source === 'M1_EXPENSES'), round2(Math.max(0, num(declared.expenses) - detailedOf(false))));
+  await setPlaceholderExpense(tx, placeholders.find((r) => r.source === 'M1_DEBT_PAYMENT'), round2(Math.max(0, num(declared.debtPayment) - detailedOf(true))));
+  if (!debt) return;
+  const data = {
+    balance: round2(Math.max(0, num(declared.totalDebt) - num(others._sum.balance))),
+    payment: round2(Math.max(0, num(declared.debtPayment) - num(others._sum.payment))),
+  };
+  if (data.balance > 0 || data.payment > 0) {
+    await tx.debtBalance.update({ where: { id: debt.id }, data });
+    await renameDiagnosisDebt(tx, debt.debt);
+  } else {
+    await tx.debtBalance.delete({ where: { id: debt.id } });
+    if (!(await tx.debtBalance.count({ where: { debtId: debt.debtId } }))) await tx.debt.delete({ where: { id: debt.debtId } });
+  }
+}
+
+export async function reconcileDiagnosisBreakdown() {
+  if (await prisma.publicSection.findUnique({ where: { key: RECONCILE_KEY } })) return 0;
+  const submissions = await prisma.moduleSubmission.findMany({ where: { moduleNumber: 1 }, orderBy: { createdAt: 'desc' }, distinct: ['userId'] });
+  let periods = 0;
+  for (const sub of submissions) {
+    const [expenseRows, debtRows] = await Promise.all([
+      prisma.expense.findMany({ where: { userId: sub.userId, source: { in: DIAGNOSIS_EXPENSE_SOURCES }, period: { status: 'OPEN' } }, select: { periodId: true } }),
+      prisma.debtBalance.findMany({ where: { debt: { userId: sub.userId, source: DIAGNOSIS_DEBT_SOURCE }, period: { status: 'OPEN' } }, select: { periodId: true } }),
+    ]);
+    for (const periodId of new Set([...expenseRows, ...debtRows].map((r) => r.periodId))) {
+      await prisma.$transaction((tx) => reconcilePeriod(tx, sub.userId, periodId, sub.data || {}));
+      periods += 1;
+    }
+  }
+  await prisma.publicSection.create({ data: { key: RECONCILE_KEY, navLabel: 'Ajuste de datos', position: 0, title: 'Desglose del diagnóstico', active: false } });
+  return periods;
+}
+
 const isFirstPosition = async (tx, assetId, periodId) => !(await tx.assetPosition.count({ where: { assetId, NOT: { periodId } } }));
 
 async function setPositionCapital(tx, assetId, periodId, capital) {

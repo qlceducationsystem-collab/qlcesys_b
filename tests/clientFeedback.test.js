@@ -145,6 +145,31 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('admin').put('/api/admin/login-notice', { ...body, metrics: { ...body.metrics, hitRate: 120 } })).status, 400);
   });
 
+  test('Los datos capturados antes del desglose se concilian una sola vez', async () => {
+    await register('old');
+    const checkout = await api('old').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
+    await api('old').post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome: 'APPROVED' });
+    const d = await api('old').put('/api/academy/diagnosis', {
+      income: 100000, expenses: 60000, debtPayment: 20000, monthlyInvestment: 0,
+      cash: 50000, investments: 0, otherAssets: 0, totalDebt: 1000000, emergencyFund: 100000,
+      riskTolerance: 'MODERADO', mainGoal: 'CONSTRUIR_PATRIMONIO',
+    });
+    const user = await prisma.user.findUnique({ where: { email: `old-${uid}@test.qlc` } });
+    const scope = { userId: user.id, periodId: d.body.periodId };
+    await prisma.expense.createMany({ data: [['VIVIENDA', 23500], ['ALIMENTACION', 15000], ['ENTRETENIMIENTO', 10000], ['TRANSPORTE', 5000]].map(([category, amount]) => ({ ...scope, category, amount, description: 'Previo' })) });
+    const debt = await prisma.debt.create({ data: { userId: user.id, name: 'TOYOTA', annualRate: 15 } });
+    await prisma.debtBalance.create({ data: { debtId: debt.id, periodId: d.body.periodId, balance: 100000, payment: 5000 } });
+    const summary = async () => (await api('old').get(`/api/periods/${d.body.periodId}/summary`)).body.summary;
+    assert.equal((await summary()).cashflow.expenses, 133500);
+    assert.equal((await summary()).debts.totalBalance, 1100000);
+    await prisma.publicSection.deleteMany({ where: { key: 'fix:diagnosis-breakdown-v1' } });
+    const { reconcileDiagnosisBreakdown } = await import('../src/services/moduleData.service.js');
+    assert.ok((await reconcileDiagnosisBreakdown()) >= 1);
+    assert.equal((await summary()).cashflow.expenses, 80000);
+    assert.equal((await summary()).debts.totalBalance, 1000000);
+    assert.equal(await reconcileDiagnosisBreakdown(), 0);
+  });
+
   test('Registro con código por correo cuando Gmail está conectado; sin Gmail no se exige', async () => {
     const off = await request(app).post('/api/auth/register/email-code').send({ email: `nomail-${uid}@test.qlc` });
     assert.equal(off.body.required, false);

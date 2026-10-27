@@ -4,7 +4,7 @@ const TOOL_NAMES = {
   3: 'Constructor de cartera',
   4: 'Simulador de riesgo y exposición',
   5: 'Simulador de una operación',
-  6: 'Simulador de operación profesional',
+  6: 'Laboratorio de gestión multiposición',
   7: 'Presupuesto y control financiero',
   8: 'Fondo de emergencia y liquidez',
   9: 'Panel de obligaciones y costo del dinero',

@@ -193,30 +193,15 @@ const BLOCK_1 = [
     title: 'Operación profesional',
     summary: 'Datos, gestión del riesgo, exposición, ejecución, automatización, monitoreo, registro y control operativo.',
     content: {
-      tool: { name: 'Simulador de operación profesional', question: '¿Cómo se controla un conjunto de operaciones dentro de un sistema?' },
+      tool: { name: 'Laboratorio de gestión multiposición', question: '¿Cómo se comporta un conjunto de posiciones expuestas al mismo mercado?' },
       essentials: [
         'Simulación educativa: no conecta exchanges ni realiza trading real.',
         'Los resultados no alimentan tu patrimonio, cartera ni allocation.',
       ],
       riskNotes: [
         '“Profesional” no significa “seguro” ni “rentable”. Automatizar no elimina el riesgo de mercado ni garantiza resultados.',
-        'La clasificación del nivel operativo es exclusivamente educativa y no representa una metodología financiera universal.',
       ],
       lesson: [
-        section(
-          'Más allá de una operación',
-          'Una operación profesional requiere un sistema: datos, gestión del riesgo, exposición, ejecución, automatización, monitoreo, registro y control operativo.',
-        ),
-        section(
-          'Fórmulas',
-          'Riesgo monetario por operación = capital operativo × riesgo por operación (%). Riesgo acumulado teórico (%) = riesgo por operación × número de operaciones. Riesgo monetario acumulado = riesgo monetario por operación × número de operaciones. Exposición nominal máxima teórica = capital operativo × apalancamiento.',
-          'Con 10,000 USD, 1% por operación, 5 operaciones y 5x: 100 USD por operación, 5% acumulado, 500 USD acumulados y 50,000 USD de exposición teórica.',
-        ),
-        section(
-          'Automatización y monitoreo',
-          'Manual: las decisiones requieren intervención humana. Semiautomatizado: algunas tareas siguen reglas. Automatizado: las reglas se ejecutan dentro del escenario educativo.',
-          'Monitorear permite detectar cambios, pero no elimina el riesgo de mercado.',
-        ),
         section(
           'Laboratorio de gestión multiposición',
           'En esta práctica aprenderás cómo se comporta una cartera de varias posiciones cuando todas están expuestas a los movimientos de un mismo mercado. Cada operación puede tener dirección, margen, apalancamiento y reglas de salida diferentes; por eso, un mismo movimiento de BTC/USDT no produce el mismo resultado en todas las posiciones.',
@@ -269,8 +254,8 @@ const BLOCK_1 = [
         ),
       ],
       exercise: {
-        prompt: 'Con 10,000 USD y 1% de riesgo por operación compara 1, 5 y 10 operaciones. ¿Por qué un sistema profesional necesita conocer la exposición total y no solo el riesgo de cada operación?',
-        steps: ['Simula los tres escenarios.', 'Guarda al menos una simulación.', 'Registra tu respuesta y completa la Ruta de Mercados.'],
+        prompt: 'En el laboratorio abre varias posiciones sobre BTC/USDT y mueve el precio. ¿Por qué un mismo movimiento del mercado no produce el mismo resultado en todas las posiciones?',
+        steps: ['Configura al menos tres posiciones con dirección, margen y apalancamiento distintos.', 'Mueve el precio y observa el resultado agregado y el drawdown.', 'Registra tu respuesta y completa la Ruta de Mercados.'],
       },
     },
   },
