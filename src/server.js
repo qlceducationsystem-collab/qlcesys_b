@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { prisma } from './config/prisma.js';
 import { startKeepAlive } from './services/keepAlive.service.js';
 import { reconcileDiagnosisBreakdown } from './services/moduleData.service.js';
+import { startIncomeJob } from './services/productIncome.service.js';
 
 const app = createApp();
 
@@ -11,6 +12,7 @@ const server = app.listen(env.port, () => {
 });
 
 const keepAlive = startKeepAlive();
+const incomeJob = startIncomeJob();
 
 reconcileDiagnosisBreakdown()
   .then((periods) => periods && console.info(`[qlc] desglose del diagnóstico conciliado en ${periods} periodos`))
@@ -19,6 +21,7 @@ reconcileDiagnosisBreakdown()
 async function shutdown(signal) {
   console.info(`[qlc] ${signal} recibido, cerrando...`);
   if (keepAlive) clearInterval(keepAlive);
+  clearInterval(incomeJob);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

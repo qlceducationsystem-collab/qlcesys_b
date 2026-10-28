@@ -1,0 +1,5 @@
+ALTER TABLE "Asset" ADD COLUMN "incomeType" TEXT;
+ALTER TABLE "Asset" ADD COLUMN "incomeValue" DECIMAL(14,4);
+ALTER TABLE "Asset" ADD COLUMN "incomeDay" INTEGER;
+ALTER TABLE "AssetPosition" ADD COLUMN "incomeAmount" DECIMAL(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE "AssetPosition" ADD COLUMN "incomeDate" TIMESTAMP(3);

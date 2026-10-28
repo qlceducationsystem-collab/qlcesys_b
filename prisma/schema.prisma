@@ -457,6 +457,9 @@ model Asset {
   liquidityLevel LiquidityLevel?
   perceivedRisk  PerceivedRisk?
   source         String?
+  incomeType     String?
+  incomeValue    Decimal?              @db.Decimal(14, 4)
+  incomeDay      Int?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -477,6 +480,8 @@ model AssetPosition {
   periodId       String
   initialCapital Decimal         @db.Decimal(14, 2)
   finalCapital   Decimal         @db.Decimal(14, 2)
+  incomeAmount   Decimal         @default(0) @db.Decimal(14, 2)
+  incomeDate     DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)

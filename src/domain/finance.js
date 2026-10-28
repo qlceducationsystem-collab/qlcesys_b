@@ -28,6 +28,11 @@ export function summarizePortfolio(positions = []) {
     source: p.source ?? null,
     categoryCode: p.category.code,
     categoryName: p.category.name,
+    incomeType: p.incomeType ?? null,
+    incomeValue: p.incomeValue === null || p.incomeValue === undefined ? null : num(p.incomeValue),
+    incomeDay: p.incomeDay ?? null,
+    incomeAmount: num(p.incomeAmount),
+    incomeDate: p.incomeDate ?? null,
     ...capitalResult(p.initialCapital, p.finalCapital),
   }));
 

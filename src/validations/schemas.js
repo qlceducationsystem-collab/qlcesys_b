@@ -100,6 +100,14 @@ export const assetSchema = z.object({
   notes: optText(),
   initialCapital: money,
   finalCapital: money,
+  incomeType: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.enum(['AMOUNT', 'PERCENT']).nullable()).default(null),
+  incomeValue: nullableNumber(0, 1e12).optional(),
+  incomeDay: z.preprocess((v) => (v === '' || v === undefined || v === null ? null : v), z.coerce.number().int().min(1).max(31).nullable()).default(null),
+}).refine((v) => !v.incomeType || (v.incomeValue !== null && v.incomeValue !== undefined && v.incomeDay), { message: 'Indica la rentabilidad y el día en que la recibes', path: ['incomeValue'] });
+
+export const positionIncomeSchema = z.object({
+  amount: z.coerce.number().min(0, 'No puede ser negativo').max(1e12),
+  date: z.coerce.date(),
 });
 
 export const movementSchema = z.object({

@@ -161,6 +161,27 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal(ok.body.channel, 'CHAT_INTERNO');
   });
 
+  test('Rentabilidad mensual automática: se suma al capital final y se puede corregir', async () => {
+    const created = await api('c').post('/api/portfolio/positions', { periodId: state.periodId, categoryCode: 'BIENES_RAICES', name: 'Casa en renta', initialCapital: 1000000, finalCapital: 1000000, incomeType: 'AMOUNT', incomeValue: 12000, incomeDay: 1 });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const product = async () => (await api('c').get(`/api/periods/${state.periodId}/summary`)).body.summary.portfolio.products.find((p) => p.positionId === created.body.id);
+    let p = await product();
+    assert.equal(p.final, 1012000);
+    assert.equal(p.result, 12000);
+    assert.equal(p.roi, 1.2);
+    assert.equal(p.incomeAmount, 12000);
+    const { applyDueIncome } = await import('../src/services/productIncome.service.js');
+    await applyDueIncome();
+    assert.equal((await product()).final, 1012000);
+    const day = new Date((await product()).incomeDate);
+    const skipped = await api('c').put(`/api/portfolio/positions/${created.body.id}/income`, { amount: 0, date: day.toISOString() });
+    assert.equal(skipped.status, 200);
+    p = await product();
+    assert.equal(p.final, 1000000);
+    assert.equal((await api('c').put(`/api/portfolio/positions/${created.body.id}/income`, { amount: 11000, date: '2001-01-01T12:00:00Z' })).status, 400);
+    assert.equal((await api('c').post('/api/portfolio/positions', { periodId: state.periodId, categoryCode: 'RENTA_FIJA', name: 'CETES', initialCapital: 1, finalCapital: 1, incomeType: 'PERCENT' })).status, 400);
+  });
+
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
     const initial = await request(app).get('/api/public/notice');
     assert.equal(initial.status, 200);
