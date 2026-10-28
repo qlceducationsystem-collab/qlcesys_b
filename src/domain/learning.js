@@ -22,7 +22,8 @@ export function diagnose(input) {
   const savingRate = pctOf(savings, income);
   const totalAssets = round2(cash + investments + otherAssets);
   const netWorth = round2(totalAssets - totalDebt);
-  const liquidityMonths = expenses === 0 ? null : round2(cash / expenses);
+  const monthlyOutflow = expenses + debtPayment;
+  const liquidityMonths = monthlyOutflow === 0 ? null : round2(cash / monthlyOutflow);
   const savingLevel = savingRate === null ? null : SAVING_LEVELS.find((l) => savingRate >= l.min);
 
   return {
@@ -33,7 +34,7 @@ export function diagnose(input) {
     netWorth,
     liquidityMonths,
     liquidityCash: cash,
-    liquidityExpenses: expenses,
+    liquidityExpenses: monthlyOutflow,
     investmentToNetWorth: netWorth > 0 ? pctOf(investments, netWorth) : null,
     debtToNetWorth: netWorth > 0 ? pctOf(totalDebt, netWorth) : null,
     freeCashFlow: round2(income - expenses - debtPayment - monthlyInvestment),
