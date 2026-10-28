@@ -9,13 +9,15 @@ export const BUDGET_DEFAULTS = [
   ['ALIMENTACION', 12],
   ['TRANSPORTE', 8],
   ['ENTRETENIMIENTO', 7],
-  ['DEUDAS', 10],
+  ['FLUJO_DISPONIBLE', 10],
   ['AHORRO', 20],
   ['INVERSION', 18],
 ];
 export const TARGET_CATEGORIES = ['AHORRO', 'INVERSION'];
 export const BUDGET_EXPENSE_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'DEUDAS', 'OTROS'];
-export const BUDGET_CATEGORIES = [...BUDGET_EXPENSE_CATEGORIES, ...TARGET_CATEGORIES];
+export const FREE_FLOW = 'FLUJO_DISPONIBLE';
+export const BUDGET_CATEGORIES = [...BUDGET_EXPENSE_CATEGORIES, FREE_FLOW, ...TARGET_CATEGORIES];
+export const BUDGET_OPTIONAL_CATEGORIES = BUDGET_CATEGORIES.filter((c) => c !== 'DEUDAS');
 export const ESSENTIAL_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'DEUDAS'];
 export const isEssentialCategory = (category) => ESSENTIAL_CATEGORIES.includes(category);
 const PERCENT_TOLERANCE = 0.005;
@@ -30,24 +32,27 @@ export function budgetLine({ category, percent }, netIncome, actual) {
   const planned = (toNumber(netIncome) * toNumber(percent)) / 100;
   const real = toNumber(actual);
   const difference = planned - real;
-  const kind = TARGET_CATEGORIES.includes(category) ? 'TARGET' : 'EXPENSE';
-  const status = kind === 'TARGET' ? (real >= planned ? 'MET' : 'PENDING') : difference < 0 ? 'OVER' : 'WITHIN';
+  const kind = category === FREE_FLOW ? 'FREE' : TARGET_CATEGORIES.includes(category) ? 'TARGET' : 'EXPENSE';
+  const status = kind === 'EXPENSE' ? (difference < 0 ? 'OVER' : 'WITHIN') : real >= planned ? 'MET' : 'PENDING';
   return { category, kind, percent: toNumber(percent), planned, actual: real, difference, status };
 }
 
 export function budgetView({ netIncome, lines = [], actuals = {} }) {
   const income = toNumber(netIncome);
   const pending = toNumber(actuals[DIAGNOSIS_PENDING]);
-  const rows = lines.map((l) => budgetLine(l, income, actuals[l.category]));
+  const budgeted = new Set(lines.map((l) => l.category));
+  const debtPayments = budgeted.has('DEUDAS') ? 0 : toNumber(actuals.DEUDAS);
+  const fixedActual = lines.filter((l) => l.category !== FREE_FLOW).reduce((acc, l) => acc + toNumber(actuals[l.category]), 0);
+  const freeActual = income - fixedActual - debtPayments;
+  const rows = lines.map((l) => budgetLine(l, income, l.category === FREE_FLOW ? freeActual : actuals[l.category]));
   const expenses = rows.filter((r) => r.kind === 'EXPENSE');
   const pick = (category) => rows.find((r) => r.category === category);
-  const budgeted = new Set(rows.map((r) => r.category));
   const percentTotal = total(rows, (r) => r.percent);
   const percentGap = 100 - percentTotal;
   const expensesPlanned = total(expenses, (r) => r.planned);
   const expensesActual = total(expenses, (r) => r.actual);
-  const totalActual = total(rows, (r) => r.actual);
-  const unbudgeted = BUDGET_EXPENSE_CATEGORIES.filter((c) => !budgeted.has(c) && toNumber(actuals[c]) > 0).map((c) => ({ category: c, actual: toNumber(actuals[c]) }));
+  const totalActual = total(rows.filter((r) => r.kind !== 'FREE'), (r) => r.actual) + debtPayments;
+  const unbudgeted = BUDGET_EXPENSE_CATEGORIES.filter((c) => c !== 'DEUDAS' && !budgeted.has(c) && toNumber(actuals[c]) > 0).map((c) => ({ category: c, actual: toNumber(actuals[c]) }));
   const unbudgetedExpenses = total(unbudgeted, (u) => u.actual);
   return {
     netIncome: income,
@@ -69,6 +74,9 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
     unbudgeted,
     unbudgetedExpenses,
     diagnosisPending: pending,
+    debtPayments,
+    freeFlow: freeActual,
+    tableBalance: income - totalActual,
   };
 }
 

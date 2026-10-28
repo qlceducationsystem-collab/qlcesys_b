@@ -12,7 +12,7 @@ const CAT_COLS = [
 
 const BUDGET_LABELS = {
   VIVIENDA: 'Vivienda', ALIMENTACION: 'Alimentación', SERVICIOS: 'Servicios', TRANSPORTE: 'Transporte', SEGUROS: 'Seguros', EDUCACION: 'Educación',
-  ENTRETENIMIENTO: 'Entretenimiento', VIAJES: 'Viajes', DEUDAS: 'Deudas', OTROS: 'Otros', AHORRO: 'Ahorro', INVERSION: 'Inversión',
+  ENTRETENIMIENTO: 'Entretenimiento', VIAJES: 'Viajes', DEUDAS: 'Deudas', OTROS: 'Otros', FLUJO_DISPONIBLE: 'Flujo disponible', AHORRO: 'Ahorro', INVERSION: 'Inversión',
 };
 
 function budgetSection(doc, budget) {

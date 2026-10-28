@@ -13,7 +13,8 @@ describe('M7 · presupuesto', () => {
     const v = budgetView({ netIncome: 30000, lines: defaults });
     assert.equal(v.complete, true);
     assert.deepEqual(v.rows.map((r) => r.planned), [7500, 3600, 2400, 2100, 3000, 6000, 5400]);
-    assert.equal(v.expensesPlanned, 18600);
+    assert.equal(v.expensesPlanned, 15600);
+    assert.equal(v.rows.find((r) => r.category === 'FLUJO_DISPONIBLE').kind, 'FREE');
     assert.equal(v.savingsPlanned, 6000);
     assert.equal(v.investmentPlanned, 5400);
   });
@@ -45,8 +46,11 @@ describe('M7 · presupuesto', () => {
     const v = budgetView({ netIncome: 100000, lines: defaults, actuals: { DEUDAS: 20000, OTROS: 60000 } });
     assert.deepEqual(v.unbudgeted, [{ category: 'OTROS', actual: 60000 }]);
     assert.equal(v.unbudgetedExpenses, 60000);
-    assert.equal(v.expensesActualTotal, 80000);
+    assert.equal(v.expensesActualTotal, 60000);
+    assert.equal(v.debtPayments, 20000);
     assert.equal(v.estimatedBalance, 20000);
+    assert.equal(v.rows.find((r) => r.category === 'FLUJO_DISPONIBLE').actual, 80000);
+    assert.equal(v.tableBalance, 80000);
   });
 });
 

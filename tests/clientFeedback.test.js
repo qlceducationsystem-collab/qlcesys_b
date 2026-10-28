@@ -133,6 +133,31 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.ok((await api('c').get(`/api/academy/budget?${query()}`)).body.view.diagnosisPending > 0);
   });
 
+  test('Flujo disponible se calcula solo y confirmar los gastos reales quita el estimado del diagnóstico', async () => {
+    const lines = [['VIVIENDA', 30], ['FLUJO_DISPONIBLE', 20], ['AHORRO', 20], ['INVERSION', 30]].map(([category, percent]) => ({ category, percent }));
+    const saved = await api('c').put('/api/academy/budget', { ...state.month, netIncome: 100000, lines });
+    assert.equal(saved.status, 200);
+    const v = saved.body.view;
+    const free = v.rows.find((r) => r.category === 'FLUJO_DISPONIBLE');
+    assert.equal(free.actual, 100000 - v.rows.filter((r) => r.kind !== 'FREE').reduce((a, r) => a + r.actual, 0) - v.debtPayments);
+    assert.equal(v.tableBalance, free.actual);
+    assert.equal((await api('c').put('/api/academy/budget/actuals', { ...state.month, category: 'FLUJO_DISPONIBLE', amount: 1 })).status, 400);
+    assert.ok(v.diagnosisPending > 0);
+    const confirmed = await api('c').post('/api/academy/budget/confirm-real', state.month);
+    assert.equal(confirmed.status, 200);
+    assert.equal(confirmed.body.view.diagnosisPending, 0);
+    assert.equal(await prisma.expense.count({ where: { periodId: state.periodId, source: 'M1_EXPENSES' } }), 0);
+  });
+
+  test('Las citas son por chat interno con duraciones de 20, 40 o 60 minutos', async () => {
+    const scheduledAt = new Date(Date.now() + 2 * 86400000).toISOString();
+    assert.equal((await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 45 })).status, 400);
+    assert.equal((await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 40, channel: 'VIDEOLLAMADA' })).status, 400);
+    const ok = await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 40, channel: 'CHAT_INTERNO' });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.equal(ok.body.channel, 'CHAT_INTERNO');
+  });
+
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
     const initial = await request(app).get('/api/public/notice');
     assert.equal(initial.status, 200);

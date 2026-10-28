@@ -3,14 +3,14 @@ import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView, DIAGNOSIS_PENDING, isCu
 import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { createContribution } from './emergency.service.js';
-import { absorbDiagnosisExpense, isDiagnosisExpense } from './moduleData.service.js';
+import { absorbDiagnosisExpense } from './moduleData.service.js';
 
 const ADJUST_SOURCE = 'M7_ADJUST';
 const INVEST_ADJUST = 'Aportación registrada desde el presupuesto (M7)';
 const customSource = (category) => `M7_${category}`;
 const customAdjustSource = (category) => `M7_ADJUST_${category}`;
 const customKey = (source) => source?.match(/^M7_(?:ADJUST_)?(CUSTOM:.+)$/)?.[1] || null;
-const bucketOf = (row) => (isDiagnosisExpense(row) ? DIAGNOSIS_PENDING : customKey(row.source) || row.category);
+const bucketOf = (row) => (row.source === 'M1_EXPENSES' ? DIAGNOSIS_PENDING : customKey(row.source) || row.category);
 const expenseCategoryOf = (category) => (isCustomCategory(category) ? 'OTROS' : category);
 const adjustSourceOf = (category) => (isCustomCategory(category) ? customAdjustSource(category) : ADJUST_SOURCE);
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
@@ -173,6 +173,13 @@ async function setExpense(userId, period, category, amount) {
     }
     await absorbDiagnosisExpense(tx, { userId, periodId: period.id, category: expenseCategory, delta: difference - previous });
   });
+}
+
+export async function confirmRealExpenses(req, month) {
+  const userId = req.subjectId;
+  const period = await requirePeriod(userId, month);
+  await prisma.expense.deleteMany({ where: { userId, periodId: period.id, source: 'M1_EXPENSES' } });
+  return getBudget(userId, month);
 }
 
 export async function setActual(req, { year, month, category, amount }) {

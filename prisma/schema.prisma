@@ -73,6 +73,7 @@ enum AppointmentStatus {
 }
 
 enum AppointmentChannel {
+  CHAT_INTERNO
   VIDEOLLAMADA
   LLAMADA
   WHATSAPP

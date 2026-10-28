@@ -137,15 +137,15 @@ export const createAdminSchema = z.object({
 export const appointmentSchema = z.object({
   reason: text(500),
   scheduledAt: z.coerce.date().refine((d) => d.getTime() > Date.now(), 'La fecha debe ser futura'),
-  durationMin: z.coerce.number().int().min(15).max(240).default(60),
-  channel: z.enum(['VIDEOLLAMADA', 'LLAMADA', 'WHATSAPP', 'PRESENCIAL']),
+  durationMin: z.coerce.number().int().refine((m) => [20, 40, 60].includes(m), 'La duración debe ser de 20, 40 o 60 minutos').default(60),
+  channel: z.literal('CHAT_INTERNO').default('CHAT_INTERNO'),
   notes: optText(),
 });
 
 export const appointmentAdminSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']).optional(),
   scheduledAt: z.coerce.date().optional(),
-  durationMin: z.coerce.number().int().min(15).max(240).optional(),
+  durationMin: z.coerce.number().int().refine((m) => [20, 40, 60].includes(m), 'La duración debe ser de 20, 40 o 60 minutos').optional(),
   adminNotes: optText(),
 });
 
@@ -232,7 +232,7 @@ export const grantSchema = z.object({ offerCode: text(40) });
 
 export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });
 
-const BUDGET_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'DEUDAS', 'OTROS', 'AHORRO', 'INVERSION'];
+const BUDGET_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'DEUDAS', 'OTROS', 'FLUJO_DISPONIBLE', 'AHORRO', 'INVERSION'];
 const customBudgetCategory = z.string().trim().regex(/^CUSTOM:\S.{0,39}$/, 'Nombre de categoría inválido');
 const budgetCategory = (exclude = []) => z.union([z.enum(BUDGET_CATEGORIES.filter((c) => !exclude.includes(c))), customBudgetCategory]);
 const yearField = z.coerce.number().int().min(2000).max(2100);
@@ -254,7 +254,7 @@ export const budgetSchema = z.object({
 export const budgetActualSchema = z.object({
   year: yearField,
   month: monthField,
-  category: budgetCategory(['INVERSION']),
+  category: budgetCategory(['INVERSION', 'FLUJO_DISPONIBLE']),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
   description: text(),
 });
@@ -262,7 +262,7 @@ export const budgetActualSchema = z.object({
 export const budgetActualSetSchema = z.object({
   year: yearField,
   month: monthField,
-  category: budgetCategory(),
+  category: budgetCategory(['FLUJO_DISPONIBLE']),
   amount: z.coerce.number().min(0, 'No puede ser negativo').max(1e12),
 });
 

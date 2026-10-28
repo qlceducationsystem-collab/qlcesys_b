@@ -130,8 +130,8 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(housing.actual, 9000);
     assert.equal(housing.difference, -1500);
     assert.equal(housing.status, 'OVER');
-    assert.equal(view.rows.find((r) => r.category === 'DEUDAS').actual, 0);
-    assert.equal(view.diagnosisPending, 16000);
+    assert.equal(view.rows.find((r) => r.category === 'DEUDAS').actual, 3000);
+    assert.equal(view.diagnosisPending, 13000);
     assert.equal(view.unbudgeted.length, 0);
     assert.equal(await prisma.expense.count({ where: { userId: ids.p } }), expensesCount);
 

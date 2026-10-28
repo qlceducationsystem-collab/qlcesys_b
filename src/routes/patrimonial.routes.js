@@ -24,6 +24,7 @@ r.get('/budget', tool(7), validate(monthQuery, 'query'), ah(async (req, res) => 
 r.get('/budget/history', tool(7), ah(async (req, res) => res.json(await budget.budgetHistory(req.subjectId))));
 r.put('/budget', tool(7), validate(budgetSchema), ah(async (req, res) => res.json(await budget.saveBudget(req, req.body))));
 r.post('/budget/actuals', tool(7), validate(budgetActualSchema), ah(async (req, res) => res.status(201).json(await budget.recordActual(req, req.body))));
+r.post('/budget/confirm-real', tool(7), validate(monthQuery), ah(async (req, res) => res.json(await budget.confirmRealExpenses(req, req.body))));
 r.put('/budget/actuals', tool(7), validate(budgetActualSetSchema), ah(async (req, res) => res.json(await budget.setActual(req, req.body))));
 
 r.get('/emergency', tool(8), ah(async (req, res) => res.json(await emergency.getEmergency(req.subjectId))));
