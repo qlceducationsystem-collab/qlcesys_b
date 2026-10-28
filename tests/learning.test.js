@@ -16,6 +16,7 @@ test('M1: diagnóstico con el ejemplo del documento', () => {
   assert.equal(r.netWorth, 320000);
   assert.equal(r.liquidityMonths, 2);
   assert.equal(r.investmentToNetWorth, 31.25);
+  assert.equal(r.otherAssetsToNetWorth, 78.13);
   assert.equal(r.debtToNetWorth, 25);
   assert.equal(r.freeCashFlow, 2000);
 });

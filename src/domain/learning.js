@@ -36,6 +36,7 @@ export function diagnose(input) {
     liquidityCash: cash,
     liquidityExpenses: monthlyOutflow,
     investmentToNetWorth: netWorth > 0 ? pctOf(investments, netWorth) : null,
+    otherAssetsToNetWorth: netWorth > 0 ? pctOf(otherAssets, netWorth) : null,
     debtToNetWorth: netWorth > 0 ? pctOf(totalDebt, netWorth) : null,
     freeCashFlow: round2(income - expenses - debtPayment - monthlyInvestment),
   };
