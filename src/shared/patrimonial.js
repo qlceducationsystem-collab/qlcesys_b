@@ -24,6 +24,7 @@ const PERCENT_TOLERANCE = 0.005;
 export const CUSTOM_PREFIX = 'CUSTOM:';
 export const CUSTOM_NAME_MAX = 40;
 export const DIAGNOSIS_PENDING = 'DIAGNOSTICO_PENDIENTE';
+export const DEBT_PLAN = 'DEUDAS_PLAN';
 export const isCustomCategory = (category) => typeof category === 'string' && category.startsWith(CUSTOM_PREFIX);
 export const customCategory = (name) => `${CUSTOM_PREFIX}${String(name).trim().replace(/\s+/g, ' ').slice(0, CUSTOM_NAME_MAX)}`;
 export const customName = (category) => category.slice(CUSTOM_PREFIX.length);
@@ -41,7 +42,8 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
   const income = toNumber(netIncome);
   const pending = toNumber(actuals[DIAGNOSIS_PENDING]);
   const budgeted = new Set(lines.map((l) => l.category));
-  const debtPayments = budgeted.has('DEUDAS') ? 0 : toNumber(actuals.DEUDAS);
+  const debtRecorded = toNumber(actuals.DEUDAS);
+  const debtPayments = budgeted.has('DEUDAS') ? 0 : actuals[DEBT_PLAN] === undefined ? debtRecorded : toNumber(actuals[DEBT_PLAN]);
   const fixedActual = lines.filter((l) => l.category !== FREE_FLOW).reduce((acc, l) => acc + toNumber(actuals[l.category]), 0);
   const freeActual = income - fixedActual - debtPayments;
   const rows = lines.map((l) => budgetLine(l, income, l.category === FREE_FLOW ? freeActual : actuals[l.category]));
@@ -75,6 +77,7 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
     unbudgetedExpenses,
     diagnosisPending: pending,
     debtPayments,
+    debtRecorded,
     freeFlow: freeActual,
     tableBalance: income - totalActual,
   };

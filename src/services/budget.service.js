@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView, DIAGNOSIS_PENDING, isCustomCategory } from '../domain/patrimonial.js';
+import { BUDGET_CATEGORIES, BUDGET_DEFAULTS, budgetView, DEBT_PLAN, DIAGNOSIS_PENDING, isCustomCategory } from '../domain/patrimonial.js';
 import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { createContribution } from './emergency.service.js';
@@ -28,10 +28,11 @@ const findBudget = (userId, { year, month }, db = prisma) =>
 
 export async function monthActuals(userId, periodId, db = prisma) {
   if (!periodId) return {};
-  const [expenses, contributions, investments] = await Promise.all([
+  const [expenses, contributions, investments, debtPlan] = await Promise.all([
     db.expense.groupBy({ by: ['category', 'source'], where: { userId, periodId }, _sum: { amount: true } }),
     db.savingContribution.aggregate({ where: { userId, periodId }, _sum: { amount: true } }),
     db.patrimonialMovement.aggregate({ where: { userId, periodId, type: 'APORTACION' }, _sum: { amount: true } }),
+    db.debtBalance.aggregate({ where: { periodId, debt: { userId, status: 'ACTIVE' } }, _sum: { payment: true } }),
   ]);
   const byBucket = {};
   for (const e of expenses) {
@@ -41,6 +42,7 @@ export async function monthActuals(userId, periodId, db = prisma) {
   return {
     ...byBucket,
     AHORRO: num(contributions._sum.amount),
+    [DEBT_PLAN]: num(debtPlan._sum.payment),
     INVERSION: num(investments._sum.amount),
   };
 }
