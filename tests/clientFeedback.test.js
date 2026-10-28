@@ -108,7 +108,7 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
   });
 
   test('Presupuesto: categoría personalizada, inversión real editable, historial y actualización', async () => {
-    const lines = [['VIVIENDA', 30], ['CUSTOM:Mascotas', 5], ['AHORRO', 20], ['INVERSION', 45]].map(([category, percent]) => ({ category, percent }));
+    const lines = [['VIVIENDA', 30], ['CUSTOM:Mascotas', 5], ['AHORRO', 20], ['INVERSION', 25]].map(([category, percent]) => ({ category, percent }));
     const saved = await api('c').put('/api/academy/budget', { ...state.month, netIncome: 100000, lines });
     assert.equal(saved.status, 200);
     assert.equal(saved.body.lines.map((l) => l.category).join(), 'VIVIENDA,CUSTOM:Mascotas,AHORRO,INVERSION');
@@ -122,19 +122,22 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal(invested.status, 200);
     assert.equal(invested.body.view.investmentActual, 18000);
     assert.equal((await api('c').put('/api/academy/budget/actuals', { ...state.month, category: 'INVERSION', amount: 10000 })).body.view.investmentActual, 10000);
-    const updated = await api('c').put('/api/academy/budget', { ...state.month, netIncome: 90000, lines });
+    assert.equal(saved.body.view.debtPercent, 20);
+    assert.equal(saved.body.view.percentTotal, 100);
+    assert.equal((await api('c').put('/api/academy/budget', { ...state.month, netIncome: 100000, lines: lines.map((l) => (l.category === 'INVERSION' ? { ...l, percent: 45 } : l)) })).status, 400);
+    const updated = await api('c').put('/api/academy/budget', { ...state.month, netIncome: 100000, lines: lines.map((l) => (l.category === 'VIVIENDA' ? { ...l, percent: 25 } : l.category === 'CUSTOM:Mascotas' ? { ...l, percent: 10 } : l)) });
     assert.equal(updated.status, 200);
-    assert.equal(updated.body.netIncome, 90000);
+    assert.equal(updated.body.lines.find((l) => l.category === 'CUSTOM:Mascotas').percent, 10);
     const history = await api('c').get('/api/academy/budget/history');
     assert.equal(history.status, 200);
     assert.equal(history.body.length, 1);
-    assert.equal(history.body[0].netIncome, 90000);
+    assert.equal(history.body[0].netIncome, 100000);
     assert.equal((await api('c').put('/api/academy/budget', { ...state.month, netIncome: 1, lines: [{ category: 'CUSTOM:', percent: 100 }] })).status, 400);
     assert.ok((await api('c').get(`/api/academy/budget?${query()}`)).body.view.diagnosisPending > 0);
   });
 
   test('Flujo disponible se calcula solo y confirmar los gastos reales quita el estimado del diagnóstico', async () => {
-    const lines = [['VIVIENDA', 30], ['FLUJO_DISPONIBLE', 20], ['AHORRO', 20], ['INVERSION', 30]].map(([category, percent]) => ({ category, percent }));
+    const lines = [['VIVIENDA', 30], ['FLUJO_DISPONIBLE', 20], ['AHORRO', 20], ['INVERSION', 10]].map(([category, percent]) => ({ category, percent }));
     const saved = await api('c').put('/api/academy/budget', { ...state.month, netIncome: 100000, lines });
     assert.equal(saved.status, 200);
     const v = saved.body.view;

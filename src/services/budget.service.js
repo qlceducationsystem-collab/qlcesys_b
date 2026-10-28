@@ -32,7 +32,7 @@ export async function monthActuals(userId, periodId, db = prisma) {
     db.expense.groupBy({ by: ['category', 'source'], where: { userId, periodId }, _sum: { amount: true } }),
     db.savingContribution.aggregate({ where: { userId, periodId }, _sum: { amount: true } }),
     db.patrimonialMovement.aggregate({ where: { userId, periodId, type: 'APORTACION' }, _sum: { amount: true } }),
-    db.debtBalance.aggregate({ where: { periodId, debt: { userId, status: 'ACTIVE' } }, _sum: { payment: true } }),
+    debtPlanOf(userId, periodId, db),
   ]);
   const byBucket = {};
   for (const e of expenses) {
@@ -42,7 +42,7 @@ export async function monthActuals(userId, periodId, db = prisma) {
   return {
     ...byBucket,
     AHORRO: num(contributions._sum.amount),
-    [DEBT_PLAN]: num(debtPlan._sum.payment),
+    [DEBT_PLAN]: debtPlan,
     INVERSION: num(investments._sum.amount),
   };
 }
@@ -50,11 +50,26 @@ export async function monthActuals(userId, periodId, db = prisma) {
 const realIncome = async (userId, periodId, db = prisma) =>
   periodId ? num((await db.income.aggregate({ where: { userId, periodId }, _sum: { amount: true } }))._sum.amount) : 0;
 
+const debtPlanOf = async (userId, periodId, db = prisma) =>
+  periodId ? num((await db.debtBalance.aggregate({ where: { periodId, debt: { userId, status: 'ACTIVE' } }, _sum: { payment: true } }))._sum.payment) : 0;
+
+function defaultLines(netIncome, debtPlan) {
+  let excess = netIncome > 0 ? Math.round((debtPlan / netIncome) * 10000) / 100 : 0;
+  const lines = DEFAULT_LINES.map((l) => ({ ...l }));
+  for (const category of ['FLUJO_DISPONIBLE', 'INVERSION', 'AHORRO']) {
+    const line = lines.find((l) => l.category === category);
+    const cut = Math.min(line.percent, excess);
+    line.percent = Math.round((line.percent - cut) * 100) / 100;
+    excess = Math.round((excess - cut) * 100) / 100;
+  }
+  return lines;
+}
+
 export async function getBudget(userId, month, db = prisma) {
   const [budget, period] = await Promise.all([findBudget(userId, month, db), findPeriod(userId, month, db)]);
   const [actuals, income] = await Promise.all([monthActuals(userId, period?.id, db), realIncome(userId, period?.id, db)]);
-  const lines = budget ? sortLines(budget.lines.map((l) => ({ category: l.category, percent: num(l.percent) }))) : DEFAULT_LINES;
   const netIncome = budget ? num(budget.netIncome) : income;
+  const lines = budget ? sortLines(budget.lines.map((l) => ({ category: l.category, percent: num(l.percent) }))) : defaultLines(netIncome, actuals[DEBT_PLAN] || 0);
   return {
     ...month,
     saved: !!budget,
@@ -97,9 +112,9 @@ async function assertMonthEditable(userId, month) {
 
 export async function saveBudget(req, { year, month, netIncome, lines }) {
   const userId = req.subjectId;
-  const view = budgetView({ netIncome, lines });
+  const period = await assertMonthEditable(userId, { year, month });
+  const view = budgetView({ netIncome, lines, actuals: { [DEBT_PLAN]: await debtPlanOf(userId, period?.id) } });
   if (!view.complete) throw badRequest(percentMessage(view.percentGap), { percentTotal: view.percentTotal, percentGap: view.percentGap });
-  await assertMonthEditable(userId, { year, month });
   await prisma.$transaction(async (tx) => {
     const budget = await tx.budget.upsert({
       where: { userId_year_month: { userId, year, month } },

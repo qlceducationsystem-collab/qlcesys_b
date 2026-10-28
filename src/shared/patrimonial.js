@@ -44,12 +44,14 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
   const budgeted = new Set(lines.map((l) => l.category));
   const debtRecorded = toNumber(actuals.DEUDAS);
   const debtPayments = budgeted.has('DEUDAS') ? 0 : actuals[DEBT_PLAN] === undefined ? debtRecorded : toNumber(actuals[DEBT_PLAN]);
+  const debtPlanned = budgeted.has('DEUDAS') ? 0 : toNumber(actuals[DEBT_PLAN]);
+  const debtPercent = income > 0 ? (debtPlanned / income) * 100 : 0;
   const fixedActual = lines.filter((l) => l.category !== FREE_FLOW).reduce((acc, l) => acc + toNumber(actuals[l.category]), 0);
   const freeActual = income - fixedActual - debtPayments;
   const rows = lines.map((l) => budgetLine(l, income, l.category === FREE_FLOW ? freeActual : actuals[l.category]));
   const expenses = rows.filter((r) => r.kind === 'EXPENSE');
   const pick = (category) => rows.find((r) => r.category === category);
-  const percentTotal = total(rows, (r) => r.percent);
+  const percentTotal = total(rows, (r) => r.percent) + debtPercent;
   const percentGap = 100 - percentTotal;
   const expensesPlanned = total(expenses, (r) => r.planned);
   const expensesActual = total(expenses, (r) => r.actual);
@@ -62,7 +64,9 @@ export function budgetView({ netIncome, lines = [], actuals = {} }) {
     percentTotal,
     percentGap,
     complete: Math.abs(percentGap) < PERCENT_TOLERANCE,
-    totalPlanned: total(rows, (r) => r.planned),
+    totalPlanned: total(rows, (r) => r.planned) + debtPlanned,
+    debtPlanned,
+    debtPercent,
     expensesPlanned,
     expensesActual,
     expenseDifference: expensesPlanned - expensesActual,
