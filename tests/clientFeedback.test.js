@@ -182,6 +182,15 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('c').post('/api/portfolio/positions', { periodId: state.periodId, categoryCode: 'RENTA_FIJA', name: 'CETES', initialCapital: 1, finalCapital: 1, incomeType: 'PERCENT' })).status, 400);
   });
 
+  test('Se pueden crear periodos anteriores para probar el informe anual', async () => {
+    const past = { year: state.month.year - 1, month: state.month.month };
+    const created = await api('c').post('/api/periods', past);
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const positions = await prisma.assetPosition.count({ where: { periodId: created.body.id } });
+    assert.ok(positions > 0);
+    assert.equal((await api('c').post('/api/periods', past)).status, 409);
+  });
+
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
     const initial = await request(app).get('/api/public/notice');
     assert.equal(initial.status, 200);

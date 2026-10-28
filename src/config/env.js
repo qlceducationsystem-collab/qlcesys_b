@@ -14,6 +14,7 @@ const backendUrl = trimUrl(process.env.BACKEND_URL || 'http://localhost:4000');
 export const env = {
   isProd,
   isTest: process.env.NODE_ENV === 'test',
+  allowPastPeriods: process.env.ALLOW_PAST_PERIODS !== 'false',
   port: Number(process.env.PORT) || 4000,
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',

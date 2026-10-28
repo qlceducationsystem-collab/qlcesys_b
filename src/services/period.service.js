@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { buildPeriodSummary, summarizeMovements } from '../domain/finance.js';
 import { conflict, notFound } from '../utils/httpError.js';
@@ -106,10 +107,16 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
   return prisma.$transaction(async (tx) => {
     const exists = await tx.financialPeriod.findFirst({ where: { userId, year, month } });
     if (exists) throw conflict('Ese periodo ya existe');
-    const prev = await tx.financialPeriod.findFirst({ where: { userId }, orderBy: periodOrder });
-    if (prev && periodIndex(prev) > year * 12 + month) throw conflict('Solo puedes crear periodos posteriores al último registrado');
+    const target = year * 12 + month;
+    const latest = await tx.financialPeriod.findFirst({ where: { userId }, orderBy: periodOrder });
+    const past = latest && periodIndex(latest) > target;
+    if (past && !env.allowPastPeriods) throw conflict('Solo puedes crear periodos posteriores al último registrado');
+    const all = past ? await tx.financialPeriod.findMany({ where: { userId } }) : [];
+    const earlier = past ? all.filter((p) => periodIndex(p) < target).sort((a, b) => periodIndex(b) - periodIndex(a))[0] : latest;
+    const later = past && !earlier ? all.sort((a, b) => periodIndex(a) - periodIndex(b))[0] : null;
+    const prev = earlier || later;
     const period = await tx.financialPeriod.create({
-      data: { userId, year, month, openingNetWorth: prev ? null : openingNetWorth ?? null },
+      data: { userId, year, month, openingNetWorth: earlier ? null : openingNetWorth ?? null },
     });
     if (!prev) return period;
 
@@ -120,7 +127,10 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
     ]);
     if (positions.length)
       await tx.assetPosition.createMany({
-        data: positions.map((p) => ({ assetId: p.assetId, periodId: period.id, initialCapital: p.finalCapital, finalCapital: p.finalCapital })),
+        data: positions.map((p) => {
+          const capital = earlier ? p.finalCapital : p.initialCapital;
+          return { assetId: p.assetId, periodId: period.id, initialCapital: capital, finalCapital: capital };
+        }),
       });
     if (protection.length)
       await tx.protectionRecord.createMany({
