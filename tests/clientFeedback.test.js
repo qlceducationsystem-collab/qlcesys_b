@@ -191,6 +191,26 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('c').post('/api/periods', past)).status, 409);
   });
 
+  test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {
+    await register('reset');
+    const checkout = await api('reset').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
+    await api('reset').post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome: 'APPROVED' });
+    await api('reset').put('/api/academy/diagnosis', {
+      income: 50000, expenses: 30000, debtPayment: 0, monthlyInvestment: 0, cash: 10000, investments: 0, otherAssets: 0, totalDebt: 0, emergencyFund: 0,
+      riskTolerance: 'MODERADO', mainGoal: 'CONSTRUIR_PATRIMONIO',
+    });
+    const user = await prisma.user.findUnique({ where: { email: `reset-${uid}@test.qlc` } });
+    assert.ok(await prisma.financialPeriod.count({ where: { userId: user.id } }));
+    assert.equal((await api('reset').post('/api/auth/reset-profile', { confirm: 'no' })).status, 400);
+    assert.equal((await api('admin').post('/api/auth/reset-profile', { confirm: 'REINICIAR' })).status, 403);
+    const done = await api('reset').post('/api/auth/reset-profile', { confirm: 'REINICIAR' });
+    assert.equal(done.status, 200);
+    assert.equal(await prisma.financialPeriod.count({ where: { userId: user.id } }), 0);
+    assert.equal(await prisma.moduleSubmission.count({ where: { userId: user.id } }), 0);
+    assert.ok(await prisma.accessGrant.count({ where: { userId: user.id } }));
+    assert.equal((await api('reset').get('/api/auth/me')).status, 200);
+  });
+
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
     const initial = await request(app).get('/api/public/notice');
     assert.equal(initial.status, 200);
@@ -229,8 +249,11 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
   });
 
   test('Registro con código por correo cuando Gmail está conectado; sin Gmail no se exige', async () => {
-    const off = await request(app).post('/api/auth/register/email-code').send({ email: `nomail-${uid}@test.qlc` });
-    assert.equal(off.body.required, false);
+    testEmail.required = true;
+    const blocked = await request(app).post('/api/auth/register/email-code').send({ email: `nomail-${uid}@test.qlc` });
+    assert.equal(blocked.status, 503);
+    assert.equal((await request(app).post('/api/auth/register').send(registerBody('nomail'))).status, 400);
+    testEmail.required = false;
     testEmail.setReady(true);
     const email = `mail-${uid}@test.qlc`;
     const sent = await request(app).post('/api/auth/register/email-code').send({ email });

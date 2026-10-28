@@ -8,7 +8,7 @@ import { HttpError, badRequest, conflict, notFound, unauthorized } from '../util
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 import { generateSecret, matchStep, otpauthUrl } from '../utils/totp.js';
 import { trackLogin } from './analytics.service.js';
-import { emailReady, sendEmail } from './email.service.js';
+import { emailReady, sendEmail, testEmail } from './email.service.js';
 
 export const SALT_ROUNDS = 12;
 const ISSUER = 'QLC Financial Education';
@@ -18,8 +18,13 @@ const EMAIL_CODE_MINUTES = 10;
 
 const codeHash = (email, code) => crypto.createHmac('sha256', env.jwtSecret).update(`${email}:${code}`).digest('hex');
 
+const emailRequired = () => process.env.NODE_ENV !== 'test' || testEmail.required;
+
 export async function sendRegisterCode({ email }) {
-  if (!(await emailReady())) return { required: false };
+  if (!(await emailReady())) {
+    if (!emailRequired()) return { required: false };
+    throw new HttpError(503, 'El registro está en pausa: falta conectar el envío de correos para mandarte el código de verificación. Intenta más tarde.');
+  }
   if (await prisma.user.findUnique({ where: { email } })) throw conflict('Ya existe una cuenta con ese correo');
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const result = await sendEmail('verifyEmail', email, { code, minutes: EMAIL_CODE_MINUTES });
@@ -28,7 +33,7 @@ export async function sendRegisterCode({ email }) {
 }
 
 async function assertEmailVerified({ email, emailToken, emailCode }) {
-  if (!(await emailReady())) return;
+  if (!(await emailReady()) && !emailRequired()) return;
   if (!emailToken || !emailCode) throw badRequest('Confirma tu correo con el código que te enviamos.');
   const payload = verifyEmailToken(emailToken);
   const expected = Buffer.from(payload.h || '', 'hex');

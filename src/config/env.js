@@ -15,6 +15,7 @@ export const env = {
   isProd,
   isTest: process.env.NODE_ENV === 'test',
   allowPastPeriods: process.env.ALLOW_PAST_PERIODS !== 'false',
+  allowProfileReset: process.env.ALLOW_PROFILE_RESET !== 'false',
   port: Number(process.env.PORT) || 4000,
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
