@@ -17,6 +17,24 @@ export function withinTerm(asset, period) {
 
 export const incomeDateOf = (period, day) => new Date(Date.UTC(period.year, period.month - 1, Math.min(day, lastDay(period.year, period.month)), 12));
 
+export async function carryForward(db, assetId, period, delta) {
+  const change = round2(num(delta));
+  if (!change) return;
+  const later = await db.financialPeriod.findMany({
+    where: { userId: period.userId, OR: [{ year: { gt: period.year } }, { year: period.year, month: { gt: period.month } }] },
+    orderBy: [{ year: 'asc' }, { month: 'asc' }],
+  });
+  for (const next of later) {
+    if (next.status !== 'OPEN') return;
+    const pos = await db.assetPosition.findFirst({ where: { assetId, periodId: next.id } });
+    if (!pos) return;
+    await db.assetPosition.update({
+      where: { id: pos.id },
+      data: { initialCapital: round2(num(pos.initialCapital) + change), finalCapital: round2(num(pos.finalCapital) + change) },
+    });
+  }
+}
+
 export function incomeFor(asset, initialCapital) {
   if (!INCOME_TYPES.includes(asset.incomeType)) return 0;
   const value = num(asset.incomeValue);
@@ -38,6 +56,7 @@ export async function applyDueIncome(userId, now = new Date()) {
       data: { incomeAmount: amount, incomeDate: date, finalCapital: round2(num(p.finalCapital) + amount) },
     });
     applied += updated.count;
+    if (updated.count) await carryForward(prisma, p.assetId, p.period, amount);
   }
   return applied;
 }
@@ -53,11 +72,15 @@ export async function setPositionIncome(req, positionId, { amount, date }) {
   const delta = round2(num(amount) - num(pos.incomeAmount));
   const finalCapital = round2(num(pos.finalCapital) + delta);
   if (finalCapital < 0) throw badRequest('El capital final no puede quedar negativo');
-  return prisma.assetPosition.update({ where: { id: pos.id }, data: { incomeAmount: amount, incomeDate: when, finalCapital } });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.assetPosition.update({ where: { id: pos.id }, data: { incomeAmount: amount, incomeDate: when, finalCapital } });
+    await carryForward(tx, pos.assetId, pos.period, delta);
+    return updated;
+  });
 }
 
 export async function assignContribution(req, positionId, movementId) {
-  const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } } });
+  const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } }, include: { period: true } });
   if (!pos) throw notFound('Producto no encontrado');
   await getOpenPeriod(req.subjectId, pos.periodId);
   const movement = await prisma.patrimonialMovement.findFirst({ where: { id: movementId, userId: req.subjectId, periodId: pos.periodId, type: 'APORTACION', assetId: null } });
@@ -65,10 +88,12 @@ export async function assignContribution(req, positionId, movementId) {
   const amount = num(movement.amount);
   return prisma.$transaction(async (tx) => {
     await tx.patrimonialMovement.update({ where: { id: movement.id }, data: { assetId: pos.assetId } });
-    return tx.assetPosition.update({
+    const updated = await tx.assetPosition.update({
       where: { id: pos.id },
       data: { initialCapital: round2(num(pos.initialCapital) + amount), finalCapital: round2(num(pos.finalCapital) + amount) },
     });
+    await carryForward(tx, pos.assetId, pos.period, amount);
+    return updated;
   });
 }
 

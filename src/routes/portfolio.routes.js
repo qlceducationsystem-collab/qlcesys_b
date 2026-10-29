@@ -4,7 +4,7 @@ import { ah } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { assetSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
-import { applyDueIncome, assignContribution, setPositionIncome } from '../services/productIncome.service.js';
+import { applyDueIncome, assignContribution, carryForward, setPositionIncome } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
 
@@ -87,11 +87,13 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   const catId = await categoryId(categoryCode);
   const updated = await prisma.$transaction(async (tx) => {
     await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...incomeFields(req.body, start) } });
-    return tx.assetPosition.update({
+    const saved = await tx.assetPosition.update({
       where: { id: pos.id },
       data: { initialCapital, finalCapital },
       include: { asset: true },
     });
+    await carryForward(tx, pos.assetId, period, Number(finalCapital) - Number(pos.finalCapital));
+    return saved;
   });
   await applyDueIncome(req.subjectId);
   res.json(updated);

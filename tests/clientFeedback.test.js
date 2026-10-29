@@ -192,6 +192,21 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('c').post('/api/periods', past)).status, 409);
   });
 
+  test('Un cambio en el capital final de un mes anterior se arrastra al capital inicial del mes siguiente', async () => {
+    const past = await prisma.financialPeriod.findFirst({ where: { user: { email: `c-${uid}@test.qlc` }, year: state.month.year - 1, month: state.month.month } });
+    const pastPos = await prisma.assetPosition.findFirst({ where: { periodId: past.id, asset: { name: 'Casa en renta' } }, include: { asset: { include: { category: true } } } });
+    const nowPos = () => prisma.assetPosition.findFirst({ where: { periodId: state.periodId, assetId: pastPos.assetId } });
+    const before = await nowPos();
+    const res = await api('c').put(`/api/portfolio/positions/${pastPos.id}`, { periodId: past.id, categoryCode: pastPos.asset.category.code, name: 'Casa en renta', initialCapital: Number(pastPos.initialCapital), finalCapital: Number(pastPos.finalCapital) + 5000 });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const pastAfter = await prisma.assetPosition.findUnique({ where: { id: pastPos.id } });
+    const delta = Number(pastAfter.finalCapital) - Number(pastPos.finalCapital);
+    assert.ok(delta >= 5000);
+    const after = await nowPos();
+    assert.equal(Number(after.initialCapital), Number(before.initialCapital) + delta);
+    assert.equal(Number(after.finalCapital) - Number(after.initialCapital), Number(before.finalCapital) - Number(before.initialCapital));
+  });
+
   test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {
     await register('reset');
     const checkout = await api('reset').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
