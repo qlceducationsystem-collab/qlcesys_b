@@ -78,6 +78,8 @@ export async function loadPeriodData(userId, periodId, db = prisma) {
       incomeType: p.asset.incomeType,
       incomeValue: p.asset.incomeValue,
       incomeDay: p.asset.incomeDay,
+      incomeTerm: p.asset.incomeTerm,
+      incomeStart: p.asset.incomeStart,
       incomeAmount: p.incomeAmount,
       incomeDate: p.incomeDate,
     })),
@@ -85,7 +87,7 @@ export async function loadPeriodData(userId, periodId, db = prisma) {
     incomes,
     expenses,
     protection,
-    debts: debtBalances.map((b) => ({ ...b.debt, balance: b.balance, payment: b.payment, fees: b.fees, balanceId: b.id })),
+    debts: debtBalances.map((b) => ({ ...b.debt, balance: b.balance, payment: b.payment, fees: b.fees, balanceId: b.id, paidAt: b.paidAt })),
     businessFlows: flows.map((f) => ({ ...f, name: f.asset.name })),
   };
 }

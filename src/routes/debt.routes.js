@@ -24,4 +24,6 @@ r.post('/:balanceId/payments', validate(debtPaymentSchema), ah(async (req, res) 
   res.status(201).json(await debts.confirmPayment(req, req.params.balanceId, req.body));
 }));
 
+r.delete('/:balanceId/payments', ah(async (req, res) => res.json(await debts.undoPayment(req, req.params.balanceId))));
+
 export default r;

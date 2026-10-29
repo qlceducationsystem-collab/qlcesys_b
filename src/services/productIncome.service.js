@@ -6,6 +6,14 @@ import { getOpenPeriod } from './period.service.js';
 export const INCOME_TYPES = ['AMOUNT', 'PERCENT'];
 
 const lastDay = (year, month) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+const monthIndex = (year, month) => year * 12 + month;
+
+export function withinTerm(asset, period) {
+  if (!asset.incomeTerm || !asset.incomeStart) return true;
+  const start = new Date(asset.incomeStart);
+  const elapsed = monthIndex(period.year, period.month) - monthIndex(start.getUTCFullYear(), start.getUTCMonth() + 1);
+  return elapsed >= 0 && elapsed < asset.incomeTerm;
+}
 
 export const incomeDateOf = (period, day) => new Date(Date.UTC(period.year, period.month - 1, Math.min(day, lastDay(period.year, period.month)), 12));
 
@@ -23,7 +31,7 @@ export async function applyDueIncome(userId, now = new Date()) {
   let applied = 0;
   for (const p of due) {
     const date = incomeDateOf(p.period, p.asset.incomeDay || 1);
-    if (date > now) continue;
+    if (date > now || !withinTerm(p.asset, p.period)) continue;
     const amount = incomeFor(p.asset, p.initialCapital);
     const updated = await prisma.assetPosition.updateMany({
       where: { id: p.id, incomeDate: null },
@@ -46,6 +54,22 @@ export async function setPositionIncome(req, positionId, { amount, date }) {
   const finalCapital = round2(num(pos.finalCapital) + delta);
   if (finalCapital < 0) throw badRequest('El capital final no puede quedar negativo');
   return prisma.assetPosition.update({ where: { id: pos.id }, data: { incomeAmount: amount, incomeDate: when, finalCapital } });
+}
+
+export async function assignContribution(req, positionId, movementId) {
+  const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } } });
+  if (!pos) throw notFound('Producto no encontrado');
+  await getOpenPeriod(req.subjectId, pos.periodId);
+  const movement = await prisma.patrimonialMovement.findFirst({ where: { id: movementId, userId: req.subjectId, periodId: pos.periodId, type: 'APORTACION', assetId: null } });
+  if (!movement) throw notFound('Aportación sin asignar no encontrada en este periodo');
+  const amount = num(movement.amount);
+  return prisma.$transaction(async (tx) => {
+    await tx.patrimonialMovement.update({ where: { id: movement.id }, data: { assetId: pos.assetId } });
+    return tx.assetPosition.update({
+      where: { id: pos.id },
+      data: { initialCapital: round2(num(pos.initialCapital) + amount), finalCapital: round2(num(pos.finalCapital) + amount) },
+    });
+  });
 }
 
 export function startIncomeJob(intervalMinutes = 60) {

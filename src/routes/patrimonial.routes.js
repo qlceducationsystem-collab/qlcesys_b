@@ -48,6 +48,7 @@ r.delete('/obligations/:balanceId', tool(9), ah(async (req, res) => {
 r.post('/obligations/:balanceId/payments', tool(9), validate(debtPaymentSchema), ah(async (req, res) => {
   res.status(201).json(await debts.confirmPayment(req, req.params.balanceId, req.body));
 }));
+r.delete('/obligations/:balanceId/payments', tool(9), ah(async (req, res) => res.json(await debts.undoPayment(req, req.params.balanceId))));
 
 r.get('/tax-items', tool(10), ah(async (req, res) => res.json(await estimates.listTaxItems(req.subjectId))));
 r.post('/tax-items', tool(10), validate(taxItemSchema), ah(async (req, res) => res.status(201).json(await estimates.taxItems.create(req, req.body))));

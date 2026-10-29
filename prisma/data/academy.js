@@ -114,6 +114,11 @@ const BLOCK_1 = [
           'Resultado: 80–100 Equilibrada, 60–79 Moderada, 40–59 Concentrada, 0–39 Muy concentrada.',
           '“Equilibrada” significa únicamente que la estructura presenta una distribución relativamente diversificada y sin una concentración dominante según los parámetros educativos de QLC. No existe un porcentaje universal correcto para todas las personas.',
         ),
+        section(
+          'Rendimientos de tus productos',
+          'Para que tu cartera refleje lo que generan tus inversiones, dirígete a la sección Mi cartera. Ahí puedes automatizar la rentabilidad mensual de cada producto (un monto fijo o un porcentaje, el día en que la recibes y su plazo) para que el sistema la sume sola cada mes.',
+          'Si prefieres hacerlo tú, regístrala manualmente cada mes con el botón «Registrar rentabilidad del mes» de cada producto. También puedes corregirla o dejarla en cero si algún mes no la recibiste.',
+        ),
       ],
       exercise: {
         prompt: '¿Qué categoría concentra más tu patrimonio? ¿Qué pasaría con tu cartera si esa categoría cayera?',

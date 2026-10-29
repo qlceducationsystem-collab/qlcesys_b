@@ -428,6 +428,9 @@ model DebtBalance {
   balance   Decimal         @db.Decimal(14, 2)
   payment   Decimal         @db.Decimal(14, 2)
   fees      Decimal         @default(0) @db.Decimal(14, 2)
+  paymentExpenseId     String?
+  paidAt               DateTime?
+  balanceBeforePayment Decimal?        @db.Decimal(14, 2)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   debt      Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
@@ -460,6 +463,8 @@ model Asset {
   incomeType     String?
   incomeValue    Decimal?              @db.Decimal(14, 4)
   incomeDay      Int?
+  incomeTerm     Int?
+  incomeStart    DateTime?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)

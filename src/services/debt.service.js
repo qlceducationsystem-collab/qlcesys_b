@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { debtPayment, debtTotals } from '../domain/patrimonial.js';
-import { badRequest, notFound } from '../utils/httpError.js';
+import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { absorbDiagnosisDebt, absorbExpenseChange, DIAGNOSIS_DEBT_SOURCE } from './moduleData.service.js';
 import { getOpenPeriod, getPeriodSummary } from './period.service.js';
@@ -81,6 +81,7 @@ export async function deleteDebt(req, balanceId) {
 export async function confirmPayment(req, balanceId, { amount, newBalance }) {
   const bal = await ownedBalance(req.subjectId, balanceId);
   await getOpenPeriod(req.subjectId, bal.periodId);
+  if (bal.paidAt) throw conflict('Ya confirmaste el pago de este mes. Si te equivocaste, deshaz el pago y vuelve a confirmarlo.');
   if (newBalance !== undefined && newBalance !== null && Number(newBalance) > Number(bal.balance) + Number(amount)) {
     throw badRequest('El nuevo saldo no puede superar el saldo anterior más el pago');
   }
@@ -98,7 +99,36 @@ export async function confirmPayment(req, balanceId, { amount, newBalance }) {
       },
     });
     await absorbExpenseChange(tx, req.subjectId, null, expense);
-    const updated = await tx.debtBalance.update({ where: { id: bal.id }, data: { balance: finalBalance }, include: { debt: true } });
+    const updated = await tx.debtBalance.update({
+      where: { id: bal.id },
+      data: { balance: finalBalance, paidAt: new Date(), paymentExpenseId: expense.id, balanceBeforePayment: bal.balance },
+      include: { debt: true },
+    });
     return { expense, breakdown: { ...breakdown, newBalance: finalBalance }, balance: flat(updated) };
+  });
+}
+
+export async function releaseDebtPayment(tx, expenseId) {
+  const bal = await tx.debtBalance.findFirst({ where: { paymentExpenseId: expenseId } });
+  if (!bal) return;
+  await tx.debtBalance.update({ where: { id: bal.id }, data: { balance: bal.balanceBeforePayment ?? bal.balance, paidAt: null, paymentExpenseId: null, balanceBeforePayment: null } });
+}
+
+export async function undoPayment(req, balanceId) {
+  const bal = await ownedBalance(req.subjectId, balanceId);
+  await getOpenPeriod(req.subjectId, bal.periodId);
+  if (!bal.paidAt) throw conflict('Este mes no tiene un pago confirmado');
+  return prisma.$transaction(async (tx) => {
+    const expense = bal.paymentExpenseId ? await tx.expense.findFirst({ where: { id: bal.paymentExpenseId, userId: req.subjectId } }) : null;
+    if (expense) {
+      await tx.expense.delete({ where: { id: expense.id } });
+      await absorbExpenseChange(tx, req.subjectId, expense, null);
+    }
+    const updated = await tx.debtBalance.update({
+      where: { id: bal.id },
+      data: { balance: bal.balanceBeforePayment ?? bal.balance, paidAt: null, paymentExpenseId: null, balanceBeforePayment: null },
+      include: { debt: true },
+    });
+    return { balance: flat(updated) };
   });
 }

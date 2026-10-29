@@ -6,6 +6,7 @@ import { completeTwoFactor } from './helpers.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
+const round = (n) => Math.round(n * 100) / 100;
 
 run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, aviso y correo', () => {
   let app;
@@ -209,6 +210,52 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal(await prisma.moduleSubmission.count({ where: { userId: user.id } }), 0);
     assert.ok(await prisma.accessGrant.count({ where: { userId: user.id } }));
     assert.equal((await api('reset').get('/api/auth/me')).status, 200);
+  });
+
+  test('Un pago de deuda no se confirma dos veces y se puede deshacer o eliminar', async () => {
+    const debt = await api('c').post('/api/academy/obligations', { name: 'Préstamo prueba', type: 'PRESTAMO_PERSONAL', balance: 10000, annualRate: 12, payment: 1100, fees: 0 });
+    assert.equal(debt.status, 201);
+    const id = debt.body.id;
+    const expensesBefore = await prisma.expense.count({ where: { periodId: state.periodId, source: 'M9_PAYMENT' } });
+    assert.equal((await api('c').post(`/api/academy/obligations/${id}/payments`, { amount: 1100 })).status, 201);
+    assert.equal(Number((await prisma.debtBalance.findUnique({ where: { id } })).balance), 9000);
+    assert.equal((await api('c').post(`/api/academy/obligations/${id}/payments`, { amount: 1100 })).status, 409);
+    assert.equal(await prisma.expense.count({ where: { periodId: state.periodId, source: 'M9_PAYMENT' } }), expensesBefore + 1);
+    const undone = await api('c').del(`/api/academy/obligations/${id}/payments`);
+    assert.equal(undone.status, 200);
+    assert.equal(Number((await prisma.debtBalance.findUnique({ where: { id } })).balance), 10000);
+    assert.equal(await prisma.expense.count({ where: { periodId: state.periodId, source: 'M9_PAYMENT' } }), expensesBefore);
+    await api('c').post(`/api/academy/obligations/${id}/payments`, { amount: 1100 });
+    const paid = await prisma.debtBalance.findUnique({ where: { id } });
+    assert.equal((await api('c').del(`/api/expenses/${paid.paymentExpenseId}`)).status, 204);
+    const released = await prisma.debtBalance.findUnique({ where: { id } });
+    assert.equal(Number(released.balance), 10000);
+    assert.equal(released.paidAt, null);
+    await api('c').del(`/api/academy/obligations/${id}`);
+  });
+
+  test('La inversión real sin asignar se ve en el resumen y se asigna a un producto de Mi cartera', async () => {
+    const summary = async () => (await api('c').get(`/api/periods/${state.periodId}/summary`)).body.summary;
+    let s = await summary();
+    assert.ok(s.patrimony.unassignedContributions > 0);
+    const pending = s.patrimony.unassignedContributions;
+    const product = s.portfolio.products.find((p) => p.name === 'Casa en renta');
+    const movement = s.patrimony.unassignedMovements[0];
+    const assigned = await api('c').post(`/api/portfolio/positions/${product.positionId}/assign`, { movementId: movement.id });
+    assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+    s = await summary();
+    assert.equal(s.patrimony.unassignedContributions, round(pending - movement.amount));
+    assert.equal(s.portfolio.products.find((p) => p.positionId === product.positionId).initial, product.initial + movement.amount);
+    assert.equal(s.reconciliation.reconciled, (await summary()).reconciliation.reconciled);
+  });
+
+  test('La rentabilidad automática respeta el plazo elegido', async () => {
+    const { withinTerm } = await import('../src/services/productIncome.service.js');
+    const asset = { incomeTerm: 3, incomeStart: new Date(Date.UTC(2026, 9, 1, 12)) };
+    assert.equal(withinTerm(asset, { year: 2026, month: 10 }), true);
+    assert.equal(withinTerm(asset, { year: 2026, month: 12 }), true);
+    assert.equal(withinTerm(asset, { year: 2027, month: 1 }), false);
+    assert.equal(withinTerm({ incomeTerm: null }, { year: 2030, month: 1 }), true);
   });
 
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
