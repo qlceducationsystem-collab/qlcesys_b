@@ -62,7 +62,7 @@ export const expenseSchema = z.object({
   amount: money,
 });
 
-const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'OTRO_SEGURO'];
+const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'SEGURO_RETIRO', 'OTRO_SEGURO'];
 
 export const protectionSchema = z.object({
   periodId: id,

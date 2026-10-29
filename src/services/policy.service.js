@@ -4,7 +4,7 @@ import { cloudinaryConfigured, env } from '../config/env.js';
 import { HttpError, badRequest, notFound } from '../utils/httpError.js';
 import { getOpenPeriod } from './period.service.js';
 
-const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'OTRO_SEGURO'];
+const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'SEGURO_RETIRO', 'OTRO_SEGURO'];
 export const POLICY_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 function client() {

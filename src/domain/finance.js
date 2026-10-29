@@ -111,7 +111,7 @@ export function summarizeCashflow(incomes = [], expenses = []) {
   };
 }
 
-export const INSURANCE_TYPES = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'OTRO_SEGURO'];
+export const INSURANCE_TYPES = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'SEGURO_RETIRO', 'OTRO_SEGURO'];
 
 export function summarizeProtection(records = []) {
   const liquid = records.filter((r) => !INSURANCE_TYPES.includes(r.type));
