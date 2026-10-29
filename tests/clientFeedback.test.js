@@ -2,7 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { completeTwoFactor } from './helpers.js';
+import { completeTwoFactor, nextCode } from './helpers.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
@@ -269,6 +269,19 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     const upload = await api('c').post(`/api/protection/${created.body.id}/policy`).attach('file', Buffer.from('%PDF-1.4 prueba'), { filename: 'poliza.pdf', contentType: 'application/pdf' });
     assert.equal(upload.status, 503);
     assert.equal((await api('c').get(`/api/protection/${created.body.id}/policy`)).status, 404);
+  });
+
+  test('El cliente puede eliminar su cuenta con confirmación y código de verificación', async () => {
+    const res = await request(app).post('/api/auth/register').send(registerBody('bye'));
+    const { token, secret } = await completeTwoFactor(app, res.body.challengeToken);
+    tokens.bye = token;
+    assert.equal((await api('bye').post('/api/auth/delete-account', { confirm: 'no', code: nextCode(secret, 0) })).status, 400);
+    assert.equal((await api('bye').post('/api/auth/delete-account', { confirm: 'ELIMINAR', code: '000000' })).status, 401);
+    assert.equal((await api('admin').post('/api/auth/delete-account', { confirm: 'ELIMINAR', code: '123456' })).status, 403);
+    const done = await api('bye').post('/api/auth/delete-account', { confirm: 'ELIMINAR', code: nextCode(secret, 1) });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.equal(await prisma.user.count({ where: { email: `bye-${uid}@test.qlc` } }), 0);
+    assert.equal((await api('bye').get('/api/auth/me')).status, 401);
   });
 
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {

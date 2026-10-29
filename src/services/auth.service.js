@@ -164,3 +164,13 @@ export async function resetTwoFactor(clientId) {
   });
   if (!count) throw notFound('Cliente no encontrado');
 }
+
+export async function deleteAccount(userId, { confirm, code }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw notFound('Usuario no encontrado');
+  if (user.role !== 'CLIENT') throw new HttpError(403, 'Las cuentas de administrador no se eliminan desde aquí');
+  if (confirm !== 'ELIMINAR') throw badRequest('Escribe ELIMINAR para confirmar');
+  await verifyUserCode(user, String(code || ''));
+  await prisma.user.delete({ where: { id: user.id } });
+  return { ok: true };
+}

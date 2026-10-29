@@ -17,6 +17,7 @@ r.post('/2fa/setup', authLimiter, validate(schemas.challengeSchema), ah(async (r
 r.post('/2fa/activate', authLimiter, validate(schemas.activateTwoFactorSchema), ah(async (req, res) => res.json(await auth.activateTwoFactor(req.body))));
 r.get('/me', authenticate, ah(async (req, res) => res.json({ user: await auth.me(req.user.id) })));
 r.post('/reset-profile', authenticate, authLimiter, ah(async (req, res) => res.json(await resetProfile(req.user, req.body || {}))));
+r.post('/delete-account', authenticate, authLimiter, ah(async (req, res) => res.json(await auth.deleteAccount(req.user.id, req.body || {}))));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 
 r.post('/reset-password', authLimiter, validate(schemas.resetWithCodeSchema), ah(async (req, res) => {
