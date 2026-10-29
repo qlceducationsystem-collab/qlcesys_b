@@ -26,3 +26,9 @@ export const moduleFileUpload = multer({
 }).single('file');
 
 export const kindOf = (mimetype) => Object.entries(FILE_KINDS).find(([, types]) => types.includes(mimetype))?.[0];
+
+export const policyUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: filter(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']),
+}).single('file');

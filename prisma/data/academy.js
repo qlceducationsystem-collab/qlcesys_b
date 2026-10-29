@@ -11,7 +11,7 @@ const BLOCK_1 = [
       tool: { name: 'Diagnóstico financiero inicial', question: '¿Cuál es mi situación financiera actual y cuál es mi punto de partida?' },
       essentials: [
         'Registra tu flujo mensual, tu patrimonio actual y tu liquidez.',
-        'La información se guarda como tu línea base y alimenta Inicio, Ingresos y gastos, Patrimonio, Protección y Mi cartera.',
+        'La información se guarda como tu línea base y alimenta Inicio, Ingresos y gastos, Patrimonio, Protección y Mi portafolio de inversión.',
         'El diagnóstico no te dice dónde invertir: muestra la estructura actual de tus finanzas.',
       ],
       riskNotes: ['Los indicadores son educativos y no constituyen una calificación definitiva de tu situación.'],
@@ -59,7 +59,7 @@ const BLOCK_1 = [
       tool: { name: 'Mapa de productos financieros', question: '¿Exactamente en qué productos tengo mi dinero y qué características tiene cada uno?' },
       essentials: [
         'Registra cada producto individualmente: nombre, tipo, capital actual, horizonte, liquidez y riesgo percibido.',
-        'Cada producto alimenta Mi cartera, Allocation y Patrimonio. No necesitas registrarlo dos veces.',
+        'Cada producto alimenta Mi portafolio de inversión, Allocation y Patrimonio. No necesitas registrarlo dos veces.',
         'La herramienta no recomienda qué comprar: ayuda a entender y ordenar.',
       ],
       riskNotes: [],
@@ -67,16 +67,16 @@ const BLOCK_1 = [
         section(
           'De la cifra global a los productos individuales',
           'En el Módulo 1 registraste tus inversiones como una cifra global. Ahora el Módulo 2 empieza a descomponerla: qué parte está en CETES, en fondos, en acciones o en activos digitales.',
-          'Módulo 1 es la fotografía financiera; Módulo 2 es la composición de los activos; Módulo 3 será la construcción de la cartera.',
+          'Módulo 1 es la fotografía financiera; Módulo 2 es la composición de los activos; Módulo 3 será la construcción del portafolio.',
         ),
         section(
           'Qué información se registra por producto',
           'Nombre y tipo del producto, capital actual, horizonte (corto, mediano o largo plazo), liquidez (alta, media o baja) y riesgo percibido (bajo, medio, alto o muy alto).',
-          'El horizonte enseña que no todos los activos tienen la misma función temporal; la liquidez conecta con lo aprendido en el Módulo 1; el riesgo prepara los módulos de cartera y riesgo.',
+          'El horizonte enseña que no todos los activos tienen la misma función temporal; la liquidez conecta con lo aprendido en el Módulo 1; el riesgo prepara los módulos de portafolio y riesgo.',
         ),
         section(
           'Cómo se conecta con la plataforma',
-          'Producto individual → categoría → Mi cartera → Allocation → Patrimonio. Si registras BTC, ETH y otros activos digitales, el sistema puede consolidarlos en su categoría.',
+          'Producto individual → categoría → Mi portafolio de inversión → Allocation → Patrimonio. Si registras BTC, ETH y otros activos digitales, el sistema puede consolidarlos en su categoría.',
           'Así los módulos no son cursos independientes: cada uno utiliza la información construida en el anterior.',
         ),
       ],
@@ -88,25 +88,25 @@ const BLOCK_1 = [
   },
   {
     month: 3,
-    title: 'Construcción de cartera',
+    title: 'Construcción de portafolio',
     summary: 'Diversificación, asignación de activos, horizonte, tolerancia al riesgo, liquidez, volatilidad y correlación.',
     content: {
-      tool: { name: 'Constructor de cartera', question: '¿Cómo está distribuido mi dinero entre las diferentes categorías de activos?' },
+      tool: { name: 'Constructor de portafolio', question: '¿Cómo está distribuido mi dinero entre las diferentes categorías de activos?' },
       essentials: [
-        'La cartera actual se calcula con los productos que ya registraste: no vuelves a escribir capitales.',
-        'La simulación educativa es independiente y no modifica tu cartera real.',
-        '“Equilibrada” no significa cartera recomendada, segura ni correcta.',
+        'El portafolio actual se calcula con los productos que ya registraste: no vuelves a escribir capitales.',
+        'La simulación educativa es independiente y no modifica tu portafolio real.',
+        '“Equilibrada” no significa portafolio recomendado, seguro ni correcto.',
       ],
       riskNotes: ['La lectura educativa usa parámetros definidos por QLC y no es una recomendación de inversión.'],
       lesson: [
         section(
-          'De productos a cartera',
-          'Los productos se agrupan por categoría y la herramienta calcula qué porcentaje representa cada una. Ahora puedes ver tu cartera, no solamente saber cuánto dinero tienes.',
+          'De productos a portafolio',
+          'Los productos se agrupan por categoría y la herramienta calcula qué porcentaje representa cada una. Ahora puedes ver tu portafolio, no solamente saber cuánto dinero tienes.',
           'Tener cuatro inversiones no significa necesariamente estar diversificado. Por ejemplo, cuatro activos digitales pueden concentrar la misma clase de riesgo. Número de productos no es igual a diversificación real.',
         ),
         section(
           'Allocation',
-          'En este módulo aprendes a interpretar tu asignación. Después, la sección permanente Allocation conserva esa distribución y la actualiza conforme cambia la cartera.',
+          'En este módulo aprendes a interpretar tu asignación. Después, la sección permanente Allocation conserva esa distribución y la actualiza conforme cambia el portafolio.',
         ),
         section(
           'Lectura educativa',
@@ -116,13 +116,13 @@ const BLOCK_1 = [
         ),
         section(
           'Rendimientos de tus productos',
-          'Para que tu cartera refleje lo que generan tus inversiones, dirígete a la sección Mi cartera. Ahí puedes automatizar la rentabilidad mensual de cada producto (un monto fijo o un porcentaje, el día en que la recibes y su plazo) para que el sistema la sume sola cada mes.',
+          'Para que tu portafolio refleje lo que generan tus inversiones, dirígete a la sección Mi portafolio de inversión. Ahí puedes automatizar la rentabilidad mensual de cada producto (un monto fijo o un porcentaje, el día en que la recibes y su plazo) para que el sistema la sume sola cada mes.',
           'Si prefieres hacerlo tú, regístrala manualmente cada mes con el botón «Registrar rentabilidad del mes» de cada producto. También puedes corregirla o dejarla en cero si algún mes no la recibiste.',
         ),
       ],
       exercise: {
-        prompt: '¿Qué categoría concentra más tu patrimonio? ¿Qué pasaría con tu cartera si esa categoría cayera?',
-        steps: ['Revisa tu cartera actual.', 'Compara con una simulación educativa.', 'Registra tu reflexión y completa el módulo.'],
+        prompt: '¿Qué categoría concentra más tu patrimonio? ¿Qué pasaría con tu portafolio si esa categoría cayera?',
+        steps: ['Revisa tu portafolio actual.', 'Compara con una simulación educativa.', 'Registra tu reflexión y completa el módulo.'],
       },
     },
   },
@@ -133,7 +133,7 @@ const BLOCK_1 = [
     content: {
       tool: { name: 'Mapa de exposición y simulador de riesgo', question: '¿Qué estoy arriesgando?' },
       essentials: [
-        'Simulación educativa: no modifica Mi cartera, Patrimonio, Allocation, Ingresos ni Gastos.',
+        'Simulación educativa: no modifica Mi portafolio de inversión, Patrimonio, Allocation, Ingresos ni Gastos.',
         'Compara el mismo movimiento con 1x, 10x y 50x: el movimiento del mercado no cambia, cambia la exposición.',
       ],
       riskNotes: [
@@ -201,7 +201,7 @@ const BLOCK_1 = [
       tool: { name: 'Laboratorio de gestión multiposición', question: '¿Cómo se comporta un conjunto de posiciones expuestas al mismo mercado?' },
       essentials: [
         'Simulación educativa: no conecta exchanges ni realiza trading real.',
-        'Los resultados no alimentan tu patrimonio, cartera ni allocation.',
+        'Los resultados no alimentan tu patrimonio, portafolio ni allocation.',
       ],
       riskNotes: [
         '“Profesional” no significa “seguro” ni “rentable”. Automatizar no elimina el riesgo de mercado ni garantiza resultados.',
@@ -209,7 +209,7 @@ const BLOCK_1 = [
       lesson: [
         section(
           'Laboratorio de gestión multiposición',
-          'En esta práctica aprenderás cómo se comporta una cartera de varias posiciones cuando todas están expuestas a los movimientos de un mismo mercado. Cada operación puede tener dirección, margen, apalancamiento y reglas de salida diferentes; por eso, un mismo movimiento de BTC/USDT no produce el mismo resultado en todas las posiciones.',
+          'En esta práctica aprenderás cómo se comporta un portafolio de varias posiciones cuando todas están expuestas a los movimientos de un mismo mercado. Cada operación puede tener dirección, margen, apalancamiento y reglas de salida diferentes; por eso, un mismo movimiento de BTC/USDT no produce el mismo resultado en todas las posiciones.',
           'El objetivo no es predecir el mercado ni prometer rentabilidad. Es comprender la exposición, el resultado agregado, las salidas por take profit o stop loss y el drawdown en un escenario simulado. Activo de referencia: BTC/USDT · precio inicial simulado: 100,000 USDT.',
         ),
         section(
@@ -248,7 +248,7 @@ const BLOCK_1 = [
           'Si BTC/USDT sube, ¿qué efecto esperas en una posición LONG y en una SHORT?',
           '¿Cuál es la diferencia entre margen asignado y exposición nominal?',
           '¿Por qué el sistema calcula el riesgo estimado en lugar de pedirte que introduzcas manualmente ese resultado?',
-          '¿Puede una cartera multiposición tener posiciones ganadoras y perdedoras al mismo tiempo? ¿Qué debes revisar para evaluar el conjunto?',
+          '¿Puede un portafolio multiposición tener posiciones ganadoras y perdedoras al mismo tiempo? ¿Qué debes revisar para evaluar el conjunto?',
           '¿Por qué un resultado positivo en una simulación aleatoria no demuestra que exista una ventaja estadística?',
           '¿Qué variables cambiarías para comparar dos escenarios de forma ordenada?',
         ),

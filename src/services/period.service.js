@@ -136,7 +136,7 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
       });
     if (protection.length)
       await tx.protectionRecord.createMany({
-        data: protection.map((r) => ({ userId, periodId: period.id, type: r.type, name: r.name, amount: r.amount, notes: r.notes, source: r.source })),
+        data: protection.map((r) => ({ userId, periodId: period.id, type: r.type, name: r.name, amount: r.amount, notes: r.notes, source: r.source, insurer: r.insurer, policyNumber: r.policyNumber, claimsNumber: r.claimsNumber, policyFileId: r.policyFileId, policyFileName: r.policyFileName, policyFileFormat: r.policyFileFormat })),
       });
     if (balances.length)
       await tx.debtBalance.createMany({

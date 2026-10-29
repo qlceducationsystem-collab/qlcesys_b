@@ -10,6 +10,6 @@ export const businessRouter = periodCrudRouter({
     const asset = await prisma.asset.findFirst({
       where: { id: req.body.assetId, userId: req.subjectId, category: { code: 'NEGOCIOS' } },
     });
-    if (!asset) throw badRequest('Selecciona un negocio registrado en Mi cartera');
+    if (!asset) throw badRequest('Selecciona un negocio registrado en Mi portafolio de inversión');
   },
 });

@@ -258,6 +258,19 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal(withinTerm({ incomeTerm: null }, { year: 2030, month: 1 }), true);
   });
 
+  test('Seguros con aseguradora y póliza cuentan en la protección; la póliza en archivo es opcional', async () => {
+    const base = { periodId: state.periodId, type: 'SEGURO_AUTO', name: 'Seguro del auto', amount: 350000 };
+    assert.equal((await api('c').post('/api/protection', base)).status, 400);
+    const created = await api('c').post('/api/protection', { ...base, insurer: 'Aseguradora QLC', policyNumber: 'POL-123', claimsNumber: '800 000 0000' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.equal(created.body.policyNumber, 'POL-123');
+    const summary = (await api('c').get(`/api/periods/${state.periodId}/summary`)).body.summary;
+    assert.ok(summary.protection.insuranceTypes.includes('SEGURO_AUTO'));
+    const upload = await api('c').post(`/api/protection/${created.body.id}/policy`).attach('file', Buffer.from('%PDF-1.4 prueba'), { filename: 'poliza.pdf', contentType: 'application/pdf' });
+    assert.equal(upload.status, 503);
+    assert.equal((await api('c').get(`/api/protection/${created.body.id}/policy`)).status, 404);
+  });
+
   test('Aviso de Copytrading: público, editable por el admin y validado', async () => {
     const initial = await request(app).get('/api/public/notice');
     assert.equal(initial.status, 200);

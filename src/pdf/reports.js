@@ -7,7 +7,7 @@ const CAT_COLS = [
   { label: 'Capital final', width: 0.18, align: 'right' },
   { label: 'Resultado', width: 0.16, align: 'right' },
   { label: 'ROI', width: 0.1, align: 'right' },
-  { label: '% Cartera', width: 0.1, align: 'right' },
+  { label: '% Portafolio', width: 0.1, align: 'right' },
 ];
 
 const BUDGET_LABELS = {
@@ -62,7 +62,7 @@ export function monthlyClosePdf(res, close) {
 
   section(doc, 'Conciliación');
   const rc = s.reconciliation;
-  statusBanner(doc, rc.reconciled, 'PATRIMONIO CONCILIADO', 'INFORMACIÓN NO CONCILIADA', `Cartera ${money(rc.portfolioFinal)} · Movimientos ${money(rc.movementsFinal)} · Diferencia ${money(rc.difference)}`);
+  statusBanner(doc, rc.reconciled, 'PATRIMONIO CONCILIADO', 'INFORMACIÓN NO CONCILIADA', `Portafolio ${money(rc.portfolioFinal)} · Movimientos ${money(rc.movementsFinal)} · Diferencia ${money(rc.difference)}`);
 
   section(doc, 'Resultados por categoría y distribución');
   table(doc, CAT_COLS, s.portfolio.categories.map((c) => [c.name, money(c.initial), money(c.final), money(c.result), pct(c.roi), pct(c.share)]));
@@ -165,7 +165,7 @@ export function annualReportPdf(res, report) {
       { label: 'Categoría', width: 0.4 },
       { label: 'Resultado acumulado', width: 0.22, align: 'right' },
       { label: 'Capital al cierre', width: 0.22, align: 'right' },
-      { label: '% Cartera', width: 0.16, align: 'right' },
+      { label: '% Portafolio', width: 0.16, align: 'right' },
     ],
     s.categories.map((c) => [c.name, money(c.result), money(c.finalCapital), pct(c.share)]),
   );

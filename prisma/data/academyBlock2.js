@@ -169,7 +169,7 @@ export const BLOCK_2 = [
       essentials: [
         'Crea escenarios con capital, horizonte, inflación supuesta y rendimiento nominal supuesto.',
         'Puedes cargar el capital de una inversión o meta existente: la conexión es solo de lectura.',
-        'Los escenarios son simulaciones educativas: no modifican Patrimonio, Mi cartera, Cortes, Ingresos ni Gastos.',
+        'Los escenarios son simulaciones educativas: no modifican Patrimonio, Mi portafolio de inversión, Cortes, Ingresos ni Gastos.',
       ],
       riskNotes: ['Inflación y rendimiento son supuestos, no pronósticos. Esta versión no considera aportaciones adicionales, comisiones ni impuestos.'],
       lesson: [

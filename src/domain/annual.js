@@ -106,10 +106,10 @@ export function buildObservations(r) {
   if (withRoi.length > 1) {
     const best = withRoi.reduce((a, b) => (b.roi > a.roi ? b : a));
     const worst = withRoi.reduce((a, b) => (b.roi < a.roi ? b : a));
-    obs.push(`El mes con mayor ROI de cartera fue ${MONTHS[best.month - 1]} (${best.roi}%) y el de menor fue ${MONTHS[worst.month - 1]} (${worst.roi}%).`);
+    obs.push(`El mes con mayor ROI de portafolio fue ${MONTHS[best.month - 1]} (${best.roi}%) y el de menor fue ${MONTHS[worst.month - 1]} (${worst.roi}%).`);
   }
   const top = [...r.distribution].sort((a, b) => b.share - a.share)[0];
-  if (top) obs.push(`Al cierre, la categoría con mayor participación fue ${top.name} (${top.share}% de la cartera).`);
+  if (top) obs.push(`Al cierre, la categoría con mayor participación fue ${top.name} (${top.share}% del portafolio).`);
   if (!r.complete) obs.push(`Informe parcial: ${r.monthsClosed} de 12 periodos cerrados.`);
   return obs;
 }

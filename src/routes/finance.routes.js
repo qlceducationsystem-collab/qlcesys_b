@@ -3,6 +3,9 @@ import { badRequest } from '../utils/httpError.js';
 import { absorbExpenseChange } from '../services/moduleData.service.js';
 import { releaseDebtPayment } from '../services/debt.service.js';
 import { periodCrudRouter } from './periodCrud.js';
+import { ah } from '../utils/asyncHandler.js';
+import { policyUpload } from '../middlewares/upload.js';
+import { attachPolicy, policyUrl, removePolicy } from '../services/policy.service.js';
 import { expenseSchema, incomeSchema, movementSchema, protectionSchema } from '../validations/schemas.js';
 
 export const incomesRouter = periodCrudRouter({ model: 'income', schema: incomeSchema });
@@ -15,6 +18,10 @@ export const expensesRouter = periodCrudRouter({
   },
 });
 export const protectionRouter = periodCrudRouter({ model: 'protectionRecord', schema: protectionSchema });
+
+protectionRouter.post('/:id/policy', policyUpload, ah(async (req, res) => res.json(await attachPolicy(req, req.params.id, req.file))));
+protectionRouter.get('/:id/policy', ah(async (req, res) => res.json({ url: await policyUrl(req, req.params.id) })));
+protectionRouter.delete('/:id/policy', ah(async (req, res) => res.json(await removePolicy(req, req.params.id))));
 
 export const movementsRouter = periodCrudRouter({
   model: 'patrimonialMovement',

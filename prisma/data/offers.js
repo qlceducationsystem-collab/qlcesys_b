@@ -1,7 +1,7 @@
 const TOOL_NAMES = {
   1: 'Diagnóstico financiero inicial',
   2: 'Mapa de productos financieros',
-  3: 'Constructor de cartera',
+  3: 'Constructor de portafolio',
   4: 'Simulador de riesgo y exposición',
   5: 'Simulador de una operación',
   6: 'Laboratorio de gestión multiposición',

@@ -62,13 +62,18 @@ export const expenseSchema = z.object({
   amount: money,
 });
 
+const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGURO_DESEMPLEO', 'SEGURO_EDUCACION', 'OTRO_SEGURO'];
+
 export const protectionSchema = z.object({
   periodId: id,
-  type: z.enum(['LIQUIDEZ', 'FONDO_EMERGENCIA', 'RESERVA', 'SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'OTRO_SEGURO']),
+  type: z.enum(['LIQUIDEZ', 'FONDO_EMERGENCIA', 'RESERVA', ...INSURANCE]),
   name: text(),
   amount: money,
   notes: optText(),
-});
+  insurer: optText(120),
+  policyNumber: optText(80),
+  claimsNumber: optText(80),
+}).refine((v) => !INSURANCE.includes(v.type) || (v.insurer && v.policyNumber), { message: 'En un seguro indica la aseguradora y el número de póliza', path: ['policyNumber'] });
 
 const DEBT_TYPES = ['TARJETA_CREDITO', 'PRESTAMO_PERSONAL', 'CREDITO_AUTOMOTRIZ', 'HIPOTECA', 'CREDITO_NOMINA', 'PRESTAMO_FAMILIAR', 'BNPL', 'DEUDA_NEGOCIO', 'IMPUESTOS', 'OTRA'];
 const blankToNull = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
