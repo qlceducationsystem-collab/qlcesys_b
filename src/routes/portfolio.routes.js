@@ -5,7 +5,7 @@ import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { assetSchema, incomeUseSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
 import { incomeOptions, undoIncomeUse, useIncome } from '../services/incomeUse.service.js';
-import { applyCarry, applyDueIncome, assignContribution, carryForward, carryGaps, formIncome, setPositionIncome } from '../services/productIncome.service.js';
+import { applyCarry, applyDueIncome, assignContribution, carriedPositionIds, carryForward, carryGaps, formIncome, setPositionIncome, syncCarry } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
 
@@ -117,7 +117,8 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
       include: { asset: true },
     });
     await carryForward(tx, pos.assetId, period, income.finalCapital - Number(pos.finalCapital));
-    return saved;
+    await syncCarry(req.subjectId, period, tx);
+    return tx.assetPosition.findUnique({ where: { id: saved.id }, include: { asset: true } });
   });
   await applyDueIncome(req.subjectId);
   res.json(updated);

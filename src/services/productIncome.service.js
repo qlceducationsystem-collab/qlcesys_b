@@ -79,6 +79,34 @@ export async function carryGaps(userId, period, db = prisma) {
     .filter(Boolean);
 }
 
+export async function syncCarry(userId, period, db = prisma) {
+  if (period.status !== 'OPEN') return 0;
+  const gaps = await carryGaps(userId, period, db);
+  for (const g of gaps) {
+    const pos = await db.assetPosition.findUnique({ where: { id: g.positionId } });
+    await db.assetPosition.update({
+      where: { id: pos.id },
+      data: { initialCapital: round2(num(pos.initialCapital) + g.gap), finalCapital: round2(num(pos.finalCapital) + g.gap) },
+    });
+    await carryForward(db, pos.assetId, period, g.gap);
+  }
+  return gaps.length;
+}
+
+export async function carriedPositionIds(userId, period, db = prisma) {
+  const prev = await db.financialPeriod.findFirst({
+    where: { userId, OR: [{ year: { lt: period.year } }, { year: period.year, month: { lt: period.month } }] },
+    orderBy: [{ year: 'desc' }, { month: 'desc' }],
+  });
+  if (!prev) return [];
+  const [before, current] = await Promise.all([
+    db.assetPosition.findMany({ where: { periodId: prev.id }, select: { assetId: true } }),
+    db.assetPosition.findMany({ where: { periodId: period.id, asset: { userId } }, select: { id: true, assetId: true } }),
+  ]);
+  const known = new Set(before.map((b) => b.assetId));
+  return current.filter((p) => known.has(p.assetId)).map((p) => p.id);
+}
+
 export async function applyCarry(req, positionId) {
   const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } }, include: { period: true } });
   if (!pos) throw notFound('Producto no encontrado');

@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma.js';
 import { buildPeriodSummary, summarizeMovements } from '../domain/finance.js';
 import { conflict, notFound } from '../utils/httpError.js';
 import { num, round2, sum } from '../utils/money.js';
+import { syncCarry } from './productIncome.service.js';
 
 const periodOrder = [{ year: 'desc' }, { month: 'desc' }];
 const periodIndex = (p) => p.year * 12 + p.month;
@@ -99,6 +100,7 @@ export async function loadPeriodData(userId, periodId, db = prisma) {
 
 export async function getPeriodSummary(userId, periodId, db = prisma) {
   const period = await getOwnedPeriod(userId, periodId, db);
+  await syncCarry(userId, period, db);
   const data = await loadPeriodData(userId, periodId, db);
   const opening = await getOpening(userId, period, db, data);
   return { period, data, summary: buildPeriodSummary({ opening, ...data }) };
@@ -132,10 +134,12 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
       tx.protectionRecord.findMany({ where: { periodId: prev.id } }),
       tx.debtBalance.findMany({ where: { periodId: prev.id, debt: { status: 'ACTIVE' } } }),
     ]);
+    const laterMoves = earlier ? [] : await tx.patrimonialMovement.findMany({ where: { periodId: prev.id, assetId: { not: null } } });
+    const netOf = (assetId) => summarizeMovements(laterMoves.filter((m) => m.assetId === assetId)).net;
     if (positions.length)
       await tx.assetPosition.createMany({
         data: positions.map((p) => {
-          const capital = earlier ? p.finalCapital : p.initialCapital;
+          const capital = earlier ? p.finalCapital : round2(num(p.initialCapital) - netOf(p.assetId));
           return { assetId: p.assetId, periodId: period.id, initialCapital: capital, finalCapital: capital };
         }),
       });

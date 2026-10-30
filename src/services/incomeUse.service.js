@@ -4,7 +4,7 @@ import { num, round2 } from '../utils/money.js';
 import { customCategory, customName, isCustomCategory } from '../domain/patrimonial.js';
 import { getOpenPeriod } from './period.service.js';
 import { absorbDiagnosisExpense } from './moduleData.service.js';
-import { carryForward, carryGaps } from './productIncome.service.js';
+import { carriedPositionIds, carryForward, carryGaps, syncCarry } from './productIncome.service.js';
 import { getBudget } from './budget.service.js';
 
 export const INCOME_USE = 'INCOME_USE:';
@@ -46,10 +46,12 @@ const usedFromMonth = async (db, positionId) =>
   num((await db.incomeUse.aggregate({ where: { positionId, origin: 'MONTH' }, _sum: { amount: true } }))._sum.amount);
 
 export async function incomeOptions(userId, period) {
-  const [positions, gaps, uses] = await Promise.all([
+  await syncCarry(userId, period);
+  const [positions, gaps, uses, carried] = await Promise.all([
     prisma.assetPosition.findMany({ where: { periodId: period.id, asset: { userId } }, include: { asset: true }, orderBy: { createdAt: 'asc' } }),
     carryGaps(userId, period),
     prisma.incomeUse.findMany({ where: { userId, periodId: period.id }, orderBy: { createdAt: 'asc' } }),
+    carriedPositionIds(userId, period),
   ]);
   const nameOf = (id) => positions.find((p) => p.id === id)?.asset.name || '';
   const month = positions
@@ -60,6 +62,7 @@ export async function incomeOptions(userId, period) {
     .filter((m) => m.available > 0.004);
   return {
     carry: gaps,
+    carried,
     month,
     uses: uses.map((u) => ({
       id: u.id,

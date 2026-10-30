@@ -295,15 +295,17 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
 
     const casa = await prisma.assetPosition.findFirst({ where: { periodId: state.periodId, asset: { name: 'Casa en renta' } } });
     await prisma.assetPosition.update({ where: { id: casa.id }, data: { initialCapital: Number(casa.initialCapital) - 9000, finalCapital: Number(casa.finalCapital) - 9000 } });
-    const diff1 = (await summary()).reconciliation.difference;
-    assert.equal((await options()).carry.find((g) => g.positionId === casa.id).gap, 9000);
-    assert.equal((await use(casa.id, { origin: 'CARRY', kind: 'EXPENSE', amount: 3000, category: 'OTROS' })).status, 201);
-    assert.equal((await use(casa.id, { origin: 'CARRY', kind: 'INVEST', amount: 2000, targetPositionId: created.body.id })).status, 201);
-    assert.equal((await options()).carry.find((g) => g.positionId === casa.id).gap, 4000);
-    assert.equal((await summary()).reconciliation.difference, round(diff1 + 5000));
-    assert.equal((await api('c').post(`/api/portfolio/positions/${casa.id}/carry`, {})).status, 200);
-    assert.ok(!(await options()).carry.some((g) => g.positionId === casa.id));
-    assert.equal((await summary()).reconciliation.difference, round(diff1 + 9000));
+    assert.equal((await summary()).reconciliation.difference, diff0);
+    assert.equal(Number((await prisma.assetPosition.findUnique({ where: { id: casa.id } })).initialCapital), Number(casa.initialCapital));
+    const opts = await options();
+    assert.ok(!opts.carry.length);
+    assert.ok(opts.carried.includes(casa.id));
+    assert.ok(!opts.carried.includes(created.body.id));
+    const typed = await api('c').put(`/api/portfolio/positions/${casa.id}`, { periodId: state.periodId, categoryCode: 'BIENES_RAICES', name: 'Casa en renta', initialCapital: 1, finalCapital: 1, incomeType: 'MANUAL', incomeValue: 3000, incomeDay: 2 });
+    assert.equal(typed.status, 200, JSON.stringify(typed.body));
+    assert.equal(Number(typed.body.initialCapital), Number(casa.initialCapital));
+    assert.equal(Number(typed.body.finalCapital), Number(casa.initialCapital) + 3000);
+    assert.equal((await summary()).reconciliation.difference, diff0);
   });
 
   test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {
