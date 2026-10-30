@@ -3,7 +3,8 @@ import { prisma } from '../config/prisma.js';
 import { ah } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
-import { assetSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
+import { assetSchema, incomeSpendSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
+import { listIncomeUses, spendIncome, undoIncomeUse } from '../services/incomeUse.service.js';
 import { applyCarry, applyDueIncome, assignContribution, carryForward, carryGaps, formIncome, setPositionIncome } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
@@ -56,6 +57,13 @@ r.get('/', validate(periodQuery, 'query'), ah(async (req, res) => {
 r.get('/carry', validate(periodQuery, 'query'), ah(async (req, res) => {
   const period = await getOpenPeriod(req.subjectId, req.validQuery.periodId).catch(() => null);
   res.json(period ? await carryGaps(req.subjectId, period) : []);
+}));
+
+r.get('/spend', validate(periodQuery, 'query'), ah(async (req, res) => res.json(await listIncomeUses(req.subjectId, req.validQuery.periodId))));
+r.post('/positions/:positionId/spend', validate(incomeSpendSchema), ah(async (req, res) => res.status(201).json(await spendIncome(req, req.params.positionId, req.body))));
+r.delete('/spend/:expenseId', ah(async (req, res) => {
+  await undoIncomeUse(req, req.params.expenseId);
+  res.status(204).end();
 }));
 
 r.post('/positions/:positionId/carry', ah(async (req, res) => res.json(await applyCarry(req, req.params.positionId))));

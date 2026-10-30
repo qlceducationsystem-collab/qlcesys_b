@@ -235,6 +235,49 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('c').post(`/api/portfolio/positions/${casa.id}/carry`, {})).status, 400);
   });
 
+  test('Un producto nuevo no descuadra la conciliación y la rentabilidad se puede mover a gastos y deshacer', async () => {
+    const summary = async () => (await api('c').get(`/api/periods/${state.periodId}/summary`)).body.summary;
+    const before = await summary();
+    const diff0 = before.reconciliation.difference;
+    const created = await api('c').post('/api/portfolio/positions', { periodId: state.periodId, categoryCode: 'NEGOCIOS', name: 'Lavandería', initialCapital: 150000, finalCapital: 150000, incomeType: 'MANUAL' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.equal((await summary()).reconciliation.difference, diff0);
+    const withIncome = await api('c').put(`/api/portfolio/positions/${created.body.id}`, { periodId: state.periodId, categoryCode: 'NEGOCIOS', name: 'Lavandería', initialCapital: 150000, finalCapital: 150000, incomeType: 'MANUAL', incomeValue: 20000, incomeDay: 1 });
+    assert.equal(Number(withIncome.body.finalCapital), 170000);
+    let s1 = await summary();
+    assert.equal(s1.reconciliation.difference, diff0);
+    const expenses0 = s1.cashflow.expenses;
+    const patrimony0 = s1.patrimony.final;
+
+    assert.equal((await api('c').post(`/api/portfolio/positions/${created.body.id}/spend`, { amount: 25000, category: 'VIAJES' })).status, 400);
+    const spent = await api('c').post(`/api/portfolio/positions/${created.body.id}/spend`, { amount: 5000, category: 'VIAJES', description: 'Viaje' });
+    assert.equal(spent.status, 201, JSON.stringify(spent.body));
+    s1 = await summary();
+    assert.equal(s1.reconciliation.difference, diff0);
+    assert.equal(s1.patrimony.final, round(patrimony0 - 5000));
+    assert.ok(s1.cashflow.expenses >= expenses0);
+    const pos = await prisma.assetPosition.findUnique({ where: { id: created.body.id } });
+    assert.equal(Number(pos.initialCapital), 145000);
+    assert.equal(Number(pos.finalCapital), 165000);
+    const uses = await api('c').get(`/api/portfolio/spend?periodId=${state.periodId}`);
+    assert.equal(uses.body.length, 1);
+    assert.equal((await api('c').put(`/api/expenses/${spent.body.id}`, { periodId: state.periodId, category: 'VIAJES', description: 'x', amount: 1 })).status, 400);
+    const carry = await api('c').get(`/api/portfolio/carry?periodId=${state.periodId}`);
+    assert.ok(!carry.body.some((g) => g.positionId === created.body.id));
+
+    assert.equal((await api('c').del(`/api/portfolio/spend/${spent.body.id}`)).status, 204);
+    s1 = await summary();
+    assert.equal(s1.patrimony.final, patrimony0);
+    assert.equal(s1.reconciliation.difference, diff0);
+    assert.equal(Number((await prisma.assetPosition.findUnique({ where: { id: created.body.id } })).initialCapital), 150000);
+
+    const again = await api('c').post(`/api/portfolio/positions/${created.body.id}/spend`, { amount: 3000, category: 'OTROS' });
+    const movement = await prisma.patrimonialMovement.findFirst({ where: { assetId: pos.assetId, type: 'DEDUCCION' } });
+    assert.equal((await api('c').del(`/api/patrimonial-movements/${movement.id}`)).status, 204);
+    assert.equal(await prisma.expense.count({ where: { id: again.body.id } }), 0);
+    assert.equal(Number((await prisma.assetPosition.findUnique({ where: { id: created.body.id } })).initialCapital), 150000);
+  });
+
   test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {
     await register('reset');
     const checkout = await api('reset').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });

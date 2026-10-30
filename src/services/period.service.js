@@ -44,9 +44,14 @@ export async function getOpening(userId, period, db = prisma, data = null) {
     return round2(sum(d.positions, (p) => p.initialCapital) - summarizeMovements(d.movements).net);
   }
   const close = await latestClose(prev.id, db);
-  if (close) return round2(num(close.snapshot?.patrimony?.final));
   const positions = await db.assetPosition.findMany({ where: { periodId: prev.id } });
-  return sum(positions, (p) => p.finalCapital);
+  const base = close ? num(close.snapshot?.patrimony?.final) : sum(positions, (p) => p.finalCapital);
+  const known = new Set(positions.map((p) => p.assetId));
+  const d = data || (await loadPeriodData(userId, period.id, db));
+  const fresh = d.positions.filter((p) => !known.has(p.assetId));
+  const freshIds = new Set(fresh.map((p) => p.assetId));
+  const assigned = summarizeMovements(d.movements.filter((m) => m.assetId && freshIds.has(m.assetId))).net;
+  return round2(base + sum(fresh, (p) => p.initialCapital) - assigned);
 }
 
 export async function loadPeriodData(userId, periodId, db = prisma) {

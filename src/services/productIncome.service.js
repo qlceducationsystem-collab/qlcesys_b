@@ -63,15 +63,17 @@ export async function carryGaps(userId, period, db = prisma) {
   });
   if (!prev) return [];
   if (await db.monthlyClose.findFirst({ where: { periodId: prev.id, supersededAt: null } })) return [];
-  const [before, current] = await Promise.all([
+  const [before, current, movements] = await Promise.all([
     db.assetPosition.findMany({ where: { periodId: prev.id } }),
     db.assetPosition.findMany({ where: { periodId: period.id, asset: { userId } }, include: { asset: true } }),
+    db.patrimonialMovement.findMany({ where: { userId, periodId: period.id, assetId: { not: null } } }),
   ]);
+  const netOf = (assetId) => movements.filter((m) => m.assetId === assetId).reduce((acc, m) => acc + (m.type === 'APORTACION' ? num(m.amount) : -num(m.amount)), 0);
   return current
     .map((p) => {
       const last = before.find((b) => b.assetId === p.assetId);
       if (!last) return null;
-      const gap = round2(num(last.finalCapital) - num(p.initialCapital));
+      const gap = round2(num(last.finalCapital) + netOf(p.assetId) - num(p.initialCapital));
       return Math.abs(gap) >= 0.01 ? { positionId: p.id, name: p.asset.name, previousFinal: num(last.finalCapital), initial: num(p.initialCapital), gap } : null;
     })
     .filter(Boolean);
