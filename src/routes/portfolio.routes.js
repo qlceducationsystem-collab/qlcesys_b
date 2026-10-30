@@ -5,7 +5,7 @@ import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { assetSchema, incomeUseSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
 import { incomeOptions, undoIncomeUse, useIncome } from '../services/incomeUse.service.js';
-import { applyCarry, applyDueIncome, assignContribution, carriedPositionIds, carryForward, carryGaps, formIncome, setPositionIncome, syncCarry } from '../services/productIncome.service.js';
+import { adjustCapital, applyCarry, applyDueIncome, assignContribution, carriedPositionIds, carryForward, carryGaps, formIncome, setPositionIncome, syncCarry } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
 
@@ -103,13 +103,17 @@ r.post('/positions', validate(assetSchema), ah(async (req, res) => {
 }));
 
 r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
+  const owned = await ownedPosition(req);
+  const period = await getOpenPeriod(req.subjectId, owned.periodId);
+  await syncCarry(req.subjectId, period);
   const pos = await ownedPosition(req);
-  const period = await getOpenPeriod(req.subjectId, pos.periodId);
+  const carried = (await carriedPositionIds(req.subjectId, period)).includes(pos.id);
   const { categoryCode, name, institution, notes, initialCapital } = req.body;
   const start = sameIncome(pos.asset, req.body) && pos.asset.incomeStart ? pos.asset.incomeStart : periodStart(period);
   const catId = await categoryId(categoryCode);
   const updated = await prisma.$transaction(async (tx) => {
     const asset = await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...incomeFields(req.body, start) } });
+    if (carried) await adjustCapital(tx, req.subjectId, period, { ...pos, asset }, Number(initialCapital) - Number(pos.initialCapital));
     const income = formIncome(asset, period, req.body);
     const saved = await tx.assetPosition.update({
       where: { id: pos.id },

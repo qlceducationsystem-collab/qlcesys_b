@@ -301,11 +301,28 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.ok(!opts.carry.length);
     assert.ok(opts.carried.includes(casa.id));
     assert.ok(!opts.carried.includes(created.body.id));
-    const typed = await api('c').put(`/api/portfolio/positions/${casa.id}`, { periodId: state.periodId, categoryCode: 'BIENES_RAICES', name: 'Casa en renta', initialCapital: 1, finalCapital: 1, incomeType: 'MANUAL', incomeValue: 3000, incomeDay: 2 });
-    assert.equal(typed.status, 200, JSON.stringify(typed.body));
-    assert.equal(Number(typed.body.initialCapital), Number(casa.initialCapital));
-    assert.equal(Number(typed.body.finalCapital), Number(casa.initialCapital) + 3000);
+    const edit = (initialCapital) => api('c').put(`/api/portfolio/positions/${casa.id}`, { periodId: state.periodId, categoryCode: 'BIENES_RAICES', name: 'Casa en renta', initialCapital, finalCapital: 1, incomeType: 'MANUAL', incomeValue: 3000, incomeDay: 2 });
+    const base = Number(casa.initialCapital);
+    const patrimony1 = (await summary()).patrimony.final;
+    const out = await edit(base - 50000);
+    assert.equal(out.status, 200, JSON.stringify(out.body));
+    assert.equal(Number(out.body.initialCapital), base - 50000);
+    assert.equal(Number(out.body.finalCapital), base - 50000 + 3000);
+    let s2 = await summary();
+    assert.equal(s2.reconciliation.difference, diff0);
+    assert.equal(s2.patrimony.withdrawals >= 50000, true);
+    const adjust = () => prisma.patrimonialMovement.findMany({ where: { assetId: casa.assetId, periodId: state.periodId, description: { startsWith: 'Ajuste de capital desde el producto' } } });
+    assert.equal((await adjust()).length, 1);
+    assert.equal((await adjust())[0].type, 'DEDUCCION');
+    await edit(base - 20000);
+    assert.equal((await adjust()).length, 1);
+    assert.equal(Number((await adjust())[0].amount), 20000);
     assert.equal((await summary()).reconciliation.difference, diff0);
+    await edit(base);
+    assert.equal((await adjust()).length, 0);
+    s2 = await summary();
+    assert.equal(s2.reconciliation.difference, diff0);
+    assert.ok(Math.abs(s2.patrimony.final - patrimony1) < 3001);
   });
 
   test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {

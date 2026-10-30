@@ -107,6 +107,29 @@ export async function carriedPositionIds(userId, period, db = prisma) {
   return current.filter((p) => known.has(p.assetId)).map((p) => p.id);
 }
 
+export const CAPITAL_ADJUST = 'Ajuste de capital desde el producto';
+
+export async function adjustCapital(db, userId, period, pos, delta) {
+  const change = round2(num(delta));
+  if (!change) return;
+  const existing = await db.patrimonialMovement.findFirst({ where: { userId, periodId: period.id, assetId: pos.assetId, description: { startsWith: CAPITAL_ADJUST } } });
+  const net = round2((existing ? (existing.type === 'APORTACION' ? 1 : -1) * num(existing.amount) : 0) + change);
+  const data = { type: net > 0 ? 'APORTACION' : 'DEDUCCION', amount: Math.abs(net), description: `${CAPITAL_ADJUST} (${net > 0 ? 'aportación' : 'retiro'}) · ${pos.asset.name}` };
+  if (!net) {
+    if (existing) await db.patrimonialMovement.delete({ where: { id: existing.id } });
+    return;
+  }
+  if (existing) {
+    await db.patrimonialMovement.update({ where: { id: existing.id }, data });
+    return;
+  }
+  const now = new Date();
+  const start = new Date(Date.UTC(period.year, period.month - 1, 1, 12));
+  const end = new Date(Date.UTC(period.year, period.month, 0, 12));
+  const date = now < start ? start : now > end ? end : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12));
+  await db.patrimonialMovement.create({ data: { userId, periodId: period.id, assetId: pos.assetId, date, ...data } });
+}
+
 export async function applyCarry(req, positionId) {
   const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } }, include: { period: true } });
   if (!pos) throw notFound('Producto no encontrado');
