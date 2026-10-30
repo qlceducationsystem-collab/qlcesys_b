@@ -10,7 +10,11 @@ const INVEST_ADJUST = 'Aportación registrada desde el presupuesto (M7)';
 const customSource = (category) => `M7_${category}`;
 const customAdjustSource = (category) => `M7_ADJUST_${category}`;
 const customKey = (source) => source?.match(/^M7_(?:ADJUST_)?(CUSTOM:.+)$/)?.[1] || null;
-const bucketOf = (row) => (row.source === 'M1_EXPENSES' ? DIAGNOSIS_PENDING : customKey(row.source) || row.category);
+const incomeUseKey = (source) => {
+  const s = String(source || '');
+  return s.startsWith('INCOME_USE:') && s.includes('|') ? s.slice(s.indexOf('|') + 1) : null;
+};
+const bucketOf = (row) => (row.source === 'M1_EXPENSES' ? DIAGNOSIS_PENDING : customKey(row.source) || incomeUseKey(row.source) || row.category);
 const expenseCategoryOf = (category) => (isCustomCategory(category) ? 'OTROS' : category);
 const adjustSourceOf = (category) => (isCustomCategory(category) ? customAdjustSource(category) : ADJUST_SOURCE);
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });

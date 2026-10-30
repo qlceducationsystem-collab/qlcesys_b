@@ -3,8 +3,8 @@ import { prisma } from '../config/prisma.js';
 import { ah } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
-import { assetSchema, incomeSpendSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
-import { listIncomeUses, spendIncome, undoIncomeUse } from '../services/incomeUse.service.js';
+import { assetSchema, incomeUseSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
+import { incomeOptions, undoIncomeUse, useIncome } from '../services/incomeUse.service.js';
 import { applyCarry, applyDueIncome, assignContribution, carryForward, carryGaps, formIncome, setPositionIncome } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
@@ -59,10 +59,13 @@ r.get('/carry', validate(periodQuery, 'query'), ah(async (req, res) => {
   res.json(period ? await carryGaps(req.subjectId, period) : []);
 }));
 
-r.get('/spend', validate(periodQuery, 'query'), ah(async (req, res) => res.json(await listIncomeUses(req.subjectId, req.validQuery.periodId))));
-r.post('/positions/:positionId/spend', validate(incomeSpendSchema), ah(async (req, res) => res.status(201).json(await spendIncome(req, req.params.positionId, req.body))));
-r.delete('/spend/:expenseId', ah(async (req, res) => {
-  await undoIncomeUse(req, req.params.expenseId);
+r.get('/income-uses', validate(periodQuery, 'query'), ah(async (req, res) => {
+  const period = await getOpenPeriod(req.subjectId, req.validQuery.periodId).catch(() => null);
+  res.json(period ? await incomeOptions(req.subjectId, period) : { carry: [], month: [], uses: [] });
+}));
+r.post('/positions/:positionId/use-income', validate(incomeUseSchema), ah(async (req, res) => res.status(201).json(await useIncome(req, req.params.positionId, req.body))));
+r.delete('/income-uses/:useId', ah(async (req, res) => {
+  await undoIncomeUse(req, req.params.useId);
   res.status(204).end();
 }));
 

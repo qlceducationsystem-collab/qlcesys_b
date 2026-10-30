@@ -112,10 +112,15 @@ export const assetSchema = z.object({
 }).refine((v) => !['AMOUNT', 'PERCENT'].includes(v.incomeType) || (v.incomeValue !== null && v.incomeValue !== undefined && v.incomeDay), { message: 'Indica la rentabilidad y el día en que la recibes', path: ['incomeValue'] })
   .refine((v) => v.incomeValue === null || v.incomeValue === undefined || v.incomeDay, { message: 'Indica el día en que recibiste la rentabilidad', path: ['incomeDay'] });
 
-export const incomeSpendSchema = z.object({
+export const incomeUseSchema = z.object({
+  origin: z.enum(['MONTH', 'CARRY']),
+  kind: z.enum(['EXPENSE', 'INVEST']),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
-  category: z.enum(['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'OTROS']),
+  category: optText(80),
+  newCategory: optText(60),
   description: optText(),
+  targetPositionId: optText(40),
+  newProduct: z.object({ categoryCode: text(40), name: text() }).nullable().optional(),
 });
 
 export const positionIncomeSchema = z.object({

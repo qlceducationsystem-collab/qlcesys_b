@@ -296,6 +296,7 @@ model User {
   goals            Goal[]
   annualReviews    AnnualReview[]
   reviewNotes      AnnualReviewNote[]
+  incomeUses       IncomeUse[]
 }
 
 model PasswordResetToken {
@@ -338,8 +339,33 @@ model FinancialPeriod {
   businessFlows   BusinessFlow[]
   closes          MonthlyClose[]
   contributions   SavingContribution[]
+  incomeUses      IncomeUse[]
 
   @@unique([userId, year, month])
+}
+
+model IncomeUse {
+  id               String          @id @default(cuid())
+  userId           String
+  periodId         String
+  positionId       String
+  origin           String
+  kind             String
+  amount           Decimal         @db.Decimal(14, 2)
+  category         String?
+  expenseId        String?
+  outMovementId    String?
+  inMovementId     String?
+  targetPositionId String?
+  createdTarget    Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period           FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodId])
+  @@index([expenseId])
+  @@index([outMovementId])
+  @@index([inMovementId])
 }
 
 model FinancialProfile {
