@@ -207,6 +207,34 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal(Number(after.finalCapital) - Number(after.initialCapital), Number(before.finalCapital) - Number(before.initialCapital));
   });
 
+  test('Editar el producto controla la rentabilidad: manual del mes o automática, y el arrastre del mes anterior se puede sumar', async () => {
+    const body = (extra) => ({ periodId: state.periodId, categoryCode: 'RENTA_FIJA', name: 'Bono prueba', initialCapital: 100000, finalCapital: 100000, ...extra });
+    const created = await api('c').post('/api/portfolio/positions', body({ incomeType: 'MANUAL', incomeValue: 2500, incomeDay: 1 }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.equal(Number(created.body.finalCapital), 102500);
+    assert.equal(Number(created.body.incomeAmount), 2500);
+    const auto = await api('c').put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'AMOUNT', incomeValue: 8000, incomeDay: 1 }));
+    assert.equal(auto.status, 200, JSON.stringify(auto.body));
+    assert.equal(Number(auto.body.finalCapital), 108000);
+    const again = await api('c').put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'AMOUNT', incomeValue: 5000, incomeDay: 1 }));
+    assert.equal(Number(again.body.finalCapital), 105000);
+    const manual = await api('c').put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'MANUAL', finalCapital: 101000 }));
+    assert.equal(Number(manual.body.finalCapital), 101000);
+    assert.equal(manual.body.asset.incomeType, null);
+    assert.equal((await api('c').put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'MANUAL', incomeValue: 100 }))).status, 400);
+
+    const casa = await prisma.assetPosition.findFirst({ where: { periodId: state.periodId, asset: { name: 'Casa en renta' } } });
+    await prisma.assetPosition.update({ where: { id: casa.id }, data: { initialCapital: Number(casa.initialCapital) - 7000, finalCapital: Number(casa.finalCapital) - 7000 } });
+    const gaps = await api('c').get(`/api/portfolio/carry?periodId=${state.periodId}`);
+    const gap = gaps.body.find((g) => g.positionId === casa.id);
+    assert.equal(gap.gap, 7000);
+    const applied = await api('c').post(`/api/portfolio/positions/${casa.id}/carry`, {});
+    assert.equal(applied.status, 200, JSON.stringify(applied.body));
+    assert.equal(Number(applied.body.initialCapital), Number(casa.initialCapital));
+    assert.ok(!(await api('c').get(`/api/portfolio/carry?periodId=${state.periodId}`)).body.some((g) => g.positionId === casa.id));
+    assert.equal((await api('c').post(`/api/portfolio/positions/${casa.id}/carry`, {})).status, 400);
+  });
+
   test('El cliente puede reiniciar su perfil y conserva su cuenta y su acceso', async () => {
     await register('reset');
     const checkout = await api('reset').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });

@@ -4,7 +4,7 @@ import { ah } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
 import { assetSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
-import { applyDueIncome, assignContribution, carryForward, setPositionIncome } from '../services/productIncome.service.js';
+import { applyCarry, applyDueIncome, assignContribution, carryForward, carryGaps, formIncome, setPositionIncome } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
 
@@ -16,21 +16,26 @@ async function categoryId(code) {
   return cat.id;
 }
 
+const autoType = (t) => (t === 'AMOUNT' || t === 'PERCENT' ? t : null);
+
 const sameIncome = (asset, body) =>
-  asset.incomeType === (body.incomeType || null)
+  asset.incomeType === autoType(body.incomeType)
   && Number(asset.incomeValue ?? 0) === Number(body.incomeValue ?? 0)
   && (asset.incomeDay ?? null) === (body.incomeDay ?? null)
   && (asset.incomeTerm ?? null) === (body.incomeTerm ?? null);
 
 const periodStart = (period) => new Date(Date.UTC(period.year, period.month - 1, 1, 12));
 
-const incomeFields = ({ incomeType, incomeValue, incomeDay, incomeTerm }, start) => ({
-  incomeType: incomeType || null,
-  incomeValue: incomeType ? incomeValue : null,
-  incomeDay: incomeType ? incomeDay : null,
-  incomeTerm: incomeType ? incomeTerm : null,
-  incomeStart: incomeType ? start : null,
-});
+const incomeFields = ({ incomeType, incomeValue, incomeDay, incomeTerm }, start) => {
+  const type = autoType(incomeType);
+  return {
+    incomeType: type,
+    incomeValue: type ? incomeValue : null,
+    incomeDay: type ? incomeDay : null,
+    incomeTerm: type ? incomeTerm : null,
+    incomeStart: type ? start : null,
+  };
+};
 
 async function ownedPosition(req) {
   const pos = await prisma.assetPosition.findFirst({
@@ -47,6 +52,13 @@ r.get('/', validate(periodQuery, 'query'), ah(async (req, res) => {
   const { period, summary } = await getPeriodSummary(req.subjectId, req.validQuery.periodId);
   res.json({ period, portfolio: summary.portfolio, patrimony: summary.patrimony, reconciliation: summary.reconciliation });
 }));
+
+r.get('/carry', validate(periodQuery, 'query'), ah(async (req, res) => {
+  const period = await getOpenPeriod(req.subjectId, req.validQuery.periodId).catch(() => null);
+  res.json(period ? await carryGaps(req.subjectId, period) : []);
+}));
+
+r.post('/positions/:positionId/carry', ah(async (req, res) => res.json(await applyCarry(req, req.params.positionId))));
 
 r.get('/assets/:assetId', ah(async (req, res) => {
   const asset = await prisma.asset.findFirst({
@@ -68,12 +80,12 @@ r.get('/assets/:assetId', ah(async (req, res) => {
 }));
 
 r.post('/positions', validate(assetSchema), ah(async (req, res) => {
-  const { periodId, categoryCode, name, institution, notes, initialCapital, finalCapital } = req.body;
+  const { periodId, categoryCode, name, institution, notes, initialCapital } = req.body;
   const period = await getOpenPeriod(req.subjectId, periodId);
   const catId = await categoryId(categoryCode);
   const pos = await prisma.$transaction(async (tx) => {
     const asset = await tx.asset.create({ data: { userId: req.subjectId, categoryId: catId, name, institution, notes, ...incomeFields(req.body, periodStart(period)) } });
-    return tx.assetPosition.create({ data: { assetId: asset.id, periodId, initialCapital, finalCapital } });
+    return tx.assetPosition.create({ data: { assetId: asset.id, periodId, initialCapital, ...formIncome(asset, period, req.body) } });
   });
   await applyDueIncome(req.subjectId);
   res.status(201).json(pos);
@@ -82,17 +94,18 @@ r.post('/positions', validate(assetSchema), ah(async (req, res) => {
 r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   const pos = await ownedPosition(req);
   const period = await getOpenPeriod(req.subjectId, pos.periodId);
-  const { categoryCode, name, institution, notes, initialCapital, finalCapital } = req.body;
+  const { categoryCode, name, institution, notes, initialCapital } = req.body;
   const start = sameIncome(pos.asset, req.body) && pos.asset.incomeStart ? pos.asset.incomeStart : periodStart(period);
   const catId = await categoryId(categoryCode);
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...incomeFields(req.body, start) } });
+    const asset = await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...incomeFields(req.body, start) } });
+    const income = formIncome(asset, period, req.body);
     const saved = await tx.assetPosition.update({
       where: { id: pos.id },
-      data: { initialCapital, finalCapital },
+      data: { initialCapital, ...income },
       include: { asset: true },
     });
-    await carryForward(tx, pos.assetId, period, Number(finalCapital) - Number(pos.finalCapital));
+    await carryForward(tx, pos.assetId, period, income.finalCapital - Number(pos.finalCapital));
     return saved;
   });
   await applyDueIncome(req.subjectId);

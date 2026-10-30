@@ -41,6 +41,58 @@ export function incomeFor(asset, initialCapital) {
   return round2(asset.incomeType === 'PERCENT' ? (num(initialCapital) * value) / 100 : value);
 }
 
+export function formIncome(asset, period, { incomeType, incomeValue, incomeDay, initialCapital, finalCapital }, now = new Date()) {
+  const initial = round2(num(initialCapital));
+  if (INCOME_TYPES.includes(incomeType)) {
+    const date = incomeDateOf(period, incomeDay);
+    if (date > now || !withinTerm(asset, period)) return { incomeAmount: 0, incomeDate: null, finalCapital: initial };
+    const amount = incomeFor(asset, initial);
+    return { incomeAmount: amount, incomeDate: date, finalCapital: round2(initial + amount) };
+  }
+  if (incomeValue !== null && incomeValue !== undefined && incomeDay) {
+    const amount = round2(num(incomeValue));
+    return { incomeAmount: amount, incomeDate: incomeDateOf(period, incomeDay), finalCapital: round2(initial + amount) };
+  }
+  return { incomeAmount: 0, incomeDate: null, finalCapital: round2(num(finalCapital)) };
+}
+
+export async function carryGaps(userId, period, db = prisma) {
+  const prev = await db.financialPeriod.findFirst({
+    where: { userId, OR: [{ year: { lt: period.year } }, { year: period.year, month: { lt: period.month } }] },
+    orderBy: [{ year: 'desc' }, { month: 'desc' }],
+  });
+  if (!prev) return [];
+  if (await db.monthlyClose.findFirst({ where: { periodId: prev.id, supersededAt: null } })) return [];
+  const [before, current] = await Promise.all([
+    db.assetPosition.findMany({ where: { periodId: prev.id } }),
+    db.assetPosition.findMany({ where: { periodId: period.id, asset: { userId } }, include: { asset: true } }),
+  ]);
+  return current
+    .map((p) => {
+      const last = before.find((b) => b.assetId === p.assetId);
+      if (!last) return null;
+      const gap = round2(num(last.finalCapital) - num(p.initialCapital));
+      return Math.abs(gap) >= 0.01 ? { positionId: p.id, name: p.asset.name, previousFinal: num(last.finalCapital), initial: num(p.initialCapital), gap } : null;
+    })
+    .filter(Boolean);
+}
+
+export async function applyCarry(req, positionId) {
+  const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } }, include: { period: true } });
+  if (!pos) throw notFound('Producto no encontrado');
+  await getOpenPeriod(req.subjectId, pos.periodId);
+  const item = (await carryGaps(req.subjectId, pos.period)).find((g) => g.positionId === pos.id);
+  if (!item) throw badRequest('Este producto ya coincide con el capital final del mes anterior');
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.assetPosition.update({
+      where: { id: pos.id },
+      data: { initialCapital: round2(num(pos.initialCapital) + item.gap), finalCapital: round2(num(pos.finalCapital) + item.gap) },
+    });
+    await carryForward(tx, pos.assetId, pos.period, item.gap);
+    return updated;
+  });
+}
+
 export async function applyDueIncome(userId, now = new Date()) {
   const due = await prisma.assetPosition.findMany({
     where: { incomeDate: null, period: { status: 'OPEN' }, asset: { incomeType: { in: INCOME_TYPES }, ...(userId ? { userId } : {}) } },
