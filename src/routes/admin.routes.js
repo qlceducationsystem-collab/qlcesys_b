@@ -22,7 +22,7 @@ import { resetTwoFactor } from '../services/auth.service.js';
 import * as leads from '../services/lead.service.js';
 import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service.js';
 import * as exercises from '../services/exerciseInbox.service.js';
-import { stopShareByAdmin } from '../services/dataShare.service.js';
+import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
@@ -36,6 +36,8 @@ r.get('/analytics', ah(async (req, res) => res.json(await platformMetrics({ days
 
 r.get('/clients', ah(async (req, res) => res.json(await admin.listClients({ q: req.query.q }))));
 r.get('/clients/:id', ah(async (req, res) => res.json(await admin.getClient(req.params.id))));
+r.get('/clients/:id/data-share/messages', ah(async (req, res) => res.json(await adminMessages(req.params.id))));
+r.post('/clients/:id/data-share/messages', ah(async (req, res) => res.status(201).json(await adminSend(req.user, req.params.id, req.body?.body))));
 r.post('/clients/:id/data-share/stop', ah(async (req, res) => res.json(await stopShareByAdmin(req.user, req.params.id))));
 r.post('/clients/:id/grants', FULL, validate(grantSchema), ah(async (req, res) => res.status(201).json(await admin.grantAccess(req.params.id, req.body))));
 r.post('/clients/:id/grants/:grantId/revoke', FULL, ah(async (req, res) => {

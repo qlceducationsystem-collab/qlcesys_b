@@ -352,9 +352,23 @@ model DataShare {
   endedAt     DateTime?
   endedById   String?
   endedByRole String?
-  client      User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client      User           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  messages    ShareMessage[]
 
   @@index([clientId, endedAt])
+}
+
+model ShareMessage {
+  id         String    @id @default(cuid())
+  shareId    String
+  senderId   String
+  senderRole String
+  senderName String
+  body       String
+  createdAt  DateTime  @default(now())
+  share      DataShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@index([shareId, createdAt])
 }
 
 model IncomeUse {

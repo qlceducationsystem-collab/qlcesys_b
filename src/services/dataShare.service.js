@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { forbidden, notFound } from '../utils/httpError.js';
+import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 
 const view = (share) => share && { id: share.id, grantedAt: share.grantedAt, endedAt: share.endedAt };
 
@@ -18,8 +18,52 @@ export async function startShare(user) {
 }
 
 async function endShare(clientId, endedById, endedByRole) {
-  await prisma.dataShare.updateMany({ where: { clientId, endedAt: null }, data: { endedAt: new Date(), endedById, endedByRole } });
+  await prisma.$transaction(async (tx) => {
+    const open = await tx.dataShare.findMany({ where: { clientId, endedAt: null }, select: { id: true } });
+    await tx.shareMessage.deleteMany({ where: { shareId: { in: open.map((s) => s.id) } } });
+    await tx.dataShare.updateMany({ where: { clientId, endedAt: null }, data: { endedAt: new Date(), endedById, endedByRole } });
+  });
 }
+
+const messageView = (m) => ({ id: m.id, senderRole: m.senderRole, senderName: m.senderRole === 'ADMIN' ? 'Asesor QLC' : m.senderName, body: m.body, createdAt: m.createdAt });
+
+async function shareFor(clientId) {
+  const share = await activeShare(clientId);
+  if (!share) throw forbidden('El chat se cerró porque ya no se están compartiendo los datos.');
+  return share;
+}
+
+export async function listMessages(clientId) {
+  const share = await shareFor(clientId);
+  const rows = await prisma.shareMessage.findMany({ where: { shareId: share.id }, orderBy: { createdAt: 'asc' }, take: 500 });
+  return { shareId: share.id, messages: rows.map(messageView) };
+}
+
+export async function sendMessage(user, clientId, text) {
+  const body = String(text || '').trim();
+  if (!body) throw badRequest('Escribe un mensaje');
+  if (body.length > 2000) throw badRequest('El mensaje es demasiado largo');
+  const share = await shareFor(clientId);
+  return messageView(await prisma.shareMessage.create({ data: { shareId: share.id, senderId: user.id, senderRole: user.role, senderName: user.name || '', body } }));
+}
+
+const clientOnly = (user) => {
+  if (user.role !== 'CLIENT') throw forbidden('Solo el cliente puede usar este chat');
+};
+
+export const clientMessages = (user) => {
+  clientOnly(user);
+  return listMessages(user.id);
+};
+
+export const clientSend = (user, text) => {
+  clientOnly(user);
+  return sendMessage(user, user.id, text);
+};
+
+export const adminMessages = (clientId) => listMessages(clientId);
+
+export const adminSend = (admin, clientId, text) => sendMessage(admin, clientId, text);
 
 export async function stopShareByClient(user) {
   if (user.role !== 'CLIENT') throw forbidden('Solo el cliente puede dejar de compartir sus datos');

@@ -137,7 +137,16 @@ run('API (integración)', () => {
     const products = (await api('a').get('/api/academy/products')).body.products;
     assert.equal(products[0].name, 'CETES 28 días');
     assert.equal(products[0].capital, 45000);
+    assert.equal((await api('a').post('/api/auth/data-share/messages', { body: 'Hola, necesito orientación' })).status, 201);
+    assert.equal((await api('view').post(`/api/admin/clients/${ids.a}/data-share/messages`, { body: 'Con gusto, reviso tus datos' })).status, 201);
+    assert.equal((await api('a').post('/api/auth/data-share/messages', { body: '   ' })).status, 400);
+    const chat = (await api('a').get('/api/auth/data-share/messages')).body.messages;
+    assert.deepEqual(chat.map((m) => m.senderRole), ['CLIENT', 'ADMIN']);
+    assert.equal((await api('view').get(`/api/admin/clients/${ids.a}/data-share/messages`)).body.messages.length, 2);
     assert.equal((await api('a').post('/api/auth/data-share/stop', {})).status, 200);
+    assert.equal(await prisma.shareMessage.count({ where: { shareId: started.body.active.id } }), 0);
+    assert.equal((await api('a').get('/api/auth/data-share/messages')).status, 403);
+    assert.equal((await api('view').post(`/api/admin/clients/${ids.a}/data-share/messages`, { body: 'x' })).status, 403);
     assert.equal((await api('view').get('/api/academy/products', h)).status, 403);
     await api('a').post('/api/auth/data-share/start', {});
     assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
