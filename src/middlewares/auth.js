@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { badRequest, forbidden, notFound, unauthorized } from '../utils/httpError.js';
 import { getAccess } from '../services/access.service.js';
+import { assertShared } from '../services/dataShare.service.js';
 
 export const signToken = (user) => jwt.sign({ sub: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 
@@ -93,6 +94,7 @@ export async function resolveSubject(req, _res, next) {
       if (!clientId) throw badRequest('Selecciona un cliente para gestionar');
       const client = await prisma.user.findFirst({ where: { id: String(clientId), role: 'CLIENT' }, select: { id: true } });
       if (!client) throw notFound('Cliente no encontrado');
+      await assertShared(client.id);
       if (isWrite(req.method) && !adminCan(req.user, 'EDIT')) throw forbidden('Tu nivel de administrador es de solo visualización');
       req.subjectId = client.id;
       req.asAdmin = true;

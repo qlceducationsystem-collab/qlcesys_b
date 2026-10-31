@@ -123,6 +123,13 @@ run('API (integración)', () => {
 
   test('Admin VIEW solo consulta; admin EDIT modifica los mismos registros', async () => {
     const h = { 'X-Client-Id': ids.a };
+    assert.equal((await api('view').get('/api/academy/products', h)).status, 403);
+    assert.equal((await api('view').get('/api/auth/data-share')).status, 403);
+    const started = await api('a').post('/api/auth/data-share/start', {});
+    assert.equal(started.status, 200, JSON.stringify(started.body));
+    assert.ok(started.body.active.id);
+    assert.equal((await api('a').get('/api/auth/data-share')).body.active.id, started.body.active.id);
+    assert.equal((await api('a').post('/api/auth/data-share/start', {})).body.active.id, started.body.active.id);
     assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
     const body = { name: 'CETES', productType: 'RENTA_FIJA', capital: 45000, horizon: 'CORTO', liquidityLevel: 'ALTA', perceivedRisk: 'BAJO' };
     assert.equal((await api('view').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
@@ -130,6 +137,14 @@ run('API (integración)', () => {
     const products = (await api('a').get('/api/academy/products')).body.products;
     assert.equal(products[0].name, 'CETES 28 días');
     assert.equal(products[0].capital, 45000);
+    assert.equal((await api('a').post('/api/auth/data-share/stop', {})).status, 200);
+    assert.equal((await api('view').get('/api/academy/products', h)).status, 403);
+    await api('a').post('/api/auth/data-share/start', {});
+    assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
+    assert.equal((await api('view').post(`/api/admin/clients/${ids.a}/data-share/stop`, {})).status, 200);
+    assert.equal((await api('view').get('/api/academy/products', h)).status, 403);
+    assert.equal((await api('a').get('/api/auth/data-share')).body.active, null);
+    await api('a').post('/api/auth/data-share/start', {});
   });
 
   test('Ruta y filtro de mercados: criterio exacto y bloqueo de M4', async () => {

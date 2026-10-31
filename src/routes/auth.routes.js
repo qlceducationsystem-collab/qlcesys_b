@@ -6,6 +6,7 @@ import { authLimiter } from '../middlewares/rateLimit.js';
 import * as schemas from '../validations/schemas.js';
 import * as auth from '../services/auth.service.js';
 import { resetProfile } from '../services/profileReset.service.js';
+import * as dataShare from '../services/dataShare.service.js';
 
 const r = Router();
 
@@ -18,6 +19,9 @@ r.post('/2fa/activate', authLimiter, validate(schemas.activateTwoFactorSchema), 
 r.get('/me', authenticate, ah(async (req, res) => res.json({ user: await auth.me(req.user.id) })));
 r.post('/reset-profile', authenticate, authLimiter, ah(async (req, res) => res.json(await resetProfile(req.user, req.body || {}))));
 r.post('/delete-account', authenticate, authLimiter, ah(async (req, res) => res.json(await auth.deleteAccount(req.user.id, req.body || {}))));
+r.get('/data-share', authenticate, ah(async (req, res) => res.json(await dataShare.shareStatus(req.user))));
+r.post('/data-share/start', authenticate, ah(async (req, res) => res.json(await dataShare.startShare(req.user))));
+r.post('/data-share/stop', authenticate, ah(async (req, res) => res.json(await dataShare.stopShareByClient(req.user))));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 
 r.post('/reset-password', authLimiter, validate(schemas.resetWithCodeSchema), ah(async (req, res) => {

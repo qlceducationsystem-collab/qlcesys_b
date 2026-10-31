@@ -297,6 +297,7 @@ model User {
   annualReviews    AnnualReview[]
   reviewNotes      AnnualReviewNote[]
   incomeUses       IncomeUse[]
+  dataShares       DataShare[]
 }
 
 model PasswordResetToken {
@@ -342,6 +343,18 @@ model FinancialPeriod {
   incomeUses      IncomeUse[]
 
   @@unique([userId, year, month])
+}
+
+model DataShare {
+  id          String    @id @default(cuid())
+  clientId    String
+  grantedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  endedById   String?
+  endedByRole String?
+  client      User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, endedAt])
 }
 
 model IncomeUse {

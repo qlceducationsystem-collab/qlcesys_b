@@ -196,6 +196,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(await prisma.expense.count({ where: { userId: ids.p, source: 'M1_DEBT_PAYMENT' } }), 0);
     assert.equal(Number((await prisma.debtBalance.findUnique({ where: { id: state.balanceId } })).balance), 25870);
     assert.equal((await api('q').put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 403);
+    await prisma.dataShare.create({ data: { clientId: ids.q } });
     assert.equal((await api('full', ids.q).put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 404);
     await complete('p', 9);
   });
@@ -259,6 +260,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     };
     await seedMonth(shiftMonth(window.start, -1), 300000, 300000, 100000, 140000);
     const last = await seedMonth(window.end, 300000, 325000, 120000, 105000);
+    await prisma.dataShare.create({ data: { clientId: userId } });
     const admin = api('full', userId);
     assert.equal((await admin.put('/api/academy/annual-review/goal', { targetAmount: 500000 })).status, 200);
     assert.equal((await admin.put('/api/academy/annual-review/note', { note: 'Reducir deuda y aumentar liquidez' })).status, 200);
@@ -296,6 +298,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
   });
 
   test('Admin VIEW no escribe en M7–M12; el panel muestra el progreso del Bloque 2', async () => {
+    await prisma.dataShare.create({ data: { clientId: ids.p } });
     const view = api('view', ids.p);
     assert.equal((await view.get('/api/academy/emergency')).status, 200);
     assert.equal((await view.put('/api/academy/emergency', { targetMonths: 6, monthlyContribution: 0 })).status, 403);
