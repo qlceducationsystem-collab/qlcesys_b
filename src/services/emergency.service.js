@@ -3,13 +3,35 @@ import { emergencyFund, ESSENTIAL_CATEGORIES, isEssentialCategory } from '../dom
 import { notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { assertOpen, ensureWorkingPeriod, getPeriodSummary, latestPeriod } from './period.service.js';
+import { goalSavedUntil, patrimonialGoal, savePatrimonialGoal } from './estimates.service.js';
 
 const DEFAULT_TARGET_MONTHS = 3;
 
 const CONTRIBUTION_RECORD = {
   FONDO_EMERGENCIA: { source: 'M8_FUND', type: 'FONDO_EMERGENCIA', name: 'Fondo de emergencia · aportaciones confirmadas' },
   AHORRO: { source: 'M7_SAVINGS', type: 'RESERVA', name: 'Ahorro · aportaciones confirmadas' },
+  META_PATRIMONIAL: { source: 'M8_GOAL', type: 'META_PATRIMONIAL', name: 'Meta patrimonial · aportaciones confirmadas' },
 };
+
+async function goalFor(userId) {
+  const [goal, saved] = await Promise.all([patrimonialGoal(userId), goalSavedUntil(userId)]);
+  if (!goal) return { goal: null, saved, progress: null };
+  const remaining = Math.max(0, goal.targetAmount - saved);
+  const monthly = goal.monthlyContribution || 0;
+  return {
+    goal,
+    saved,
+    progress: {
+      goal: goal.targetAmount,
+      current: saved,
+      distance: goal.targetAmount - saved,
+      progress: goal.targetAmount > 0 ? (saved / goal.targetAmount) * 100 : null,
+      reached: saved >= goal.targetAmount,
+      remaining,
+      monthsToGoal: remaining === 0 ? 0 : monthly > 0 ? Math.ceil(remaining / monthly) : null,
+    },
+  };
+}
 
 const planView = (plan) =>
   plan && {
@@ -35,7 +57,9 @@ async function essentialFromData(userId, period, summary, db = prisma) {
 
 export function liquidityOf(summary) {
   const portfolio = num(summary.portfolio.categories.find((c) => c.code === 'LIQUIDEZ')?.final);
-  return { amount: portfolio + num(summary.protection.total), portfolio, protection: num(summary.protection.total), byType: summary.protection.byType };
+  const byType = summary.protection.byType.filter((t) => t.key !== 'META_PATRIMONIAL');
+  const protection = byType.reduce((acc, t) => acc + num(t.amount), 0);
+  return { amount: portfolio + protection, portfolio, protection, byType };
 }
 
 export async function emergencyFor(userId, period, summary, plan, db = prisma) {
@@ -64,6 +88,7 @@ export async function getEmergency(userId) {
       liquid: { amount: 0, portfolio: 0, protection: 0, byType: [] },
       result: emergencyFund({ essentialExpenses: plan?.useDeclared ? num(plan.declaredEssential) : 0, liquid: 0, targetMonths: plan?.targetMonths ?? DEFAULT_TARGET_MONTHS, monthlyContribution: num(plan?.monthlyContribution) }),
       contributions: [],
+      goal: await goalFor(userId),
     };
   }
   const { summary } = await getPeriodSummary(userId, period.id);
@@ -78,7 +103,13 @@ export async function getEmergency(userId) {
     essentialCategories: ESSENTIAL_CATEGORIES,
     ...data,
     contributions: contributions.map((c) => ({ id: c.id, destination: c.destination, amount: num(c.amount), date: c.date, description: c.description })),
+    goal: await goalFor(userId),
   };
+}
+
+export async function saveGoal(req, input) {
+  await savePatrimonialGoal(req, input);
+  return getEmergency(req.subjectId);
 }
 
 export async function emergencySnapshot(userId, period, summary, db = prisma) {

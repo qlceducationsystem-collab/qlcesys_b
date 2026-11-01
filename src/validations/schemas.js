@@ -66,7 +66,7 @@ const INSURANCE = ['SEGURO_GASTOS_MEDICOS', 'SEGURO_VIDA', 'SEGURO_AUTO', 'SEGUR
 
 export const protectionSchema = z.object({
   periodId: id,
-  type: z.enum(['LIQUIDEZ', 'FONDO_EMERGENCIA', 'RESERVA', ...INSURANCE]),
+  type: z.enum(['LIQUIDEZ', 'FONDO_EMERGENCIA', 'RESERVA', 'META_PATRIMONIAL', ...INSURANCE]),
   name: text(),
   amount: money,
   notes: optText(),
@@ -300,7 +300,7 @@ export const emergencyPlanSchema = z.object({
 });
 
 export const contributionSchema = z.object({
-  destination: z.enum(['FONDO_EMERGENCIA', 'AHORRO']).default('FONDO_EMERGENCIA'),
+  destination: z.enum(['FONDO_EMERGENCIA', 'AHORRO', 'META_PATRIMONIAL']).default('FONDO_EMERGENCIA'),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
   description: text(),
 });
@@ -336,6 +336,7 @@ export const scenarioSchema = z.object({
 export const patrimonialGoalSchema = z.object({
   name: optText(120),
   targetAmount: z.coerce.number().positive('Debe ser mayor a 0').max(1e13),
+  monthlyContribution: nullableNumber(0, 1e12).optional(),
 });
 
 export const reviewNoteSchema = z.object({ note: z.string().trim().max(5000) });

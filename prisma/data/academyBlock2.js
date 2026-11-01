@@ -47,10 +47,10 @@ export const BLOCK_2 = [
   },
   {
     month: 8,
-    title: 'Fondo de emergencia y liquidez',
+    title: 'Fondo de emergencia, Meta patrimonial y Liquidez',
     summary: 'Mide cuántos meses de gastos esenciales cubre tu liquidez real y define una meta de reserva.',
     content: {
-      tool: { name: 'Fondo de emergencia y liquidez', question: 'Si mañana dejaras de recibir ingresos o tuvieras un imprevisto, ¿cuánto tiempo podrías mantener tus gastos esenciales con el dinero disponible?' },
+      tool: { name: 'Fondo de emergencia, Meta patrimonial y Liquidez', question: 'Si mañana dejaras de recibir ingresos o tuvieras un imprevisto, ¿cuánto tiempo podrías mantener tus gastos esenciales con el dinero disponible?' },
       essentials: [
         'Tus gastos esenciales se calculan con tus movimientos reales o tu presupuesto; tu liquidez proviene de Patrimonio y Protección.',
         'La meta (1, 3, 6, 9 o 12 meses) y la aportación mensual son objetivos: no aumentan tu liquidez ni tu patrimonio.',

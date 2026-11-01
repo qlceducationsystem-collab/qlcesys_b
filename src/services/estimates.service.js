@@ -98,15 +98,18 @@ export async function listScenarios(userId) {
   };
 }
 
-const goalView = (g) => g && { id: g.id, kind: g.kind, name: g.name, targetAmount: num(g.targetAmount), targetDate: g.targetDate, updatedAt: g.updatedAt };
+const goalView = (g) => g && { id: g.id, kind: g.kind, name: g.name, targetAmount: num(g.targetAmount), monthlyContribution: g.monthlyContribution === null ? null : num(g.monthlyContribution), targetDate: g.targetDate, updatedAt: g.updatedAt };
 
 export const patrimonialGoal = async (userId) =>
   goalView(await prisma.goal.findFirst({ where: { userId, kind: 'PATRIMONIO' }, orderBy: { updatedAt: 'desc' } }));
 
-export async function savePatrimonialGoal(req, { name, targetAmount }) {
+export const goalSavedUntil = async (userId, until = new Date()) =>
+  num((await prisma.savingContribution.aggregate({ where: { userId, destination: 'META_PATRIMONIAL', date: { lte: until } }, _sum: { amount: true } }))._sum.amount);
+
+export async function savePatrimonialGoal(req, { name, targetAmount, monthlyContribution }) {
   const userId = req.subjectId;
   const existing = await prisma.goal.findFirst({ where: { userId, kind: 'PATRIMONIO' }, orderBy: { updatedAt: 'desc' } });
-  const data = { name: name || 'Meta patrimonial', targetAmount };
+  const data = { name: name || 'Meta patrimonial', targetAmount, ...(monthlyContribution === undefined ? {} : { monthlyContribution }) };
   const row = existing
     ? await prisma.goal.update({ where: { id: existing.id }, data })
     : await prisma.goal.create({ data: { userId, kind: 'PATRIMONIO', ...data } });

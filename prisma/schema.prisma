@@ -56,6 +56,7 @@ enum ProtectionType {
   SEGURO_DESEMPLEO
   SEGURO_EDUCACION
   SEGURO_RETIRO
+  META_PATRIMONIAL
   OTRO_SEGURO
 }
 
@@ -199,6 +200,7 @@ enum DebtType {
 enum SavingDestination {
   FONDO_EMERGENCIA
   AHORRO
+  META_PATRIMONIAL
 }
 
 enum TaxItemType {
@@ -954,6 +956,7 @@ model Goal {
   kind         GoalKind
   name         String
   targetAmount Decimal             @db.Decimal(14, 2)
+  monthlyContribution Decimal?    @db.Decimal(14, 2)
   targetDate   DateTime?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt

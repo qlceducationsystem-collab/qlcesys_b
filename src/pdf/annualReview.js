@@ -82,12 +82,12 @@ export function annualReviewPdf(target, report) {
   if (report.goalProgress) {
     kpis(doc, [
       ['Meta patrimonial', money(report.goalProgress.goal)],
-      ['Patrimonio final', money(report.goalProgress.current)],
+      ['Aportado a la meta', money(report.goalProgress.current)],
       [report.goalProgress.reached ? 'Meta superada por' : 'Distancia a la meta', money(Math.abs(report.goalProgress.distance))],
       ['Avance', pct(report.goalProgress.progress)],
     ], 2);
   } else {
-    paragraph(doc, report.goal ? 'No hay patrimonio final disponible para calcular el avance.' : 'No hay una meta patrimonial registrada en Metas financieras.');
+    paragraph(doc, 'No hay una meta patrimonial registrada en el Módulo 8.');
   }
 
   section(doc, '¿Qué cambió durante el año?');

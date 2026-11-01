@@ -4,7 +4,7 @@ import { annualReviewPdf, reviewFilename } from '../pdf/annualReview.js';
 import { pdfBuffer } from '../pdf/layout.js';
 import { conflict, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
-import { patrimonialGoal } from './estimates.service.js';
+import { goalSavedUntil, patrimonialGoal } from './estimates.service.js';
 import { getPeriodSummary, latestClose } from './period.service.js';
 import { driveConnected, uploadBuffer } from './google/drive.js';
 
@@ -29,15 +29,16 @@ const noteView = (n) => n && { note: n.note, updatedAt: n.updatedAt };
 
 export async function buildAnnualReview(userId, now = new Date()) {
   const window = annualWindow(now);
-  const [months, goal, note, user, saved] = await Promise.all([
+  const [months, goal, note, user, saved, goalSaved] = await Promise.all([
     monthSummaries(userId, window),
     patrimonialGoal(userId),
     prisma.annualReviewNote.findUnique({ where: { userId_periodEnd: { userId, periodEnd: toDate(window.endDate) } } }),
     prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
     prisma.annualReview.findUnique({ where: { userId_periodEnd: { userId, periodEnd: toDate(window.endDate) } }, select: { id: true, generatedAt: true, driveFileId: true } }),
+    goalSavedUntil(userId, now),
   ]);
   const evolution = annualEvolution(window, months);
-  const progress = evolution.hasData && goal ? goalProgress(goal.targetAmount, evolution.change.finalNetWorth) : null;
+  const progress = goal ? { ...goalProgress(goal.targetAmount, goalSaved), asOf: now.toISOString() } : null;
   return {
     ...evolution,
     currency: 'MXN',

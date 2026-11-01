@@ -6,7 +6,7 @@ const TOOL_NAMES = {
   5: 'Simulador de una operación',
   6: 'Laboratorio de gestión multiposición',
   7: 'Presupuesto y control financiero',
-  8: 'Fondo de emergencia y liquidez',
+  8: 'Fondo de emergencia, Meta patrimonial y Liquidez',
   9: 'Panel de obligaciones y costo del dinero',
   10: 'Calculadora de rendimiento neto',
   11: 'Simulador de poder adquisitivo',

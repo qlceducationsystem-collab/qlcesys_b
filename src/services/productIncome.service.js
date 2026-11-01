@@ -15,6 +15,8 @@ export function withinTerm(asset, period) {
   return elapsed >= 0 && elapsed < asset.incomeTerm;
 }
 
+const isDue = (date, now) => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) <= now.getTime();
+
 export const incomeDateOf = (period, day) => new Date(Date.UTC(period.year, period.month - 1, Math.min(day, lastDay(period.year, period.month)), 12));
 
 export async function carryForward(db, assetId, period, delta) {
@@ -45,7 +47,7 @@ export function formIncome(asset, period, { incomeType, incomeValue, incomeDay, 
   const initial = round2(num(initialCapital));
   if (INCOME_TYPES.includes(incomeType)) {
     const date = incomeDateOf(period, incomeDay);
-    if (date > now || !withinTerm(asset, period)) return { incomeAmount: 0, incomeDate: null, finalCapital: initial };
+    if (!isDue(date, now) || !withinTerm(asset, period)) return { incomeAmount: 0, incomeDate: null, finalCapital: initial };
     const amount = incomeFor(asset, initial);
     return { incomeAmount: amount, incomeDate: date, finalCapital: round2(initial + amount) };
   }
@@ -154,7 +156,7 @@ export async function applyDueIncome(userId, now = new Date()) {
   let applied = 0;
   for (const p of due) {
     const date = incomeDateOf(p.period, p.asset.incomeDay || 1);
-    if (date > now || !withinTerm(p.asset, p.period)) continue;
+    if (!isDue(date, now) || !withinTerm(p.asset, p.period)) continue;
     const amount = incomeFor(p.asset, p.initialCapital);
     const updated = await prisma.assetPosition.updateMany({
       where: { id: p.id, incomeDate: null },

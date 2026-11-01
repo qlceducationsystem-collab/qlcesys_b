@@ -29,6 +29,7 @@ r.put('/budget/actuals', tool(7), validate(budgetActualSetSchema), ah(async (req
 
 r.get('/emergency', tool(8), ah(async (req, res) => res.json(await emergency.getEmergency(req.subjectId))));
 r.put('/emergency', tool(8), validate(emergencyPlanSchema), ah(async (req, res) => res.json(await emergency.savePlan(req, req.body))));
+r.put('/emergency/goal', tool(8), validate(patrimonialGoalSchema), ah(async (req, res) => res.json(await emergency.saveGoal(req, req.body))));
 r.post('/emergency/contributions', tool(8), validate(contributionSchema), ah(async (req, res) => res.status(201).json(await emergency.addContribution(req, req.body))));
 r.delete('/emergency/contributions/:id', tool(8), ah(async (req, res) => res.json(await emergency.deleteContribution(req, req.params.id))));
 
