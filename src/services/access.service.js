@@ -21,6 +21,7 @@ export const publicOffer = (o) => ({
   currency: o.currency,
   accessDays: o.accessDays,
   active: o.active,
+  giftable: o.giftable !== false,
 });
 
 const OFFERS_TTL_MS = 12 * 60 * 60 * 1000;

@@ -7,6 +7,7 @@ import { leadSchema } from '../validations/schemas.js';
 import { createLead } from '../services/lead.service.js';
 import { cachedActiveOffers } from '../services/access.service.js';
 import { getLoginNotice } from '../services/loginNotice.service.js';
+import { previewGift } from '../services/gift.service.js';
 import { handleCallback } from '../services/google/oauth.js';
 import { streamWithToken } from '../services/moduleMedia.service.js';
 
@@ -22,6 +23,10 @@ publicRouter.get('/offers', ah(async (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=3600');
   res.json({ offers: await cachedActiveOffers() });
 }));
+
+const giftLimiter = rateLimit({ windowMs: 15 * 60000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, skip: () => env.isTest, message: { error: 'Demasiados intentos, espera unos minutos' } });
+
+publicRouter.get('/gifts/:code', giftLimiter, ah(async (req, res) => res.json(await previewGift(req.params.code))));
 
 publicRouter.get('/notice', ah(async (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=300');

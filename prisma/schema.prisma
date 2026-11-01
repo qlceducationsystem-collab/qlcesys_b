@@ -266,6 +266,8 @@ model User {
   totpLockedUntil    DateTime?
   legalAcceptedAt    DateTime?
   legalVersion       String?
+  marketingOptOut    Boolean     @default(false)
+  subscriptionCancelledAt DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -300,6 +302,9 @@ model User {
   reviewNotes      AnnualReviewNote[]
   incomeUses       IncomeUse[]
   dataShares       DataShare[]
+  promotions       Promotion[]
+  giftsPurchased   GiftCode[]  @relation("GiftPurchaser")
+  giftsReceived    GiftCode[]  @relation("GiftRecipient")
 }
 
 model PasswordResetToken {
@@ -714,11 +719,14 @@ model ProductOffer {
   currency     String           @default("MXN")
   accessDays   Int?
   active       Boolean          @default(true)
+  giftable     Boolean          @default(true)
   sortOrder    Int              @default(0)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   attempts     PaymentAttempt[]
   grants       AccessGrant[]
+  promotions   Promotion[]
+  gifts        GiftCode[]
 }
 
 model PaymentAttempt {
@@ -731,11 +739,21 @@ model PaymentAttempt {
   providerRef String?              @unique
   status      PaymentAttemptStatus @default(PENDING)
   resolvedAt  DateTime?
+  kind        String               @default("STANDARD")
+  quantity    Int                  @default(1)
+  promotionId String?              @unique
+  authorization String?
+  authorizedAt DateTime?
+  authorizedById String?
+  giftMessage String?
+  giftRecipientName String?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   offer       ProductOffer         @relation(fields: [offerId], references: [id])
   grant       AccessGrant?
+  promotion   Promotion?           @relation(fields: [promotionId], references: [id])
+  gifts       GiftCode[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -751,12 +769,106 @@ model AccessGrant {
   startsAt         DateTime
   expiresAt        DateTime?
   active           Boolean         @default(true)
+  source           String          @default("PAGO")
+  reason           String?
+  grantedById      String?
+  revokedAt        DateTime?
+  revokedById      String?
+  expiryNotifiedAt DateTime?
   createdAt        DateTime        @default(now())
   user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   offer            ProductOffer    @relation(fields: [offerId], references: [id])
   paymentAttempt   PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id])
+  gift             GiftCode?
 
   @@index([userId, active])
+}
+
+model Promotion {
+  id              String          @id @default(cuid())
+  code            String          @unique
+  userId          String
+  offerId         String
+  discountPercent Int
+  validUntil      DateTime
+  message         String?
+  status          String          @default("ACTIVA")
+  createdById     String
+  createdByName   String
+  emailedAt       DateTime?
+  usedAt          DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime        @default(now())
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer           ProductOffer    @relation(fields: [offerId], references: [id])
+  attempt         PaymentAttempt?
+
+  @@index([userId, status])
+}
+
+model GiftCode {
+  id               String         @id @default(cuid())
+  code             String         @unique
+  offerId          String
+  purchaserId      String
+  paymentAttemptId String
+  recipientId      String?
+  recipientName    String?
+  message          String?
+  status           String         @default("DISPONIBLE")
+  redeemBy         DateTime
+  activatedAt      DateTime?
+  grantId          String?        @unique
+  cancelledAt      DateTime?
+  cancelledById    String?
+  createdAt        DateTime       @default(now())
+  offer            ProductOffer   @relation(fields: [offerId], references: [id])
+  purchaser        User           @relation("GiftPurchaser", fields: [purchaserId], references: [id], onDelete: Cascade)
+  recipient        User?          @relation("GiftRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  grant            AccessGrant?   @relation(fields: [grantId], references: [id], onDelete: SetNull)
+
+  @@index([purchaserId])
+  @@index([status])
+}
+
+model AdminEvent {
+  id         String   @id @default(cuid())
+  category   String
+  type       String
+  actorType  String
+  actorId    String?
+  actorName  String
+  userId     String?
+  userName   String?
+  userEmail  String?
+  product    String?
+  period     String?
+  status     String?
+  amount     Decimal? @db.Decimal(14, 2)
+  result     String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([category, createdAt])
+}
+
+model MasterKey {
+  id             String    @id
+  hash           String
+  ownerId        String
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
 }
 
 model MediaAsset {

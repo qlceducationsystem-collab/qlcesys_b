@@ -33,7 +33,7 @@ const mercadoPagoProvider = {
   },
   async fetchPaymentResult(paymentId, fetcher = mpRequest) {
     const payment = await fetcher(`/v1/payments/${paymentId}`);
-    return { attemptId: payment.external_reference, status: MP_STATUS[payment.status] || 'PENDING' };
+    return { attemptId: payment.external_reference, status: MP_STATUS[payment.status] || 'PENDING', amount: payment.transaction_amount ?? null };
   },
 };
 

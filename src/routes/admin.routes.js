@@ -8,7 +8,8 @@ import { validate } from '../middlewares/validate.js';
 import { requireAdminLevel } from '../middlewares/auth.js';
 import { moduleFileUpload } from '../middlewares/upload.js';
 import {
-  adminLevelSchema, adminPasswordSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, grantSchema, mediaUpdateSchema,
+  adminLevelSchema, adminPasswordSchema, adminUserSchema, appointmentAdminSchema, createAdminSchema, mediaUpdateSchema,
+  authorizePromoSchema, expirySchema, giftSettingsSchema, manualGrantSchema, masterChangeSchema, masterSetupSchema, promotionSchema, revokeSchema,
   exerciseQuery, exerciseReplySchema, leadQuery, leadUpdateSchema, loginNoticeSchema, offerUpdateSchema,
 } from '../validations/schemas.js';
 import * as admin from '../services/admin.service.js';
@@ -23,6 +24,12 @@ import * as leads from '../services/lead.service.js';
 import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service.js';
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
+import { listEvents } from '../services/adminEvent.service.js';
+import { listSubscribers } from '../services/subscriber.service.js';
+import * as promotions from '../services/promotion.service.js';
+import * as gifts from '../services/gift.service.js';
+import * as master from '../services/master.service.js';
+import * as accessControl from '../services/accessControl.service.js';
 
 const r = Router();
 const FULL = requireAdminLevel('FULL');
@@ -39,11 +46,30 @@ r.get('/clients/:id', ah(async (req, res) => res.json(await admin.getClient(req.
 r.get('/clients/:id/data-share/messages', ah(async (req, res) => res.json(await adminMessages(req.params.id))));
 r.post('/clients/:id/data-share/messages', ah(async (req, res) => res.status(201).json(await adminSend(req.user, req.params.id, req.body?.body))));
 r.post('/clients/:id/data-share/stop', ah(async (req, res) => res.json(await stopShareByAdmin(req.user, req.params.id))));
-r.post('/clients/:id/grants', FULL, validate(grantSchema), ah(async (req, res) => res.status(201).json(await admin.grantAccess(req.params.id, req.body))));
-r.post('/clients/:id/grants/:grantId/revoke', FULL, ah(async (req, res) => {
-  await admin.revokeGrant(req.params.id, req.params.grantId);
-  res.json({ ok: true });
-}));
+
+r.get('/subscribers', ah(async (req, res) => res.json(await listSubscribers({ state: req.query.state, q: req.query.q }))));
+r.get('/events', ah(async (req, res) => res.json(await listEvents({ category: req.query.category, userId: req.query.userId, type: req.query.type, take: req.query.take }))));
+
+r.get('/promotions', ah(async (req, res) => res.json(await promotions.listPromotions({ userId: req.query.userId }))));
+r.post('/promotions', EDIT, validate(promotionSchema), ah(async (req, res) => res.status(201).json(await promotions.createPromotion(req.user, req.body))));
+r.post('/promotions/:id/send', EDIT, ah(async (req, res) => res.json(await promotions.sendPromotion(req.user, req.params.id))));
+r.post('/promotions/:id/cancel', EDIT, ah(async (req, res) => res.json(await promotions.cancelPromotion(req.user, req.params.id))));
+
+r.get('/gifts', ah(async (req, res) => res.json(await gifts.listGifts({ status: req.query.status }))));
+r.get('/gifts/settings', ah(async (_req, res) => res.json(await gifts.giftSettings())));
+r.put('/gifts/settings', FULL, validate(giftSettingsSchema), ah(async (req, res) => res.json(await gifts.saveGiftSettings(req.body))));
+r.post('/gifts/:id/cancel', FULL, ah(async (req, res) => res.json(await gifts.cancelGift(req.user, req.params.id))));
+
+r.get('/general/status', ah(async (req, res) => res.json(await master.masterStatus(req.user))));
+r.post('/general/setup', FULL, validate(masterSetupSchema), ah(async (req, res) => res.json(await master.setupMaster(req.user, req.body))));
+r.post('/general/change', FULL, validate(masterChangeSchema), ah(async (req, res) => res.json(await master.changeMaster(req.user, req.body))));
+r.get('/general/users', FULL, ah(async (req, res) => res.json(await accessControl.searchUsers(req.query.q))));
+r.get('/general/pending', FULL, ah(async (_req, res) => res.json(await accessControl.pendingAuthorizations())));
+r.post('/general/grants', FULL, validate(manualGrantSchema), ah(async (req, res) => res.status(201).json(await accessControl.grantManual(req.user, req.body))));
+r.put('/general/grants/:id', FULL, validate(expirySchema), ah(async (req, res) => res.json(await accessControl.changeExpiry(req.user, req.params.id, req.body))));
+r.post('/general/grants/:id/revoke', FULL, validate(revokeSchema), ah(async (req, res) => res.json(await accessControl.revokeManual(req.user, req.params.id, req.body))));
+r.post('/general/pending/:id/authorize', FULL, validate(authorizePromoSchema), ah(async (req, res) => res.json(await accessControl.authorizePromo(req.user, req.params.id, req.body))));
+r.post('/general/pending/:id/reject', FULL, validate(revokeSchema), ah(async (req, res) => res.json(await accessControl.rejectPromo(req.user, req.params.id, req.body))));
 r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req.params.id, req.body))));
 r.get('/leads', validate(leadQuery, 'query'), ah(async (req, res) => res.json(await leads.listLeads(req.validQuery))));
 r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req.params.id, req.body))));

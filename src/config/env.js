@@ -23,6 +23,8 @@ export const env = {
   frontendUrl: frontendUrls[0],
   backendUrl,
   paymentProvider: (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase(),
+  adminNotifyEmails: (process.env.ADMIN_NOTIFY_EMAIL || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+  generalAdminEmail: (process.env.GENERAL_ADMIN_EMAIL || '').trim().toLowerCase(),
   mercadoPago: {
     accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || '',
     publicKey: process.env.MERCADOPAGO_PUBLIC_KEY || '',

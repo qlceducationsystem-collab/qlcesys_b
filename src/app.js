@@ -7,6 +7,7 @@ import { authenticate, privateAccess, requireRole, subjectAccess } from './middl
 import { errorHandler, notFoundHandler } from './middlewares/error.js';
 import authRoutes from './routes/auth.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
+import giftRoutes from './routes/gift.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/api', apiLimiter);
   app.use('/api/public', publicRouter);
   app.use('/api/payments', authenticate, paymentRoutes);
+  app.use('/api/gifts', authenticate, giftRoutes);
   app.use('/api/admin', authenticate, requireRole('ADMIN'), adminRoutes);
   app.use('/api/academy', ...subjectAccess, academyRoutes);
   app.use('/api/academy', ...subjectAccess, patrimonialRoutes);

@@ -10,8 +10,8 @@ const r = Router();
 export async function processMercadoPagoPayment({ dataId, eventId }, { db = prisma, fetcher } = {}) {
   const eventKey = `payment:${dataId}:${eventId || 'na'}`;
   if (await db.webhookEvent.findUnique({ where: { eventKey } })) return { duplicate: true };
-  const { attemptId, status } = await mercadoPagoProvider.fetchPaymentResult(dataId, fetcher);
-  if (attemptId && status !== 'PENDING') await resolveAttempt(attemptId, status, db);
+  const { attemptId, status, amount } = await mercadoPagoProvider.fetchPaymentResult(dataId, fetcher);
+  if (attemptId && status !== 'PENDING') await resolveAttempt(attemptId, status, db, { paidAmount: amount });
   try {
     await db.webhookEvent.create({ data: { provider: 'mercadopago', eventKey, topic: 'payment', resourceId: String(dataId) } });
   } catch (err) {

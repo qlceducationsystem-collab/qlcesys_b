@@ -252,9 +252,34 @@ export const offerUpdateSchema = z.object({
   currency: z.string().trim().toUpperCase().length(3),
   accessDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
   active: z.boolean(),
+  giftable: z.boolean().optional(),
 });
 
-export const grantSchema = z.object({ offerCode: text(40) });
+const authorizationFields = { masterPassword: z.string().min(1, 'Escriba la contraseña maestra').max(200), code: z.string().trim().regex(/^\d{6}$/, 'Escriba el código de 6 dígitos de su autenticador') };
+const futureDate = z.coerce.date({ invalid_type_error: 'Fecha inválida' });
+
+export const manualGrantSchema = z.object({
+  userId: text(40),
+  offerCode: text(40),
+  expiresAt: futureDate,
+  reason: z.enum(['CORTESIA', 'BENEFICIO', 'PROMOCION', 'COMPENSACION', 'INVITACION', 'ESPECIAL']),
+  note: optText(300),
+  ...authorizationFields,
+});
+export const expirySchema = z.object({ expiresAt: futureDate, note: optText(300), ...authorizationFields });
+export const revokeSchema = z.object({ note: optText(300), ...authorizationFields });
+export const authorizePromoSchema = z.object({ expiresAt: futureDate.optional().nullable(), ...authorizationFields });
+export const masterSetupSchema = z.object({ password: z.string().min(12).max(200), code: authorizationFields.code });
+export const masterChangeSchema = z.object({ password: z.string().min(12).max(200), ...authorizationFields });
+export const promotionSchema = z.object({
+  userId: text(40),
+  offerCode: text(40),
+  discountPercent: z.coerce.number().int().min(1, 'Mínimo 1%').max(100, 'Máximo 100%'),
+  validUntil: futureDate,
+  message: optText(600),
+  send: z.boolean().default(true),
+});
+export const giftSettingsSchema = z.object({ redeemDays: z.coerce.number().int().min(7).max(1095) });
 
 export const mediaUpdateSchema = z.object({ active: z.boolean().optional(), position: z.coerce.number().int().min(0).max(999).optional(), name: text(160).optional() });
 

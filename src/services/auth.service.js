@@ -79,7 +79,7 @@ export async function login({ email, password }) {
   return startSession(user);
 }
 
-async function verifyUserCode(user, code) {
+export async function verifyUserCode(user, code) {
   twoFactorReady();
   if (user.totpLockedUntil && user.totpLockedUntil > new Date()) {
     throw new HttpError(429, 'Demasiados códigos incorrectos. Intenta de nuevo en unos minutos.');

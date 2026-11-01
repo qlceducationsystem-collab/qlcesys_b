@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/prisma.js';
-import { grantWindow, renewalBase, summarizeAccess } from '../domain/access.js';
+import { summarizeAccess } from '../domain/access.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { publicUser, SALT_ROUNDS } from './auth.service.js';
 import { invalidateOffersCache, publicOffer } from './access.service.js';
@@ -40,28 +40,12 @@ export async function getClient(id) {
   const row = await prisma.user.findFirst({ where: { id, role: 'CLIENT' }, select: clientSelect });
   if (!row) throw notFound('Cliente no encontrado');
   const grants = await prisma.accessGrant.findMany({ where: { userId: id }, include: { offer: true }, orderBy: { createdAt: 'desc' } });
-  return { ...toClient(row), grants: grants.map((g) => ({ id: g.id, offer: g.offer.name, accessType: g.accessType, moduleNumber: g.moduleNumber, startsAt: g.startsAt, expiresAt: g.expiresAt, active: g.active, paymentAttemptId: g.paymentAttemptId })) };
+  return { ...toClient(row), grants: grants.map((g) => ({ id: g.id, offer: g.offer.name, accessType: g.accessType, moduleNumber: g.moduleNumber, startsAt: g.startsAt, expiresAt: g.expiresAt, active: g.active, paymentAttemptId: g.paymentAttemptId, source: g.source, reason: g.reason })) };
 }
 
 async function assertClient(clientId) {
   const client = await prisma.user.findFirst({ where: { id: clientId, role: 'CLIENT' }, select: { id: true } });
   if (!client) throw notFound('Cliente no encontrado');
-}
-
-export async function grantAccess(clientId, { offerCode }) {
-  await assertClient(clientId);
-  const offer = await prisma.productOffer.findUnique({ where: { code: offerCode } });
-  if (!offer) throw notFound('Oferta no encontrada');
-  const grants = await prisma.accessGrant.findMany({ where: { userId: clientId, active: true } });
-  const { startsAt, expiresAt } = grantWindow(offer, renewalBase(grants, offer));
-  return prisma.accessGrant.create({
-    data: { userId: clientId, offerId: offer.id, accessType: offer.type, moduleNumber: offer.moduleNumber, startsAt, expiresAt },
-  });
-}
-
-export async function revokeGrant(clientId, grantId) {
-  const { count } = await prisma.accessGrant.updateMany({ where: { id: grantId, userId: clientId }, data: { active: false } });
-  if (!count) throw notFound('Acceso no encontrado');
 }
 
 export async function setClientActive(clientId, { isActive }) {
