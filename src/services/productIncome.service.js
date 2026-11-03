@@ -186,15 +186,23 @@ export async function setPositionIncome(req, positionId, { amount, date }) {
   });
 }
 
-export async function assignContribution(req, positionId, movementId) {
+export async function assignContribution(req, positionId, movementId, part = null) {
   const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId: req.subjectId } }, include: { period: true } });
   if (!pos) throw notFound('Producto no encontrado');
   await getOpenPeriod(req.subjectId, pos.periodId);
   const movement = await prisma.patrimonialMovement.findFirst({ where: { id: movementId, userId: req.subjectId, periodId: pos.periodId, type: 'APORTACION', assetId: null } });
   if (!movement) throw notFound('Aportación sin asignar no encontrada en este periodo');
-  const amount = num(movement.amount);
+  const total = num(movement.amount);
+  const amount = part === null || part === undefined || part === '' ? total : round2(num(part));
+  if (amount <= 0) throw badRequest('El monto a asignar debe ser mayor a 0');
+  if (amount > total + 0.004) throw badRequest(`Solo quedan ${total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} por asignar de esta aportación`);
   return prisma.$transaction(async (tx) => {
-    await tx.patrimonialMovement.update({ where: { id: movement.id }, data: { assetId: pos.assetId } });
+    if (amount < total - 0.004) {
+      await tx.patrimonialMovement.update({ where: { id: movement.id }, data: { amount: round2(total - amount) } });
+      await tx.patrimonialMovement.create({ data: { userId: movement.userId, periodId: movement.periodId, assetId: pos.assetId, type: 'APORTACION', amount, date: movement.date, description: movement.description } });
+    } else {
+      await tx.patrimonialMovement.update({ where: { id: movement.id }, data: { assetId: pos.assetId } });
+    }
     const updated = await tx.assetPosition.update({
       where: { id: pos.id },
       data: { initialCapital: round2(num(pos.initialCapital) + amount), finalCapital: round2(num(pos.finalCapital) + amount) },

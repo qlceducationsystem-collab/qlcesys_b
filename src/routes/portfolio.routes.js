@@ -128,7 +128,7 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   res.json(updated);
 }));
 
-r.post('/positions/:positionId/assign', ah(async (req, res) => res.json(await assignContribution(req, req.params.positionId, String(req.body?.movementId || '')))));
+r.post('/positions/:positionId/assign', ah(async (req, res) => res.json(await assignContribution(req, req.params.positionId, String(req.body?.movementId || ''), req.body?.amount ?? null))));
 
 r.put('/positions/:positionId/income', validate(positionIncomeSchema), ah(async (req, res) => res.json(await setPositionIncome(req, req.params.positionId, req.body))));
 

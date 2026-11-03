@@ -69,4 +69,23 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     const s = (await get('/api/dashboard')).body.summary;
     assert.equal(s.portfolio.products.some((p) => p.source === 'M1_OTHER_ASSETS'), false);
   });
+
+  test('Una inversión sin asignar se puede repartir entre varios productos con montos personalizados', async () => {
+    const s0 = (await get('/api/dashboard')).body.summary;
+    const period = (await get('/api/dashboard')).body.period;
+    const user = await prisma.user.findUnique({ where: { email: `${uid}@test.qlc` } });
+    const movement = await prisma.patrimonialMovement.create({ data: { userId: user.id, periodId: period.id, type: 'APORTACION', amount: 15000, date: new Date(), description: 'Aportación registrada desde el presupuesto (M7)' } });
+    const cetes = s0.portfolio.products.find((p) => p.name === 'CETES');
+    const lav = s0.portfolio.products.find((p) => p.name === 'Lavandería');
+    assert.equal((await post(`/api/portfolio/positions/${cetes.positionId}/assign`, { movementId: movement.id, amount: 20000 })).status, 400);
+    assert.equal((await post(`/api/portfolio/positions/${cetes.positionId}/assign`, { movementId: movement.id, amount: 5000 })).status, 200);
+    let s1 = (await get('/api/dashboard')).body.summary;
+    assert.equal(s1.patrimony.unassignedContributions, 10000);
+    assert.equal(s1.portfolio.products.find((p) => p.name === 'CETES').initial, cetes.initial + 5000);
+    assert.equal((await post(`/api/portfolio/positions/${lav.positionId}/assign`, { movementId: movement.id, amount: 10000 })).status, 200);
+    s1 = (await get('/api/dashboard')).body.summary;
+    assert.equal(s1.patrimony.unassignedContributions, 0);
+    assert.equal(s1.portfolio.products.find((p) => p.name === 'Lavandería').initial, lav.initial + 10000);
+    assert.equal(s1.reconciliation.difference, s0.reconciliation.difference);
+  });
 });
