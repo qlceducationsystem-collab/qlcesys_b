@@ -197,8 +197,9 @@ export const diagnosisSchema = z.object({
   totalDebt: amount,
   emergencyFund: amount,
   riskTolerance: enumOf(['CONSERVADOR', 'MODERADO', 'ALTO']),
-  mainGoal: enumOf(['CONSTRUIR_PATRIMONIO', 'FONDO_EMERGENCIA', 'INVERTIR_MEJOR', 'REDUCIR_DEUDAS']),
-});
+  mainGoal: enumOf(['CONSTRUIR_PATRIMONIO', 'FONDO_EMERGENCIA', 'INVERTIR_MEJOR', 'REDUCIR_DEUDAS', 'OTRO']),
+  mainGoalCustom: optText(120),
+}).refine((v) => v.mainGoal !== 'OTRO' || (v.mainGoalCustom && v.mainGoalCustom.trim()), { message: 'Escribe tu objetivo financiero', path: ['mainGoalCustom'] });
 
 export const productSchema = z.object({
   name: text(120),

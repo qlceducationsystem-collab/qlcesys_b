@@ -60,9 +60,9 @@ export const PLACEHOLDERS = {
     category: 'PENDIENTE_DESGLOSE',
     name: 'Inversiones por desglosar (diagnóstico)',
     field: 'declaredInvestments',
-    covers: ['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'ACTIVO_DIGITAL', 'ALTO_RIESGO'],
+    covers: ['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'ACTIVO_DIGITAL', 'ALTO_RIESGO', 'NEGOCIO'],
   },
-  M1_OTHER_ASSETS: { category: 'OTROS_ACTIVOS', name: 'Bienes y otros activos (diagnóstico)', field: 'declaredOtherAssets', covers: ['BIENES_RAICES', 'NEGOCIO'] },
+  M1_OTHER_ASSETS: { category: 'OTROS_ACTIVOS', name: 'Bienes y otros activos (diagnóstico)', field: 'declaredOtherAssets', covers: ['BIENES_RAICES'] },
 };
 
 export function placeholderAmounts(profile, products = []) {
@@ -134,6 +134,7 @@ export function buildAllocation(amountsByBucket) {
 }
 
 export function allocationFromPortfolio(products = []) {
+  if (!products.some((p) => !p.source)) return { ...buildAllocation({}), pendingBreakdown: 0, registered: false };
   const amounts = {};
   let excluded = 0;
   for (const p of products) {
@@ -141,7 +142,7 @@ export function allocationFromPortfolio(products = []) {
     if (bucket) amounts[bucket.key] = num(amounts[bucket.key]) + num(p.final);
     else excluded += num(p.final);
   }
-  return { ...buildAllocation(amounts), pendingBreakdown: round2(excluded) };
+  return { ...buildAllocation(amounts), pendingBreakdown: round2(excluded), registered: true };
 }
 
 export const MARKET_FILTER = { tradingQuestions: ['q1', 'q2', 'q3'], exchangeQuestions: ['q4', 'q5', 'q6'] };

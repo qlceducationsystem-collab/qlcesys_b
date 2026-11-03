@@ -123,6 +123,23 @@ async function reconcilePeriod(tx, userId, periodId, declared) {
   }
 }
 
+const PLACEHOLDER_FIX_KEY = 'fix:negocio-investments-v1';
+
+export async function resyncPlaceholdersOnce() {
+  if (await prisma.publicSection.findUnique({ where: { key: PLACEHOLDER_FIX_KEY } })) return 0;
+  const profiles = await prisma.financialProfile.findMany({ select: { userId: true } });
+  let count = 0;
+  for (const { userId } of profiles) {
+    const periods = await prisma.financialPeriod.findMany({ where: { userId, status: 'OPEN' }, select: { id: true } });
+    for (const period of periods) {
+      await prisma.$transaction((tx) => syncPlaceholders(tx, userId, period.id));
+      count += 1;
+    }
+  }
+  await prisma.publicSection.create({ data: { key: PLACEHOLDER_FIX_KEY, navLabel: 'Ajuste de datos', position: 0, title: 'Negocio como inversión', active: false } });
+  return count;
+}
+
 export async function reconcileDiagnosisBreakdown() {
   if (await prisma.publicSection.findUnique({ where: { key: RECONCILE_KEY } })) return 0;
   const submissions = await prisma.moduleSubmission.findMany({ where: { moduleNumber: 1 }, orderBy: { createdAt: 'desc' }, distinct: ['userId'] });
@@ -194,6 +211,7 @@ const profileView = (p) =>
     declaredOtherAssets: num(p.declaredOtherAssets),
     riskTolerance: p.riskTolerance,
     mainGoal: p.mainGoal,
+    mainGoalCustom: p.mainGoalCustom,
     diagnosedAt: p.diagnosedAt,
     updatedAt: p.updatedAt,
   };
@@ -220,6 +238,7 @@ export async function saveDiagnosis(req, input) {
       declaredOtherAssets: input.otherAssets,
       riskTolerance: input.riskTolerance,
       mainGoal: input.mainGoal,
+      mainGoalCustom: input.mainGoal === 'OTRO' ? input.mainGoalCustom || null : null,
     };
     await tx.financialProfile.upsert({ where: { userId }, create: { userId, ...profileData }, update: profileData });
     await upsertSourced(tx, 'income', { ...scope, source: 'M1_INCOME' }, { category: 'OTROS', description: 'Ingreso mensual (diagnóstico)', amount: input.income });
