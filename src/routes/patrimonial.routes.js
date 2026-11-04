@@ -13,7 +13,7 @@ import * as estimates from '../services/estimates.service.js';
 import * as review from '../services/annualReview.service.js';
 import { ensureWorkingPeriod, latestPeriod } from '../services/period.service.js';
 import { annualReviewPdf } from '../pdf/annualReview.js';
-import { budgetPdf } from '../pdf/reports.js';
+import { budgetPdf, scenariosPdf } from '../pdf/reports.js';
 import { prisma } from '../config/prisma.js';
 import { notFound } from '../utils/httpError.js';
 
@@ -68,6 +68,12 @@ r.delete('/tax-items/:id', tool(10), ah(async (req, res) => {
   res.status(204).end();
 }));
 
+r.get('/scenarios/pdf', tool(11), ah(async (req, res) => {
+  const data = await estimates.listScenarios(req.subjectId);
+  if (!data.items.length) throw notFound('Guarda al menos un escenario para descargarlo');
+  const user = await prisma.user.findUnique({ where: { id: req.subjectId }, select: { name: true, email: true } });
+  scenariosPdf(res, data, user);
+}));
 r.get('/scenarios', tool(11), ah(async (req, res) => res.json(await estimates.listScenarios(req.subjectId))));
 r.post('/scenarios', tool(11), validate(scenarioSchema), ah(async (req, res) => res.status(201).json(await estimates.scenarios.create(req, req.body))));
 r.put('/scenarios/:id', tool(11), validate(scenarioSchema), ah(async (req, res) => res.json(await estimates.scenarios.update(req, req.params.id, req.body))));

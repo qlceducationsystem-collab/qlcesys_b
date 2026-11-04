@@ -244,6 +244,13 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(created.status, 201);
     assert.ok(Math.abs(created.body.result.nominalFuture - 100000 * 1.06 ** 10) < 1e-6);
     assert.equal(await prisma.inflationScenario.count({ where: { userId: ids.p } }), 1);
+    const pdf = await api('p').get('/api/academy/scenarios/pdf').buffer(true).parse((res, cb) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.body.subarray(0, 4).toString(), '%PDF');
     const edited = await api('p').put(`/api/academy/scenarios/${created.body.id}`, { name: 'Ahorro vivienda', type: 'AHORRO', capital: 100000, years: 0, inflationRate: 4, nominalRate: 6 });
     assert.equal(edited.body.result.realFuture, 100000);
     assert.equal((await api('p').post('/api/academy/scenarios', { name: 'x', type: 'OTRO', capital: 1, years: 1, inflationRate: -100, nominalRate: 0 })).status, 400);

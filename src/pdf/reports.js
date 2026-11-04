@@ -40,6 +40,51 @@ function budgetSection(doc, budget) {
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+const SCENARIO_TYPES = { AHORRO: 'Ahorro', INVERSION: 'Inversión', META: 'Meta financiera', EFECTIVO: 'Efectivo', OTRO: 'Otro' };
+
+export function scenariosPdf(res, data, user) {
+  const doc = createDoc(
+    res,
+    'QLC_Simulacion_Inflacion.pdf',
+    'Simulador de poder adquisitivo — Mis escenarios',
+    `${user?.name || ''} · ${user?.email || ''} · Generado el ${date(new Date())}`,
+  );
+  section(doc, 'Resumen');
+  kpis(doc, [
+    ['Escenarios', String(data.totals.count)],
+    ['Capital total', money(data.totals.capital)],
+    ['Valor nominal futuro', money(data.totals.nominalFuture)],
+    ['Valor real futuro', money(data.totals.realFuture)],
+  ]);
+  section(doc, 'Escenarios guardados');
+  table(
+    doc,
+    [
+      { label: 'Escenario', width: 0.22 },
+      { label: 'Capital', width: 0.14, align: 'right' },
+      { label: 'Años', width: 0.07, align: 'right' },
+      { label: 'Inflación', width: 0.1, align: 'right' },
+      { label: 'Rendimiento', width: 0.11, align: 'right' },
+      { label: 'Valor nominal', width: 0.13, align: 'right' },
+      { label: 'Valor real', width: 0.13, align: 'right' },
+      { label: 'Tasa real', width: 0.1, align: 'right' },
+    ],
+    data.items.map((s) => [`${s.name} (${SCENARIO_TYPES[s.type] || s.type})`, money(s.capital), String(s.years), pct(s.inflationRate), pct(s.nominalRate), money(s.result.nominalFuture), money(s.result.realFuture), pct(s.result.realRate)]),
+  );
+  section(doc, 'Pérdida de poder adquisitivo');
+  table(
+    doc,
+    [
+      { label: 'Escenario', width: 0.34 },
+      { label: 'Costo futuro de lo mismo', width: 0.22, align: 'right' },
+      { label: 'Capital en dinero de hoy', width: 0.22, align: 'right' },
+      { label: 'Pérdida de poder adquisitivo', width: 0.22, align: 'right' },
+    ],
+    data.items.map((s) => [s.name, money(s.result.futureCost), money(s.result.realCapital), money(s.result.purchasingPowerLoss)]),
+  );
+  finish(doc);
+}
+
 export function budgetPdf(res, budget, user) {
   const label = `${MONTHS[budget.month - 1]} ${budget.year}`;
   const doc = createDoc(
