@@ -62,6 +62,7 @@ function defaultLines(netIncome, debtPlan) {
   const lines = DEFAULT_LINES.map((l) => ({ ...l }));
   for (const category of ['FLUJO_DISPONIBLE', 'INVERSION', 'AHORRO']) {
     const line = lines.find((l) => l.category === category);
+    if (!line) continue;
     const cut = Math.min(line.percent, excess);
     line.percent = Math.round((line.percent - cut) * 100) / 100;
     excess = Math.round((excess - cut) * 100) / 100;

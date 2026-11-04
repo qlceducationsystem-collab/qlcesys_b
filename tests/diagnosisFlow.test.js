@@ -56,6 +56,8 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     const afterAdd = (await get('/api/dashboard')).body.allocation;
     assert.equal(afterAdd.registered, true);
     assert.ok(afterAdd.reading);
+    const fixed = afterAdd.shares.find((x) => x.key === 'RENTA_FIJA');
+    assert.deepEqual(fixed.items, [{ name: 'CETES', amount: 200000 }]);
   });
 
   test('Un negocio registrado en el M2 se descuenta de las inversiones por desglosar', async () => {

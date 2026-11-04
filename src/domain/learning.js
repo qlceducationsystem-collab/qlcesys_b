@@ -136,13 +136,18 @@ export function buildAllocation(amountsByBucket) {
 export function allocationFromPortfolio(products = []) {
   if (!products.some((p) => !p.source)) return { ...buildAllocation({}), pendingBreakdown: 0, registered: false };
   const amounts = {};
+  const items = {};
   let excluded = 0;
   for (const p of products) {
     const bucket = ALLOCATION_BUCKETS.find((b) => b.categories.includes(p.categoryCode));
-    if (bucket) amounts[bucket.key] = num(amounts[bucket.key]) + num(p.final);
-    else excluded += num(p.final);
+    if (bucket) {
+      amounts[bucket.key] = num(amounts[bucket.key]) + num(p.final);
+      if (num(p.final) > 0) (items[bucket.key] ||= []).push({ name: p.name, amount: round2(num(p.final)) });
+    } else excluded += num(p.final);
   }
-  return { ...buildAllocation(amounts), pendingBreakdown: round2(excluded), registered: true };
+  const allocation = buildAllocation(amounts);
+  const shares = allocation.shares.map((s) => ({ ...s, items: (items[s.key] || []).sort((a, b) => b.amount - a.amount) }));
+  return { ...allocation, shares, pendingBreakdown: round2(excluded), registered: true };
 }
 
 export const MARKET_FILTER = { tradingQuestions: ['q1', 'q2', 'q3'], exchangeQuestions: ['q4', 'q5', 'q6'] };

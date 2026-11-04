@@ -12,11 +12,11 @@ describe('M7 · presupuesto', () => {
   test('distribución inicial suma 100% e importes planeados exactos', () => {
     const v = budgetView({ netIncome: 30000, lines: defaults });
     assert.equal(v.complete, true);
-    assert.deepEqual(v.rows.map((r) => r.planned), [7500, 3600, 2400, 2100, 3000, 6000, 5400]);
+    assert.deepEqual(v.rows.map((r) => r.planned), [7500, 3600, 2400, 2100, 7500, 6900]);
     assert.equal(v.expensesPlanned, 15600);
-    assert.equal(v.rows.find((r) => r.category === 'FLUJO_DISPONIBLE').kind, 'FREE');
-    assert.equal(v.savingsPlanned, 6000);
-    assert.equal(v.investmentPlanned, 5400);
+    assert.equal(v.rows.some((r) => r.category === 'FLUJO_DISPONIBLE'), false);
+    assert.equal(v.savingsPlanned, 7500);
+    assert.equal(v.investmentPlanned, 6900);
   });
 
   test('96% y 105% no forman una distribución completa', () => {
@@ -40,6 +40,9 @@ describe('M7 · presupuesto', () => {
     assert.equal(v.expensesActual, 12000);
     assert.equal(v.savingsActual, 2000);
     assert.equal(v.estimatedBalance, 30000 - 14000);
+    const flow = budgetView({ netIncome: 30000, lines: [...defaults.map((l) => (l.category === 'AHORRO' ? { ...l, percent: 15 } : l)), { category: 'FLUJO_DISPONIBLE', percent: 10 }] });
+    assert.equal(flow.complete, true);
+    assert.equal(flow.rows.find((r) => r.category === 'FLUJO_DISPONIBLE').kind, 'FREE');
   });
 
   test('gastos reales fuera del presupuesto también se descuentan del saldo estimado', () => {
@@ -49,7 +52,6 @@ describe('M7 · presupuesto', () => {
     assert.equal(v.expensesActualTotal, 60000);
     assert.equal(v.debtPayments, 20000);
     assert.equal(v.estimatedBalance, 20000);
-    assert.equal(v.rows.find((r) => r.category === 'FLUJO_DISPONIBLE').actual, 80000);
     assert.equal(v.tableBalance, 80000);
   });
 });
