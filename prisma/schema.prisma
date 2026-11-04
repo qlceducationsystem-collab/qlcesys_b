@@ -484,6 +484,7 @@ model Debt {
   name       String
   lender     String?
   type       DebtType      @default(OTRA)
+  customType String?
   annualRate Decimal?      @db.Decimal(7, 4)
   status     DebtStatus    @default(ACTIVE)
   source     String?
@@ -533,6 +534,7 @@ model Asset {
   horizon        Horizon?
   liquidityLevel LiquidityLevel?
   perceivedRisk  PerceivedRisk?
+  breakdown      Boolean               @default(true)
   source         String?
   incomeType     String?
   incomeValue    Decimal?              @db.Decimal(14, 4)

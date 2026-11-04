@@ -184,7 +184,7 @@ const productRows = (tx, userId, periodId) =>
 export async function syncPlaceholders(tx, userId, periodId) {
   const profile = await tx.financialProfile.findUnique({ where: { userId } });
   if (!profile) return;
-  const products = (await productRows(tx, userId, periodId)).map((p) => ({ productType: p.asset.productType, capital: p.finalCapital }));
+  const products = (await productRows(tx, userId, periodId)).filter((p) => p.asset.breakdown).map((p) => ({ productType: p.asset.productType, capital: p.finalCapital }));
   const amounts = placeholderAmounts(profile, products);
   for (const [source, cfg] of Object.entries(PLACEHOLDERS)) {
     const asset = await tx.asset.findFirst({ where: { userId, source } });
@@ -261,6 +261,7 @@ const productView = (p) => ({
   horizon: p.asset.horizon,
   liquidityLevel: p.asset.liquidityLevel,
   perceivedRisk: p.asset.perceivedRisk,
+  breakdown: p.asset.breakdown,
 });
 
 export async function listProducts(userId) {
@@ -268,7 +269,7 @@ export async function listProducts(userId) {
   if (!period) return { period: null, products: [], pending: null };
   const [rows, profile] = await Promise.all([productRows(prisma, userId, period.id), prisma.financialProfile.findUnique({ where: { userId } })]);
   const products = rows.map(productView);
-  const pending = profile ? placeholderAmounts(profile, products) : null;
+  const pending = profile ? placeholderAmounts(profile, products.filter((p) => p.breakdown)) : null;
   return { period, products, pending };
 }
 
@@ -280,12 +281,12 @@ const assetFields = (d) => ({
   perceivedRisk: d.perceivedRisk,
 });
 
-export async function addProduct(req, data) {
+export async function addProduct(req, data, { breakdown = true } = {}) {
   const userId = req.subjectId;
   const period = await ensureWorkingPeriod(userId);
   return prisma.$transaction(async (tx) => {
     const asset = await tx.asset.create({
-      data: { userId, ...assetFields(data), categoryId: await categoryId(tx, PRODUCT_CATEGORY[data.productType]) },
+      data: { userId, ...assetFields(data), breakdown, categoryId: await categoryId(tx, PRODUCT_CATEGORY[data.productType]) },
     });
     await tx.assetPosition.create({ data: { assetId: asset.id, periodId: period.id, initialCapital: data.capital, finalCapital: data.capital } });
     await syncPlaceholders(tx, userId, period.id);

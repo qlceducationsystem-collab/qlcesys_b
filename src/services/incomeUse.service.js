@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { num, round2 } from '../utils/money.js';
 import { customCategory, customName, isCustomCategory } from '../domain/patrimonial.js';
+import { CATEGORY_PRODUCT } from '../domain/learning.js';
 import { getOpenPeriod } from './period.service.js';
 import { absorbDiagnosisExpense } from './moduleData.service.js';
 import { carriedPositionIds, carryForward, carryGaps, syncCarry } from './productIncome.service.js';
@@ -124,7 +125,13 @@ export async function useIncome(req, positionId, body) {
     let createdTarget = false;
     if (body.kind === 'INVEST' && !target) {
       const cat = await tx.assetCategory.findUnique({ where: { code: body.newProduct.categoryCode } });
-      const asset = await tx.asset.create({ data: { userId, categoryId: cat.id, name: body.newProduct.name } });
+      const kind = CATEGORY_PRODUCT[cat.code];
+      const asset = await tx.asset.create({
+        data: {
+          userId, categoryId: cat.id, name: body.newProduct.name, breakdown: false,
+          ...(kind ? { productType: kind, horizon: body.newProduct.horizon || 'MEDIANO', liquidityLevel: body.newProduct.liquidityLevel || 'MEDIA', perceivedRisk: body.newProduct.perceivedRisk || 'MEDIO' } : {}),
+        },
+      });
       target = { ...(await tx.assetPosition.create({ data: { assetId: asset.id, periodId: pos.periodId, initialCapital: 0, finalCapital: 0 } })), asset };
       createdTarget = true;
     }

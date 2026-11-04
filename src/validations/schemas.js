@@ -83,6 +83,7 @@ export const debtFields = z.object({
   name: text(),
   lender: optText(120),
   type: z.enum(DEBT_TYPES).default('OTRA'),
+  customType: optText(80),
   annualRate: nullableNumber(0, 1000),
   status: z.enum(['ACTIVE', 'PAID']).default('ACTIVE'),
   balance: money,
@@ -122,7 +123,13 @@ export const incomeUseSchema = z.object({
   newCategory: optText(60),
   description: optText(),
   targetPositionId: optText(40),
-  newProduct: z.object({ categoryCode: text(40), name: text() }).nullable().optional(),
+  newProduct: z.object({
+    categoryCode: text(40),
+    name: text(),
+    horizon: z.enum(['CORTO', 'MEDIANO', 'LARGO']).optional(),
+    liquidityLevel: z.enum(['ALTA', 'MEDIA', 'BAJA']).optional(),
+    perceivedRisk: z.enum(['BAJO', 'MEDIO', 'ALTO', 'MUY_ALTO']).optional(),
+  }).nullable().optional(),
 });
 
 export const positionIncomeSchema = z.object({

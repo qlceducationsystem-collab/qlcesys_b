@@ -167,6 +167,7 @@ export function summarizeDebts(debts = []) {
       name: d.name,
       lender: d.lender ?? null,
       type: d.type ?? 'OTRA',
+      customType: d.customType ?? null,
       status: d.status,
       annualRate: estimate.annualRate,
       rateKnown: estimate.rateKnown,

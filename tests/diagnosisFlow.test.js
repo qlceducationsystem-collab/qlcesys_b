@@ -196,4 +196,30 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     assert.equal(reverted.portfolio.products.find((p) => p.name === 'BTC').final, before.portfolio.products.find((p) => p.name === 'BTC').final);
     assert.equal(await prisma.incomeUse.count({ where: { id: saved.body.id } }), 0);
   });
+
+  test('Un producto creado en el portafolio aparece en el M2 sin descontarse de lo pendiente por desglosar', async () => {
+    const period = (await get('/api/dashboard')).body.period;
+    const before = (await get('/api/academy/products')).body;
+    const created = await post('/api/portfolio/positions', { periodId: period.id, categoryCode: 'NEGOCIOS', name: 'COMIDA CHINA', initialCapital: 25000, finalCapital: 25000, incomeType: 'MANUAL' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const after = (await get('/api/academy/products')).body;
+    const row = after.products.find((p) => p.name === 'COMIDA CHINA');
+    assert.equal(row.productType, 'NEGOCIO');
+    assert.equal(row.breakdown, false);
+    assert.deepEqual(after.pending, before.pending);
+  });
+
+  test('El desglose de deudas compara lo declarado en el M1 con lo registrado en el M9', async () => {
+    const period = (await get('/api/dashboard')).body.period;
+    const user = await prisma.user.findUnique({ where: { email: `${uid}@test.qlc` } });
+    const sub = await prisma.moduleSubmission.findFirst({ where: { userId: user.id, moduleNumber: 1 }, orderBy: { createdAt: 'desc' } });
+    await prisma.moduleSubmission.update({ where: { id: sub.id }, data: { data: { ...sub.data, totalDebt: 1000000, debtPayment: 20000 } } });
+    const debt = await prisma.debt.create({ data: { userId: user.id, name: 'Auto', type: 'OTRA', customType: 'Préstamo de mi tío' } });
+    await prisma.debtBalance.create({ data: { debtId: debt.id, periodId: period.id, balance: 700000, payment: 14000 } });
+    const { debtBreakdown } = await import('../src/services/debt.service.js');
+    const b = await debtBreakdown(user.id, period.id);
+    assert.equal(b.pendingBalance, 300000);
+    assert.equal(b.balancePercent, 70);
+    assert.equal(b.pendingPayment, 6000);
+  });
 });

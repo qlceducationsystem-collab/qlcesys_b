@@ -9,6 +9,7 @@ const flat = (b) => ({
   name: b.debt.name,
   lender: b.debt.lender,
   type: b.debt.type,
+  customType: b.debt.customType,
   annualRate: b.debt.annualRate,
   status: b.debt.status,
   balance: b.balance,
@@ -17,7 +18,28 @@ const flat = (b) => ({
   periodId: b.periodId,
 });
 
-const debtFields = ({ name, lender, type, annualRate, status }) => ({ name, lender, type, annualRate, status });
+const debtFields = ({ name, lender, type, customType, annualRate, status }) => ({ name, lender, type, customType: type === 'OTRA' ? customType || null : null, annualRate, status });
+
+export async function debtBreakdown(userId, periodId, db = prisma) {
+  const submission = await db.moduleSubmission.findFirst({ where: { userId, moduleNumber: 1 }, orderBy: { createdAt: 'desc' } });
+  const declaredBalance = num(submission?.data?.totalDebt);
+  const declaredPayment = num(submission?.data?.debtPayment);
+  if (!periodId || (!declaredBalance && !declaredPayment)) return null;
+  const rows = await db.debtBalance.findMany({ where: { periodId, debt: { userId, OR: [{ source: null }, { source: { not: DIAGNOSIS_DEBT_SOURCE } }] } } });
+  const registeredBalance = rows.reduce((acc, b) => acc + num(b.balanceBeforePayment ?? b.balance), 0);
+  const registeredPayment = rows.reduce((acc, b) => acc + num(b.payment), 0);
+  const pct = (part, total) => (total > 0 ? Math.min(100, Math.round((part / total) * 10000) / 100) : 100);
+  return {
+    declaredBalance,
+    declaredPayment,
+    registeredBalance,
+    registeredPayment,
+    pendingBalance: Math.max(0, Math.round((declaredBalance - registeredBalance) * 100) / 100),
+    pendingPayment: Math.max(0, Math.round((declaredPayment - registeredPayment) * 100) / 100),
+    balancePercent: pct(registeredBalance, declaredBalance),
+    paymentPercent: pct(registeredPayment, declaredPayment),
+  };
+}
 const balanceFields = ({ balance, payment, fees }) => ({ balance, payment, fees });
 const isDiagnosisDebt = (debt) => debt.source === DIAGNOSIS_DEBT_SOURCE;
 
@@ -40,6 +62,7 @@ export async function debtOverview(userId, periodId) {
     items: summary.debts.items,
     totals: debtTotals(summary.debts.items, summary.cashflow.income),
     balanceSheet: summary.balanceSheet,
+    breakdown: await debtBreakdown(userId, period.id),
   };
 }
 

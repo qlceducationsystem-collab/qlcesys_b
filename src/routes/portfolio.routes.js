@@ -9,6 +9,11 @@ import { incomeOptions, undoIncomeUse, useIncome } from '../services/incomeUse.s
 import { adjustCapital, applyCarry, applyDueIncome, assignContribution, carriedPositionIds, carryForward, carryGaps, formIncome, setPositionIncome, syncCarry } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
 import { capitalResult } from '../domain/finance.js';
+import { CATEGORY_PRODUCT } from '../domain/learning.js';
+
+const productFields = (code, current = {}) => (CATEGORY_PRODUCT[code]
+  ? { productType: CATEGORY_PRODUCT[code], horizon: current.horizon || 'MEDIANO', liquidityLevel: current.liquidityLevel || 'MEDIA', perceivedRisk: current.perceivedRisk || 'MEDIO' }
+  : {});
 
 const r = Router();
 
@@ -96,7 +101,7 @@ r.post('/positions', validate(assetSchema), ah(async (req, res) => {
   const period = await getOpenPeriod(req.subjectId, periodId);
   const catId = await categoryId(categoryCode);
   const pos = await prisma.$transaction(async (tx) => {
-    const asset = await tx.asset.create({ data: { userId: req.subjectId, categoryId: catId, name, institution, notes, ...incomeFields(req.body, periodStart(period)) } });
+    const asset = await tx.asset.create({ data: { userId: req.subjectId, categoryId: catId, name, institution, notes, breakdown: false, ...productFields(categoryCode), ...incomeFields(req.body, periodStart(period)) } });
     return tx.assetPosition.create({ data: { assetId: asset.id, periodId, initialCapital, ...formIncome(asset, period, req.body) } });
   });
   await applyDueIncome(req.subjectId);
@@ -113,7 +118,7 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   const start = sameIncome(pos.asset, req.body) && pos.asset.incomeStart ? pos.asset.incomeStart : periodStart(period);
   const catId = await categoryId(categoryCode);
   const updated = await prisma.$transaction(async (tx) => {
-    const asset = await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...incomeFields(req.body, start) } });
+    const asset = await tx.asset.update({ where: { id: pos.assetId }, data: { categoryId: catId, name, institution, notes, ...(pos.asset.source ? {} : productFields(categoryCode, pos.asset)), ...incomeFields(req.body, start) } });
     if (carried) await adjustCapital(tx, req.subjectId, period, { ...pos, asset }, Number(initialCapital) - Number(pos.initialCapital));
     const income = formIncome(asset, period, req.body);
     const saved = await tx.assetPosition.update({
@@ -129,7 +134,7 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   res.json(updated);
 }));
 
-r.post('/custom-investment', validate(productSchema), ah(async (req, res) => res.status(201).json(await addProduct(req, { ...req.body, capital: 0 }))));
+r.post('/custom-investment', validate(productSchema), ah(async (req, res) => res.status(201).json(await addProduct(req, { ...req.body, capital: 0 }, { breakdown: false }))));
 
 r.post('/positions/:positionId/assign', ah(async (req, res) => res.json(await assignContribution(req, req.params.positionId, String(req.body?.movementId || ''), req.body?.amount ?? null))));
 

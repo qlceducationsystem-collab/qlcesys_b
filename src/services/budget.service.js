@@ -4,6 +4,7 @@ import { badRequest, conflict } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { createContribution } from './emergency.service.js';
 import { absorbDiagnosisExpense } from './moduleData.service.js';
+import { debtBreakdown } from './debt.service.js';
 
 const ADJUST_SOURCE = 'M7_ADJUST';
 const INVEST_ADJUST = 'Aportación registrada desde el presupuesto (M7)';
@@ -85,6 +86,7 @@ export async function getBudget(userId, month, db = prisma) {
     lines,
     actuals,
     view: budgetView({ netIncome, lines, actuals }),
+    debtBreakdown: await debtBreakdown(userId, period?.id, db),
   };
 }
 

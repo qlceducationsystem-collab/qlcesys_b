@@ -54,6 +54,8 @@ export const PRODUCT_CATEGORY = {
   LIQUIDEZ: 'LIQUIDEZ',
 };
 
+export const CATEGORY_PRODUCT = { RENTA_FIJA: 'RENTA_FIJA', RENTA_VARIABLE: 'RENTA_VARIABLE', BIENES_RAICES: 'BIENES_RAICES', NEGOCIOS: 'NEGOCIO', ACTIVOS_DIGITALES: 'ACTIVO_DIGITAL', ALTO_RIESGO: 'ALTO_RIESGO', LIQUIDEZ: 'LIQUIDEZ' };
+
 export const PLACEHOLDERS = {
   M1_CASH: { category: 'LIQUIDEZ', name: 'Efectivo y liquidez (diagnóstico)', field: 'declaredCash', covers: ['LIQUIDEZ'] },
   M1_INVESTMENTS: {
