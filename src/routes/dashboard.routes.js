@@ -7,6 +7,7 @@ import { getHistory } from '../services/history.service.js';
 import { academyOverview } from '../services/academy.service.js';
 import { getDiagnosis } from '../services/moduleData.service.js';
 import { patrimonialOverview } from '../services/patrimonialOverview.service.js';
+import { goalFor } from '../services/emergency.service.js';
 
 const r = Router();
 
@@ -34,6 +35,7 @@ r.get('/', ah(async (req, res) => {
     diagnosis: diagnosis.result ? { result: diagnosis.result, profile: diagnosis.profile, savedAt: diagnosis.savedAt } : null,
     academy: { progressPct: academy.progressPct, block2ProgressPct: academy.block2ProgressPct, next: academy.next, route: academy.route, block1: academy.block1, block2: academy.block2, mode: academy.access.mode },
     nextAppointment,
+    goal: await goalFor(userId),
   });
 }));
 

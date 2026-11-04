@@ -6,6 +6,9 @@ import { getOpenPeriod } from './period.service.js';
 import { absorbDiagnosisExpense } from './moduleData.service.js';
 import { carriedPositionIds, carryForward, carryGaps, syncCarry } from './productIncome.service.js';
 import { getBudget } from './budget.service.js';
+import { adjustRecord } from './emergency.service.js';
+
+const SAVE_LABELS = { FONDO_EMERGENCIA: 'fondo de emergencia', META_PATRIMONIAL: 'meta patrimonial' };
 
 export const INCOME_USE = 'INCOME_USE:';
 export const SPEND_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'OTROS'];
@@ -102,6 +105,8 @@ export async function useIncome(req, positionId, body) {
   if (amount > available + 0.004) throw badRequest(`Solo puedes usar hasta ${mxn.format(available)}`);
 
   const category = body.kind === 'EXPENSE' ? await categoryOf(userId, body) : null;
+  if (body.kind === 'SAVE' && !SAVE_LABELS[body.destination]) throw badRequest('Elige si va al fondo de emergencia o a la meta patrimonial');
+  if (body.kind === 'SAVE' && body.destination === 'META_PATRIMONIAL' && !(await prisma.goal.findFirst({ where: { userId, kind: 'PATRIMONIO' } }))) throw badRequest('Primero define tu meta patrimonial en el Módulo 8');
   let target = null;
   if (body.kind === 'INVEST' && body.targetPositionId) {
     target = await prisma.assetPosition.findFirst({ where: { id: body.targetPositionId, periodId: pos.periodId, asset: { userId } }, include: { asset: true } });
@@ -114,7 +119,7 @@ export async function useIncome(req, positionId, body) {
 
   return prisma.$transaction(async (tx) => {
     const use = await tx.incomeUse.create({
-      data: { userId, periodId: pos.periodId, positionId: pos.id, origin: body.origin === 'CARRY' ? 'CARRY' : 'MONTH', kind: body.kind, amount, category: category?.key || null },
+      data: { userId, periodId: pos.periodId, positionId: pos.id, origin: body.origin === 'CARRY' ? 'CARRY' : 'MONTH', kind: body.kind, amount, category: category?.key || (body.kind === 'SAVE' ? body.destination : null) },
     });
     let createdTarget = false;
     if (body.kind === 'INVEST' && !target) {
@@ -126,7 +131,7 @@ export async function useIncome(req, positionId, body) {
     const out = await tx.patrimonialMovement.create({
       data: {
         userId, periodId: pos.periodId, assetId: pos.assetId, type: 'DEDUCCION', amount, date,
-        description: body.kind === 'EXPENSE' ? `Rentabilidad usada en gastos · ${pos.asset.name}` : `Rentabilidad pasada a ${target.asset.name} · ${pos.asset.name}`,
+        description: body.kind === 'EXPENSE' ? `Rentabilidad usada en gastos · ${pos.asset.name}` : body.kind === 'SAVE' ? `Rentabilidad enviada a ${SAVE_LABELS[body.destination]} · ${pos.asset.name}` : `Rentabilidad pasada a ${target.asset.name} · ${pos.asset.name}`,
       },
     });
     if (use.origin === 'MONTH') await shiftCapital(tx, pos.id, -amount);
@@ -144,6 +149,12 @@ export async function useIncome(req, positionId, body) {
       await absorbDiagnosisExpense(tx, { userId, periodId: pos.periodId, category: expenseCategory, delta: amount });
       if (custom) await ensureCustomLine(tx, userId, period, category.key);
       data.expenseId = expense.id;
+    } else if (body.kind === 'SAVE') {
+      const contribution = await tx.savingContribution.create({
+        data: { userId, periodId: pos.periodId, destination: body.destination, amount, date: new Date(), description: body.description || `Rentabilidad de ${pos.asset.name}` },
+      });
+      await adjustRecord(tx, userId, pos.periodId, body.destination, amount);
+      data.contributionId = contribution.id;
     } else {
       const inbound = await tx.patrimonialMovement.create({
         data: { userId, periodId: pos.periodId, assetId: target.assetId, type: 'APORTACION', amount, date, description: `Rentabilidad recibida de ${pos.asset.name}` },
@@ -157,6 +168,13 @@ export async function useIncome(req, positionId, body) {
 }
 
 export async function revertUse(tx, use, { skipExpense = false, skipMovement = null } = {}) {
+  if (use.contributionId) {
+    const contribution = await tx.savingContribution.findUnique({ where: { id: use.contributionId } });
+    if (contribution) {
+      await tx.savingContribution.delete({ where: { id: contribution.id } });
+      await adjustRecord(tx, use.userId, contribution.periodId, contribution.destination, -num(contribution.amount));
+    }
+  }
   if (use.expenseId && !skipExpense) {
     const expense = await tx.expense.findUnique({ where: { id: use.expenseId } });
     if (expense) {

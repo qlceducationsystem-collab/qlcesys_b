@@ -115,7 +115,8 @@ export const assetSchema = z.object({
 
 export const incomeUseSchema = z.object({
   origin: z.enum(['MONTH', 'CARRY']),
-  kind: z.enum(['EXPENSE', 'INVEST']),
+  kind: z.enum(['EXPENSE', 'INVEST', 'SAVE']),
+  destination: z.enum(['FONDO_EMERGENCIA', 'META_PATRIMONIAL']).optional().nullable(),
   amount: z.coerce.number().positive('Debe ser mayor a 0').max(1e12),
   category: optText(80),
   newCategory: optText(60),

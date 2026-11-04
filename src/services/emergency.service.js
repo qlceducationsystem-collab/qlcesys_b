@@ -13,7 +13,7 @@ const CONTRIBUTION_RECORD = {
   META_PATRIMONIAL: { source: 'M8_GOAL', type: 'META_PATRIMONIAL', name: 'Meta patrimonial · aportaciones confirmadas' },
 };
 
-async function goalFor(userId) {
+export async function goalFor(userId) {
   const [goal, saved] = await Promise.all([patrimonialGoal(userId), goalSavedUntil(userId)]);
   if (!goal) return { goal: null, saved, progress: null };
   const remaining = Math.max(0, goal.targetAmount - saved);
@@ -130,7 +130,7 @@ export async function savePlan(req, input) {
   return getEmergency(userId);
 }
 
-async function adjustRecord(tx, userId, periodId, destination, delta) {
+export async function adjustRecord(tx, userId, periodId, destination, delta) {
   const cfg = CONTRIBUTION_RECORD[destination];
   const record = await tx.protectionRecord.findFirst({ where: { userId, periodId, source: cfg.source } });
   if (!record) {
@@ -163,6 +163,12 @@ export async function deleteContribution(req, id) {
   const row = await prisma.savingContribution.findFirst({ where: { id, userId }, include: { period: true } });
   if (!row) throw notFound('Aportación no encontrada');
   assertOpen(row.period);
+  const use = await prisma.incomeUse.findFirst({ where: { contributionId: id } });
+  if (use) {
+    const { revertUse } = await import('./incomeUse.service.js');
+    await prisma.$transaction((tx) => revertUse(tx, use));
+    return getEmergency(userId);
+  }
   await prisma.$transaction(async (tx) => {
     await tx.savingContribution.delete({ where: { id } });
     await adjustRecord(tx, userId, row.periodId, row.destination, -num(row.amount));

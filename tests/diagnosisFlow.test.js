@@ -169,4 +169,31 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     assert.equal((await put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'MANUAL', incomeValue: -3000000, incomeDay: 2 }))).status, 400);
     assert.equal((await put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'AMOUNT', incomeValue: -5000, incomeDay: 2 }))).status, 400);
   });
+
+  test('La rentabilidad de una inversión se puede enviar al fondo de emergencia o a la meta, y se deshace al eliminar la aportación', async () => {
+    const period = (await get('/api/dashboard')).body.period;
+    const btc = (await get('/api/dashboard')).body.summary.portfolio.products.find((p) => p.name === 'BTC');
+    const body = { periodId: period.id, categoryCode: 'ACTIVOS_DIGITALES', name: 'BTC', initialCapital: 2000000, finalCapital: 2000000, incomeType: 'MANUAL', incomeValue: 30000, incomeDay: 2 };
+    assert.equal((await put(`/api/portfolio/positions/${btc.positionId}`, body)).status, 200);
+    const before = (await get('/api/dashboard')).body.summary;
+    assert.equal((await post(`/api/portfolio/positions/${btc.positionId}/use-income`, { origin: 'MONTH', kind: 'SAVE', destination: 'META_PATRIMONIAL', amount: 1000 })).status, 400);
+    const saved = await post(`/api/portfolio/positions/${btc.positionId}/use-income`, { origin: 'MONTH', kind: 'SAVE', destination: 'FONDO_EMERGENCIA', amount: 10000 });
+    assert.equal(saved.status, 201, JSON.stringify(saved.body));
+    const after = (await get('/api/dashboard')).body.summary;
+    assert.equal(after.reconciliation.difference, before.reconciliation.difference);
+    assert.equal(after.balanceSheet.netWorth, before.balanceSheet.netWorth);
+    assert.equal(after.protection.total, before.protection.total + 10000);
+    assert.equal((await post(`/api/portfolio/positions/${btc.positionId}/use-income`, { origin: 'MONTH', kind: 'SAVE', destination: 'FONDO_EMERGENCIA', amount: 25000 })).status, 400);
+    const goal = (await get('/api/dashboard')).body.goal;
+    assert.ok('goal' in goal);
+    await prisma.emergencyFundPlan.upsert({ where: { userId: saved.body.userId }, create: { userId: saved.body.userId, targetMonths: 3, monthlyContribution: 0 }, update: {} });
+    const row = await prisma.savingContribution.findUnique({ where: { id: saved.body.contributionId } });
+    assert.ok(row);
+    const { deleteContribution } = await import('../src/services/emergency.service.js');
+    await deleteContribution({ subjectId: saved.body.userId }, row.id);
+    const reverted = (await get('/api/dashboard')).body.summary;
+    assert.equal(reverted.protection.total, before.protection.total);
+    assert.equal(reverted.portfolio.products.find((p) => p.name === 'BTC').final, before.portfolio.products.find((p) => p.name === 'BTC').final);
+    assert.equal(await prisma.incomeUse.count({ where: { id: saved.body.id } }), 0);
+  });
 });
