@@ -159,6 +159,7 @@ run('API (integración)', () => {
   test('Ruta y filtro de mercados: criterio exacto y bloqueo de M4', async () => {
     assert.equal((await api('a').put('/api/academy/route', { route: 'MARKETS' })).status, 403);
     await api('a').put('/api/academy/modules/2/progress', { status: 'COMPLETED' });
+    await prisma.assetPosition.updateMany({ where: { incomeDate: null, asset: { user: { email: { contains: uid } }, source: null } }, data: { incomeDate: new Date(), incomeAmount: 0 } });
     await api('a').put('/api/academy/modules/3/progress', { status: 'COMPLETED' });
     assert.equal((await api('a').put('/api/academy/route', { route: 'MARKETS' })).status, 200);
     const fail = await api('a').post('/api/academy/market-filter', { answers: { q1: 1, q2: 1, q3: 0, q4: 1, q5: 1, q6: 0 } });

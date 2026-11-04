@@ -129,7 +129,14 @@ export async function assertToolOpen(req, number) {
 const COMPLETION_RULES = {
   1: async (userId) => (await prisma.moduleSubmission.count({ where: { userId, moduleNumber: 1 } })) > 0 || 'Guarda tu diagnóstico financiero antes de completar el módulo',
   2: async (userId) => (await prisma.asset.count({ where: { userId, productType: { not: null }, source: null } })) > 0 || 'Registra al menos un producto en tu mapa',
-  3: async () => true,
+  3: async (userId) => {
+    const period = await prisma.financialPeriod.findFirst({ where: { userId }, orderBy: [{ year: 'desc' }, { month: 'desc' }] });
+    if (!period) return true;
+    const positions = await prisma.assetPosition.findMany({ where: { periodId: period.id, asset: { userId, source: null } }, include: { asset: true } });
+    const missing = positions.filter((p) => p.incomeDate === null && !p.asset.incomeType);
+    if (!missing.length) return true;
+    return `Antes de continuar registra la rentabilidad del mes de tus inversiones en Mi portafolio de inversión (puede ser 0 si no generó rentabilidad). Faltan: ${missing.map((p) => p.asset.name).join(', ')}`;
+  },
   4: async (userId) => (await prisma.educationalSimulation.count({ where: { userId, moduleNumber: 4 } })) > 0 || 'Guarda al menos una simulación del módulo',
   5: async (userId) => (await prisma.educationalSimulation.count({ where: { userId, moduleNumber: 5 } })) > 0 || 'Guarda al menos una simulación del módulo',
   6: async () => true,

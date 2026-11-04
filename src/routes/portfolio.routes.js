@@ -3,7 +3,8 @@ import { prisma } from '../config/prisma.js';
 import { ah } from '../utils/asyncHandler.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { validate } from '../middlewares/validate.js';
-import { assetSchema, incomeUseSchema, periodQuery, positionIncomeSchema } from '../validations/schemas.js';
+import { assetSchema, incomeUseSchema, periodQuery, positionIncomeSchema, productSchema } from '../validations/schemas.js';
+import { addProduct } from '../services/moduleData.service.js';
 import { incomeOptions, undoIncomeUse, useIncome } from '../services/incomeUse.service.js';
 import { adjustCapital, applyCarry, applyDueIncome, assignContribution, carriedPositionIds, carryForward, carryGaps, formIncome, setPositionIncome, syncCarry } from '../services/productIncome.service.js';
 import { getOpenPeriod, getPeriodSummary } from '../services/period.service.js';
@@ -127,6 +128,8 @@ r.put('/positions/:positionId', validate(assetSchema), ah(async (req, res) => {
   await applyDueIncome(req.subjectId);
   res.json(updated);
 }));
+
+r.post('/custom-investment', validate(productSchema), ah(async (req, res) => res.status(201).json(await addProduct(req, { ...req.body, capital: 0 }))));
 
 r.post('/positions/:positionId/assign', ah(async (req, res) => res.json(await assignContribution(req, req.params.positionId, String(req.body?.movementId || ''), req.body?.amount ?? null))));
 

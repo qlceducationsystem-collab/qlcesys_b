@@ -1,7 +1,7 @@
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { buildPeriodSummary, summarizeMovements } from '../domain/finance.js';
-import { conflict, notFound } from '../utils/httpError.js';
+import { badRequest, conflict, forbidden, notFound } from '../utils/httpError.js';
 import { num, round2, sum } from '../utils/money.js';
 import { syncCarry } from './productIncome.service.js';
 
@@ -153,6 +153,21 @@ export async function createPeriod(userId, { year, month, openingNetWorth }) {
       });
     return period;
   });
+}
+
+export async function resetPeriod(user, periodId, { confirm }) {
+  if (user.role !== 'CLIENT') throw forbidden('Solo el cliente puede reiniciar sus periodos');
+  if (confirm !== 'REINICIAR') throw badRequest('Escribe REINICIAR para confirmar');
+  const period = await getOwnedPeriod(user.id, periodId);
+  assertOpen(period);
+  await prisma.$transaction(async (tx) => {
+    await tx.budget.deleteMany({ where: { userId: user.id, year: period.year, month: period.month } });
+    await tx.savingContribution.deleteMany({ where: { periodId: period.id } });
+    await tx.financialPeriod.delete({ where: { id: period.id } });
+    const orphans = await tx.asset.findMany({ where: { userId: user.id, positions: { none: {} } }, select: { id: true } });
+    if (orphans.length) await tx.asset.deleteMany({ where: { id: { in: orphans.map((a) => a.id) } } });
+  });
+  return createPeriod(user.id, { year: period.year, month: period.month });
 }
 
 export async function ensureWorkingPeriod(userId) {

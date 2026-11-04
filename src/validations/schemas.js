@@ -204,7 +204,7 @@ export const diagnosisSchema = z.object({
 export const productSchema = z.object({
   name: text(120),
   productType: enumOf(['RENTA_FIJA', 'RENTA_VARIABLE', 'FONDOS', 'ACCIONES', 'BIENES_RAICES', 'NEGOCIO', 'ACTIVO_DIGITAL', 'ALTO_RIESGO', 'LIQUIDEZ']),
-  capital: z.coerce.number().positive('Captura un monto mayor a 0').max(1e12),
+  capital: z.coerce.number().min(0, 'El monto no puede ser negativo').max(1e12),
   horizon: enumOf(['CORTO', 'MEDIANO', 'LARGO']),
   liquidityLevel: enumOf(['ALTA', 'MEDIA', 'BAJA']),
   perceivedRisk: enumOf(['BAJO', 'MEDIO', 'ALTO', 'MUY_ALTO']),

@@ -112,4 +112,46 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     assert.equal((await get('/api/academy/modules/1/masterclass')).status, 200);
     await prisma.appSetting.delete({ where: { key: 'masterclass' } });
   });
+
+  test('El M3 no se completa hasta registrar la rentabilidad de cada inversión (puede ser 0)', async () => {
+    assert.equal((await put('/api/academy/modules/1/progress', { status: 'COMPLETED' })).status, 200);
+    assert.equal((await put('/api/academy/modules/2/progress', { status: 'COMPLETED' })).status, 200);
+    const blocked = await put('/api/academy/modules/3/progress', { status: 'COMPLETED' });
+    assert.equal(blocked.status, 400, JSON.stringify(blocked.body));
+    assert.match(blocked.body.error, /rentabilidad/);
+    const products = (await get('/api/dashboard')).body.summary.portfolio.products.filter((p) => !p.source);
+    for (const p of products) {
+      const res = await put(`/api/portfolio/positions/${p.positionId}`, { periodId: (await get('/api/dashboard')).body.period.id, categoryCode: p.categoryCode, name: p.name, initialCapital: p.initial, finalCapital: p.initial, incomeType: 'MANUAL', incomeValue: 0, incomeDay: 1 });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+    }
+    const ok = await put('/api/academy/modules/3/progress', { status: 'COMPLETED' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  });
+
+  test('El presupuesto guardado se descarga en PDF y un periodo se reinicia sin afectar a los demás', async () => {
+    const period = (await get('/api/dashboard')).body.period;
+    assert.equal((await get(`/api/academy/budget/pdf?year=${period.year}&month=${period.month}`)).status, 404);
+    const lines = [['VIVIENDA', 25], ['ALIMENTACION', 12], ['TRANSPORTE', 8], ['ENTRETENIMIENTO', 7], ['AHORRO', 25], ['INVERSION', 23]].map(([category, percent]) => ({ category, percent }));
+    assert.equal((await put('/api/academy/budget', { year: period.year, month: period.month, netIncome: 50000, lines })).status, 200);
+    const pdf = await get(`/api/academy/budget/pdf?year=${period.year}&month=${period.month}`).buffer(true).parse((res, cb) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.headers['content-type'], 'application/pdf');
+    assert.equal(pdf.body.subarray(0, 4).toString(), '%PDF');
+
+    const past = await post('/api/periods', { year: period.year - 1, month: period.month });
+    assert.equal(past.status, 201, JSON.stringify(past.body));
+    const pastPositions = await prisma.assetPosition.count({ where: { periodId: past.body.id } });
+    assert.equal((await post(`/api/periods/${period.id}/reset`, { confirm: 'no' })).status, 400);
+    const reset = await post(`/api/periods/${period.id}/reset`, { confirm: 'REINICIAR' });
+    assert.equal(reset.status, 200, JSON.stringify(reset.body));
+    assert.equal(reset.body.year, period.year);
+    assert.equal(reset.body.month, period.month);
+    assert.equal(await prisma.income.count({ where: { periodId: reset.body.id } }), 0);
+    assert.equal(await prisma.budget.count({ where: { userId: reset.body.userId, year: period.year, month: period.month } }), 0);
+    assert.equal(await prisma.assetPosition.count({ where: { periodId: past.body.id } }), pastPositions);
+  });
 });

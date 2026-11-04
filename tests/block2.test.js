@@ -53,6 +53,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
   }
 
   const complete = async (who, n) => {
+    if (n === 3) await prisma.assetPosition.updateMany({ where: { incomeDate: null, asset: { user: { email: { contains: uid } }, source: null } }, data: { incomeDate: new Date(), incomeAmount: 0 } });
     const res = await api(who).put(`/api/academy/modules/${n}/progress`, { status: 'COMPLETED', exercise: 'Conclusiones' });
     assert.equal(res.status, 200, JSON.stringify(res.body));
   };

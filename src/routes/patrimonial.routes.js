@@ -13,6 +13,9 @@ import * as estimates from '../services/estimates.service.js';
 import * as review from '../services/annualReview.service.js';
 import { ensureWorkingPeriod, latestPeriod } from '../services/period.service.js';
 import { annualReviewPdf } from '../pdf/annualReview.js';
+import { budgetPdf } from '../pdf/reports.js';
+import { prisma } from '../config/prisma.js';
+import { notFound } from '../utils/httpError.js';
 
 const r = Router();
 const tool = (n) => ah(async (req, res, next) => {
@@ -21,6 +24,12 @@ const tool = (n) => ah(async (req, res, next) => {
 });
 
 r.get('/budget', tool(7), validate(monthQuery, 'query'), ah(async (req, res) => res.json(await budget.getBudget(req.subjectId, req.validQuery))));
+r.get('/budget/pdf', tool(7), validate(monthQuery, 'query'), ah(async (req, res) => {
+  const data = await budget.getBudget(req.subjectId, req.validQuery);
+  if (!data.saved) throw notFound('Guarda el presupuesto de este mes para descargarlo');
+  const user = await prisma.user.findUnique({ where: { id: req.subjectId }, select: { name: true, email: true } });
+  budgetPdf(res, data, user);
+}));
 r.get('/budget/history', tool(7), ah(async (req, res) => res.json(await budget.budgetHistory(req.subjectId))));
 r.put('/budget', tool(7), validate(budgetSchema), ah(async (req, res) => res.json(await budget.saveBudget(req, req.body))));
 r.post('/budget/actuals', tool(7), validate(budgetActualSchema), ah(async (req, res) => res.status(201).json(await budget.recordActual(req, req.body))));

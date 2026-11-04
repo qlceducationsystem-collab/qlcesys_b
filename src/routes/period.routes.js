@@ -18,6 +18,8 @@ r.post('/', validate(periodSchema), ah(async (req, res) => {
   res.status(201).json(period);
 }));
 
+r.post('/:id/reset', ah(async (req, res) => res.json(await periods.resetPeriod(req.user, req.params.id, req.body || {}))));
+
 r.get('/history', validate(historyQuery, 'query'), ah(async (req, res) => res.json(await getHistory(req.subjectId, req.validQuery))));
 
 r.get('/:id/summary', ah(async (req, res) => {

@@ -11,7 +11,7 @@ const CAT_COLS = [
 ];
 
 const BUDGET_LABELS = {
-  VIVIENDA: 'Vivienda', ALIMENTACION: 'Alimentación', SERVICIOS: 'Servicios', TRANSPORTE: 'Transporte', SEGUROS: 'Seguros', EDUCACION: 'Educación',
+  VIVIENDA: 'Renta de vivienda', ALIMENTACION: 'Alimentación', SERVICIOS: 'Servicios', TRANSPORTE: 'Transporte', SEGUROS: 'Seguros', EDUCACION: 'Educación',
   ENTRETENIMIENTO: 'Entretenimiento', VIAJES: 'Viajes', DEUDAS: 'Deudas', OTROS: 'Otros', FLUJO_DISPONIBLE: 'Flujo disponible', AHORRO: 'Ahorro', INVERSION: 'Inversión',
 };
 
@@ -36,6 +36,20 @@ function budgetSection(doc, budget) {
     ['Ahorro planeado / real', `${money(v.savingsPlanned)} / ${money(v.savingsActual)}`],
     ['Inversión planeada / real', `${money(v.investmentPlanned)} / ${money(v.investmentActual)}`],
   ]);
+}
+
+const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+export function budgetPdf(res, budget, user) {
+  const label = `${MONTHS[budget.month - 1]} ${budget.year}`;
+  const doc = createDoc(
+    res,
+    `QLC_Presupuesto_${budget.year}_${String(budget.month).padStart(2, '0')}.pdf`,
+    `Presupuesto mensual — ${label}`,
+    `${user?.name || ''} · ${user?.email || ''}${budget.updatedAt ? ` · Guardado el ${date(budget.updatedAt)}` : ''}`,
+  );
+  budgetSection(doc, budget);
+  finish(doc);
 }
 
 export function monthlyClosePdf(res, close) {
