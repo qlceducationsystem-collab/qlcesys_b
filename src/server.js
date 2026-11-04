@@ -5,6 +5,9 @@ import { startKeepAlive } from './services/keepAlive.service.js';
 import { reconcileDiagnosisBreakdown, resyncPlaceholdersOnce } from './services/moduleData.service.js';
 import { startIncomeJob } from './services/productIncome.service.js';
 import { startSubscriptionJob } from './services/subscriber.service.js';
+import { applyGoogleCredentials } from './services/mailSettings.service.js';
+
+applyGoogleCredentials().catch((err) => console.error('[qlc] credenciales de Google', err.message));
 
 const app = createApp();
 

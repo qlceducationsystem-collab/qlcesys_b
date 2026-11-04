@@ -1,8 +1,10 @@
+import { recordEvent } from './adminEvent.service.js';
 import { prisma } from '../config/prisma.js';
 import { notFound } from '../utils/httpError.js';
 
 export async function createLead({ name, email, phone, interest, message, sourcePath }) {
   const lead = await prisma.lead.create({ data: { name, email, phone: phone || null, interest, message: message || null, sourcePath: sourcePath || null } });
+  recordEvent({ category: 'PLATAFORMA', type: 'NUEVA_SOLICITUD', actor: { actorType: 'CLIENTE', actorId: null, actorName: name }, user: { id: null, name, email }, status: interest, result: [phone, message].filter(Boolean).join(' · ').slice(0, 300) || null }).catch(() => null);
   return { id: lead.id, createdAt: lead.createdAt };
 }
 

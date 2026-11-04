@@ -24,7 +24,8 @@ import * as leads from '../services/lead.service.js';
 import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service.js';
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
-import { listEvents } from '../services/adminEvent.service.js';
+import { EVENT_GROUPS, listEvents } from '../services/adminEvent.service.js';
+import { mailSettingsView, saveMailSettings } from '../services/mailSettings.service.js';
 import { masterclassSettings, saveMasterclassSettings } from '../services/masterclass.service.js';
 import { listSubscribers } from '../services/subscriber.service.js';
 import * as promotions from '../services/promotion.service.js';
@@ -120,6 +121,16 @@ r.delete('/module-media/:id', EDIT, ah(async (req, res) => {
   res.status(204).end();
 }));
 r.get('/module-media/:id/link', ah(async (req, res) => res.json(await media.createMediaLink(req, req.params.id))));
+
+const mailSettingsSchema = z.object({
+  clientId: z.string().trim().max(200).optional(),
+  clientSecret: z.string().trim().max(200).optional(),
+  senderName: z.string().trim().min(1).max(120).optional(),
+  recipients: z.array(z.string().trim().toLowerCase().email('Correo no válido')).max(20).optional(),
+  disabled: z.array(z.string().max(60)).max(100).optional(),
+});
+r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS })));
+r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => res.json({ ...(await saveMailSettings(req.body)), groups: EVENT_GROUPS })));
 
 r.get('/integrations', ah(async (_req, res) => {
   const [items, emails] = await Promise.all([

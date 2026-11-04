@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { env, googleConfigured } from '../config/env.js';
 import { sendGmail } from './google/gmail.js';
+import { notificationSettings } from './mailSettings.service.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -104,7 +105,9 @@ export async function sendEmail(template, to, data = {}) {
     return { sent: true };
   }
   try {
-    await sendGmail({ to, subject: content.subject, html: layout(content.title, content.body), text: content.text });
+    const [settings, gmail] = await Promise.all([notificationSettings(), prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } })]);
+    const from = gmail?.email && settings.senderName ? `${'=?UTF-8?B?' + Buffer.from(settings.senderName, 'utf8').toString('base64') + '?='} <${gmail.email}>` : null;
+    await sendGmail({ to, subject: content.subject, html: layout(content.title, content.body), text: content.text, from });
     await prisma.emailLog.create({ data: { to, subject: content.subject, template, status: 'SENT' } });
     return { sent: true };
   } catch (err) {

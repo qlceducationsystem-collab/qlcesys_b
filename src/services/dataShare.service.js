@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
+import { actorOf, recordEvent } from './adminEvent.service.js';
 
 const view = (share) => share && { id: share.id, grantedAt: share.grantedAt, endedAt: share.endedAt };
 
@@ -14,7 +15,9 @@ export async function startShare(user) {
   if (user.role !== 'CLIENT') throw forbidden('Solo el cliente puede compartir sus datos');
   const current = await activeShare(user.id);
   if (current) return { active: view(current) };
-  return { active: view(await prisma.dataShare.create({ data: { clientId: user.id } })) };
+  const share = await prisma.dataShare.create({ data: { clientId: user.id } });
+  recordEvent({ category: 'PLATAFORMA', type: 'DATOS_COMPARTIDOS', actor: actorOf(user), user, status: 'Compartiendo datos' }).catch(() => null);
+  return { active: view(share) };
 }
 
 async function endShare(clientId, endedById, endedByRole) {

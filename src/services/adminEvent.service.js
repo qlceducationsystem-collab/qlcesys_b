@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { num } from '../utils/money.js';
 import { sendEmail } from './email.service.js';
+import { notificationSettings } from './mailSettings.service.js';
 
 export const EVENT_LABELS = {
   CONTRATADA: 'Suscripción contratada',
@@ -27,9 +28,23 @@ export const EVENT_LABELS = {
   REGALO_COMPRADO: 'Regalo comprado',
   REGALO_CANJEADO: 'Regalo canjeado',
   REGALO_CANCELADO: 'Regalo cancelado',
+  NUEVO_REGISTRO: 'Nuevo usuario registrado',
+  NUEVA_SOLICITUD: 'Nueva solicitud de información',
+  NUEVA_CITA: 'Nueva cita de asesoría',
+  CITA_CANCELADA: 'Cita de asesoría cancelada',
+  EJERCICIO_ENVIADO: 'Ejercicio o duda enviada',
+  MODULO_COMPLETADO: 'Módulo completado',
+  DATOS_COMPARTIDOS: 'Cliente compartió sus datos',
+  CUENTA_ELIMINADA: 'Cuenta eliminada por el cliente',
 };
 
-const NOTIFY = new Set(['CONTRATADA', 'ACTIVADA', 'RENOVADA', 'VENCIDA', 'CANCELADA', 'PAGO_FALLIDO', 'RECUPERADA', 'IMPORTE_NO_COINCIDE', 'PAGO_PROMOCIONAL', 'REGALO_COMPRADO', 'REGALO_CANJEADO']);
+export const EVENT_GROUPS = [
+  ['Suscriptores y pagos', ['CONTRATADA', 'ACTIVADA', 'RENOVADA', 'VENCIDA', 'CANCELADA', 'PAGO_FALLIDO', 'RECUPERADA', 'IMPORTE_NO_COINCIDE']],
+  ['Promociones', ['PROMOCION_CREADA', 'PROMOCION_ENVIADA', 'PROMOCION_CANCELADA', 'PAGO_PROMOCIONAL']],
+  ['Control de accesos', ['ACCESO_CONCEDIDO', 'VENCIMIENTO_MODIFICADO', 'ACCESO_RETIRADO', 'ACCESO_AUTORIZADO', 'AUTORIZACION_RECHAZADA', 'CONTRASENA_MAESTRA', 'CONTRASENA_MAESTRA_CAMBIADA', 'AUTORIZACION_FALLIDA']],
+  ['Regalos', ['REGALO_COMPRADO', 'REGALO_CANJEADO', 'REGALO_CANCELADO']],
+  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA']],
+].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: EVENT_LABELS[type] })) }));
 
 export const periodOf = (offer) => {
   if (!offer) return null;
@@ -61,13 +76,16 @@ const eventView = (e) => ({
 });
 
 async function recipients() {
+  const settings = await notificationSettings();
+  if (settings.recipients?.length) return settings.recipients;
   if (env.adminNotifyEmails.length) return env.adminNotifyEmails;
   const admins = await prisma.user.findMany({ where: { role: 'ADMIN', adminLevel: 'FULL', isActive: true }, select: { email: true } });
   return admins.map((a) => a.email);
 }
 
 async function notify(event) {
-  if (!NOTIFY.has(event.type)) return;
+  const settings = await notificationSettings();
+  if (!EVENT_LABELS[event.type] || settings.disabled?.includes(event.type)) return;
   const to = await recipients();
   for (const address of to) await sendEmail('adminEvent', address, eventView(event));
 }

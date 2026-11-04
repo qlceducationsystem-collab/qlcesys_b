@@ -72,6 +72,7 @@ run('Administración comercial: suscriptores, promociones, control de accesos y 
     ({ detectExpirations } = await import('../src/services/subscriber.service.js'));
     ({ resolveAttempt } = await import('../src/services/payments/payment.service.js'));
     await prisma.masterKey.deleteMany({ where: { id: 'general' } });
+    await prisma.appSetting.deleteMany({ where: { key: { in: ['notifications', 'google-oauth'] } } });
     await createAdmin('general', 'FULL');
     await createAdmin('other', 'FULL');
     await createAdmin('edit', 'EDIT');
@@ -279,5 +280,34 @@ run('Administración comercial: suscriptores, promociones, control de accesos y 
     assert.equal((await api('general').put('/api/admin/gifts/settings', { redeemDays: 90 })).body.redeemDays, 90);
     const types = (await prisma.adminEvent.findMany({ where: { category: 'REGALO' } })).map((e) => e.type);
     assert.ok(types.includes('REGALO_COMPRADO') && types.includes('REGALO_CANJEADO') && types.includes('REGALO_CANCELADO'));
+  });
+
+  test('Correo y notificaciones se configuran desde el panel: credenciales cifradas, destinatarios y avisos activables', async () => {
+    assert.equal((await api('edit').put('/api/admin/mail-settings', { senderName: 'X' })).status, 403);
+    const saved = await api('general').put('/api/admin/mail-settings', { clientId: 'cliente-123.apps.googleusercontent.com', clientSecret: 'secreto-super-privado', senderName: 'QLC Avisos', recipients: ['avisos@qlc.test'], disabled: ['NUEVA_CITA'] });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.source, 'PANEL');
+    assert.equal(saved.body.hasSecret, true);
+    assert.ok(!JSON.stringify(saved.body).includes('secreto-super-privado'));
+    assert.ok(saved.body.groups.some((g) => g.events.some((e) => e.type === 'NUEVO_REGISTRO')));
+    const row = await prisma.appSetting.findUnique({ where: { key: 'google-oauth' } });
+    assert.ok(!JSON.stringify(row.value).includes('secreto-super-privado'));
+    const { env } = await import('../src/config/env.js');
+    assert.equal(env.google.clientId, 'cliente-123.apps.googleusercontent.com');
+    assert.equal(env.google.clientSecret, 'secreto-super-privado');
+    await api('general').put('/api/admin/mail-settings', { disabled: ['DATOS_COMPARTIDOS'] });
+    const lead = await request(app).post('/api/public/leads').send({ name: 'Prospecto', email: `lead-${uid}@test.qlc`, interest: 'GENERAL', message: 'Quiero información', acceptPrivacy: true });
+    assert.equal(lead.status, 201, JSON.stringify(lead.body));
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(testEmail.outbox.some((m) => m.template === 'adminEvent' && m.data.type === 'NUEVA_SOLICITUD' && m.to === 'avisos@qlc.test'));
+    const before = testEmail.outbox.length;
+    assert.equal((await api('juan').post('/api/auth/data-share/start', {})).status, 200);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(await prisma.adminEvent.findFirst({ where: { type: 'DATOS_COMPARTIDOS', userId: ids.juan } }));
+    assert.ok(!testEmail.outbox.slice(before).some((m) => m.data?.type === 'DATOS_COMPARTIDOS'));
+    await api('general').put('/api/admin/mail-settings', { recipients: [], disabled: [] });
+    await prisma.appSetting.deleteMany({ where: { key: 'google-oauth' } });
+    const { applyGoogleCredentials } = await import('../src/services/mailSettings.service.js');
+    await applyGoogleCredentials();
   });
 });

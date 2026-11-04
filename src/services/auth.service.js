@@ -8,6 +8,7 @@ import { HttpError, badRequest, conflict, notFound, unauthorized } from '../util
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 import { generateSecret, matchStep, otpauthUrl } from '../utils/totp.js';
 import { trackLogin } from './analytics.service.js';
+import { actorOf, recordEvent } from './adminEvent.service.js';
 import { emailReady, sendEmail, testEmail } from './email.service.js';
 
 export const SALT_ROUNDS = 12;
@@ -67,6 +68,7 @@ export async function register({ name, email, password, phone, legalVersion, ema
     data: { name, email, phone, role: 'CLIENT', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
   sendEmail('welcome', user.email, { name: user.name });
+  recordEvent({ category: 'PLATAFORMA', type: 'NUEVO_REGISTRO', actor: actorOf(user), user, status: 'Cuenta creada' }).catch(() => null);
   return setupChallenge(user);
 }
 
@@ -171,6 +173,7 @@ export async function deleteAccount(userId, { confirm, code }) {
   if (user.role !== 'CLIENT') throw new HttpError(403, 'Las cuentas de administrador no se eliminan desde aquí');
   if (confirm !== 'ELIMINAR') throw badRequest('Escribe ELIMINAR para confirmar');
   await verifyUserCode(user, String(code || ''));
+  await recordEvent({ category: 'PLATAFORMA', type: 'CUENTA_ELIMINADA', actor: actorOf(user), user, status: 'Eliminada' }).catch(() => null);
   await prisma.user.delete({ where: { id: user.id } });
   return { ok: true };
 }

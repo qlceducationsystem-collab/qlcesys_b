@@ -4,6 +4,7 @@ import { evaluateMarketFilter, professionalOperation, riskExposure, simulateTrad
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { accessFor } from './access.service.js';
 import { masterclassStatus, readMasterclass } from './masterclass.service.js';
+import { actorOf, recordEvent } from './adminEvent.service.js';
 
 const STATE_MESSAGES = {
   LOCKED_ACCESS: 'Necesitas el acceso completo o la herramienta de este módulo',
@@ -163,6 +164,11 @@ export async function saveProgress(req, number, { status, exercise, snapshot }) 
   const changed = exercise !== undefined && (exercise || '') !== (before?.exercise || '');
   const data = { status: finalStatus, completedAt, ...(exercise !== undefined ? { exercise } : {}), ...(changed && !req.asAdmin ? { exerciseAt: new Date() } : {}) };
   const row = await prisma.moduleProgress.upsert({ where, create: { userId, moduleId: mod.id, ...data }, update: data });
+  if (!req.asAdmin && (changed || (finalStatus === 'COMPLETED' && before?.status !== 'COMPLETED'))) {
+    const client = await prisma.user.findUnique({ where: { id: userId } });
+    if (changed && exercise) recordEvent({ category: 'PLATAFORMA', type: 'EJERCICIO_ENVIADO', actor: actorOf(client), user: client, status: `Módulo ${number}`, result: String(exercise).slice(0, 300) }).catch(() => null);
+    if (finalStatus === 'COMPLETED' && before?.status !== 'COMPLETED') recordEvent({ category: 'PLATAFORMA', type: 'MODULO_COMPLETADO', actor: actorOf(client), user: client, status: `Módulo ${number} · ${mod.title}` }).catch(() => null);
+  }
   if (snapshot) await prisma.moduleSubmission.create({ data: { userId, moduleNumber: number, data: { type: 'SNAPSHOT' }, result: snapshot } });
   return row;
 }

@@ -5,9 +5,10 @@ const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
 const encodeHeader = (value) => `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 
-export function buildMime({ to, subject, html, text }) {
+export function buildMime({ to, subject, html, text, from }) {
   const boundary = `qlc_${Date.now().toString(36)}`;
   return [
+    ...(from ? [`From: ${from}`] : []),
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     'MIME-Version: 1.0',
