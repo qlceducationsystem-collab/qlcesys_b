@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
 import { prisma } from '../config/prisma.js';
 import { ACTIVE_MODULES, BLOCK1_MODULES, BLOCK2_MODULES, canChooseRoute, canReadAcademy, isModuleOpen, moduleState } from '../domain/access.js';
 import { evaluateMarketFilter, professionalOperation, riskExposure, simulateTrade, buildAllocation } from '../domain/learning.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { accessFor } from './access.service.js';
+import { masterclassStatus, readMasterclass } from './masterclass.service.js';
 
 const STATE_MESSAGES = {
   LOCKED_ACCESS: 'Necesitas el acceso completo o la herramienta de este módulo',
@@ -106,7 +106,7 @@ export async function getModule(req, number) {
     essentials: content.essentials || [],
     riskNotes: content.riskNotes || [],
     lesson: full ? content.lesson || [] : null,
-    hasMasterclass: full,
+    masterclass: await masterclassStatus(ctx.access, req.asAdmin),
     exerciseGuide: full ? content.exercise || null : null,
     media: full
       ? mod.media.map((m) => ({ id: m.id, fileType: m.fileType, provider: m.provider, name: m.name, mimeType: m.mimeType, url: m.provider === 'CLOUDINARY' ? m.url : null }))
@@ -114,19 +114,10 @@ export async function getModule(req, number) {
   };
 }
 
-const MASTERCLASS_DIR = new URL('../../content/masterclass/', import.meta.url);
-const masterclassCache = new Map();
-
 export async function getMasterclass(req, number) {
   const ctx = await learningContext(req);
   await openModule(req, number, ctx);
-  if (!req.asAdmin && !canReadAcademy(ctx.access)) throw forbidden('La Masterclass está disponible con el acceso completo');
-  if (!masterclassCache.has(number)) {
-    const html = await readFile(new URL(`m${number}.html`, MASTERCLASS_DIR), 'utf8').catch(() => null);
-    if (html === null) throw notFound('Este módulo todavía no tiene Masterclass');
-    masterclassCache.set(number, html);
-  }
-  return { number, html: masterclassCache.get(number) };
+  return readMasterclass(ctx.access, req.asAdmin, number);
 }
 
 export async function assertToolOpen(req, number) {

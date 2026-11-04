@@ -7,7 +7,7 @@ export async function getAccess(userId, db = prisma) {
   return summarizeAccess(await loadGrants(userId, db));
 }
 
-export const ADMIN_ACCESS = { full: { active: true, expiresAt: null }, tools: [1, 2, 3, 4, 5, 6], hasAny: true, mode: 'FULL' };
+export const ADMIN_ACCESS = { full: { active: true, expiresAt: null }, tools: [1, 2, 3, 4, 5, 6], masterclass: { active: true, expiresAt: null }, hasAny: true, mode: 'FULL' };
 
 export const accessFor = (req) => (req.asAdmin ? ADMIN_ACCESS : getAccess(req.subjectId));
 

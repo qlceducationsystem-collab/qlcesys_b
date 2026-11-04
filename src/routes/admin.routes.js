@@ -25,6 +25,7 @@ import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 import { listEvents } from '../services/adminEvent.service.js';
+import { masterclassSettings, saveMasterclassSettings } from '../services/masterclass.service.js';
 import { listSubscribers } from '../services/subscriber.service.js';
 import * as promotions from '../services/promotion.service.js';
 import * as gifts from '../services/gift.service.js';
@@ -56,6 +57,8 @@ r.post('/promotions/:id/send', EDIT, ah(async (req, res) => res.json(await promo
 r.post('/promotions/:id/cancel', EDIT, ah(async (req, res) => res.json(await promotions.cancelPromotion(req.user, req.params.id))));
 
 r.get('/gifts', ah(async (req, res) => res.json(await gifts.listGifts({ status: req.query.status }))));
+r.get('/masterclass/settings', ah(async (_req, res) => res.json(await masterclassSettings())));
+r.put('/masterclass/settings', FULL, validate(z.object({ includedWithFull: z.boolean() })), ah(async (req, res) => res.json(await saveMasterclassSettings(req.body))));
 r.get('/gifts/settings', ah(async (_req, res) => res.json(await gifts.giftSettings())));
 r.put('/gifts/settings', FULL, validate(giftSettingsSchema), ah(async (req, res) => res.json(await gifts.saveGiftSettings(req.body))));
 r.post('/gifts/:id/cancel', FULL, ah(async (req, res) => res.json(await gifts.cancelGift(req.user, req.params.id))));

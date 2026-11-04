@@ -32,6 +32,16 @@ export const OFFERS = [
     accessDays: 30,
     sortOrder: 1,
   },
+  {
+    code: 'MASTERCLASS',
+    name: 'Masterclass QLC · 12 módulos',
+    description: 'Contenido completo de la Masterclass de cada módulo de la academia.',
+    type: 'MASTERCLASS',
+    moduleNumber: null,
+    accessDays: 365,
+    active: false,
+    sortOrder: 2,
+  },
 ];
 
 export const LEGACY_TOOL_OFFERS = Object.keys(TOOL_NAMES).map((n) => `TOOL_M${n}`);

@@ -17,6 +17,7 @@ export function summarizeAccess(grants = [], now = new Date()) {
   const fullGrants = active.filter((g) => g.accessType === 'FULL_ANNUAL');
   const fullExpiry = fullGrants.reduce((max, g) => (!max || new Date(g.expiresAt) > max ? new Date(g.expiresAt) : max), null);
   const toolGrants = active.filter((g) => g.accessType === 'TOOL_ONLY');
+  const masterclassGrants = active.filter((g) => g.accessType === 'MASTERCLASS');
   const tools = [...new Set(toolGrants.flatMap(grantTools))].sort((a, b) => a - b);
   const toolExpiry = (n) => {
     const list = toolGrants.filter((g) => grantTools(g).includes(n));
@@ -26,6 +27,7 @@ export function summarizeAccess(grants = [], now = new Date()) {
     full: fullGrants.length ? { active: true, expiresAt: fullExpiry } : null,
     tools,
     toolAccess: tools.map((n) => ({ moduleNumber: n, expiresAt: toolExpiry(n) })),
+    masterclass: masterclassGrants.length ? { active: true, expiresAt: latestDate(masterclassGrants.map((g) => g.expiresAt)) } : null,
     hasAny: active.length > 0,
     mode: fullGrants.length ? 'FULL' : tools.length ? 'TOOLS' : 'NONE',
   };
@@ -50,7 +52,9 @@ export const isModuleOpen = (state) => state === 'AVAILABLE' || state === 'COMPL
 
 export const canChooseRoute = (access, completed = []) => !access.full ? access.hasAny : completed.includes(3);
 
-export const DEFAULT_ACCESS_DAYS = { FULL_ANNUAL: 365, TOOL_ONLY: 30 };
+export const DEFAULT_ACCESS_DAYS = { FULL_ANNUAL: 365, TOOL_ONLY: 30, MASTERCLASS: 365 };
+
+export const canReadMasterclass = (access, includedWithFull) => !!access.masterclass || (includedWithFull && !!access.full);
 
 function latestDate(dates) {
   return dates.filter(Boolean).map((d) => new Date(d)).reduce((max, d) => (!max || d > max ? d : max), null);

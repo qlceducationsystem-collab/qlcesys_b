@@ -150,6 +150,7 @@ enum SimulationKind {
 enum OfferType {
   FULL_ANNUAL
   TOOL_ONLY
+  MASTERCLASS
 }
 
 enum PaymentAttemptStatus {
