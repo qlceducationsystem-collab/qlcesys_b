@@ -154,4 +154,19 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     assert.equal(await prisma.budget.count({ where: { userId: reset.body.userId, year: period.year, month: period.month } }), 0);
     assert.equal(await prisma.assetPosition.count({ where: { periodId: past.body.id } }), pastPositions);
   });
+
+  test('En modo manual se puede registrar una pérdida del mes, que se resta del capital final', async () => {
+    const period = (await get('/api/dashboard')).body.period;
+    const created = await post('/api/portfolio/positions', { periodId: period.id, categoryCode: 'ACTIVOS_DIGITALES', name: 'BTC', initialCapital: 2000000, finalCapital: 2000000, incomeType: 'MANUAL' });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const body = (extra) => ({ periodId: period.id, categoryCode: 'ACTIVOS_DIGITALES', name: 'BTC', initialCapital: 2000000, finalCapital: 2000000, ...extra });
+    const loss = await put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'MANUAL', incomeValue: -100000, incomeDay: 2 }));
+    assert.equal(loss.status, 200, JSON.stringify(loss.body));
+    assert.equal(Number(loss.body.finalCapital), 1900000);
+    assert.equal(Number(loss.body.incomeAmount), -100000);
+    const product = (await get('/api/dashboard')).body.summary.portfolio.products.find((p) => p.positionId === created.body.id);
+    assert.equal(product.result, -100000);
+    assert.equal((await put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'MANUAL', incomeValue: -3000000, incomeDay: 2 }))).status, 400);
+    assert.equal((await put(`/api/portfolio/positions/${created.body.id}`, body({ incomeType: 'AMOUNT', incomeValue: -5000, incomeDay: 2 }))).status, 400);
+  });
 });

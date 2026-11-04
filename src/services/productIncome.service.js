@@ -53,6 +53,7 @@ export function formIncome(asset, period, { incomeType, incomeValue, incomeDay, 
   }
   if (incomeValue !== null && incomeValue !== undefined && incomeDay) {
     const amount = round2(num(incomeValue));
+    if (initial + amount < 0) throw badRequest('La pérdida no puede ser mayor que el capital inicial del producto');
     return { incomeAmount: amount, incomeDate: incomeDateOf(period, incomeDay), finalCapital: round2(initial + amount) };
   }
   return { incomeAmount: 0, incomeDate: null, finalCapital: round2(num(finalCapital)) };

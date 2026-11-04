@@ -106,10 +106,11 @@ export const assetSchema = z.object({
   initialCapital: money,
   finalCapital: money,
   incomeType: z.preprocess((v) => (v === '' || v === undefined ? null : v), z.enum(['MANUAL', 'AMOUNT', 'PERCENT']).nullable()).default(null),
-  incomeValue: nullableNumber(0, 1e12).optional(),
+  incomeValue: nullableNumber(-1e12, 1e12).optional(),
   incomeDay: z.preprocess((v) => (v === '' || v === undefined || v === null ? null : v), z.coerce.number().int().min(1).max(31).nullable()).default(null),
   incomeTerm: z.preprocess((v) => (v === '' || v === undefined || v === null ? null : v), z.coerce.number().int().refine((m) => [3, 6, 12].includes(m), 'El plazo debe ser de 3, 6 o 12 meses').nullable()).default(null),
 }).refine((v) => !['AMOUNT', 'PERCENT'].includes(v.incomeType) || (v.incomeValue !== null && v.incomeValue !== undefined && v.incomeDay), { message: 'Indica la rentabilidad y el día en que la recibes', path: ['incomeValue'] })
+  .refine((v) => !['AMOUNT', 'PERCENT'].includes(v.incomeType) || !(v.incomeValue < 0), { message: 'La rentabilidad automática no puede ser negativa; registra las pérdidas en modo manual', path: ['incomeValue'] })
   .refine((v) => v.incomeValue === null || v.incomeValue === undefined || v.incomeDay, { message: 'Indica el día en que recibiste la rentabilidad', path: ['incomeDay'] });
 
 export const incomeUseSchema = z.object({
