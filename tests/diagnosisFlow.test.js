@@ -88,4 +88,17 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     assert.equal(s1.portfolio.products.find((p) => p.name === 'Lavandería').initial, lav.initial + 10000);
     assert.equal(s1.reconciliation.difference, s0.reconciliation.difference);
   });
+
+  test('La Masterclass del módulo solo se entrega con el acceso completo', async () => {
+    assert.equal((await get('/api/academy/modules/1/masterclass')).status, 403);
+    const user = await prisma.user.findUnique({ where: { email: `${uid}@test.qlc` } });
+    const offer = await prisma.productOffer.findUnique({ where: { code: 'FULL_ANNUAL' } });
+    await prisma.accessGrant.create({ data: { userId: user.id, offerId: offer.id, accessType: 'FULL_ANNUAL', startsAt: new Date(), expiresAt: new Date(Date.now() + 86400000) } });
+    const mod = await get('/api/academy/modules/1');
+    assert.equal(mod.body.hasMasterclass, true);
+    const mc = await get('/api/academy/modules/1/masterclass');
+    assert.equal(mc.status, 200, JSON.stringify(mc.body));
+    assert.match(mc.body.html, /MASTERCLASS/);
+    assert.equal((await request(app).get('/api/academy/modules/1/masterclass')).status, 401);
+  });
 });

@@ -17,6 +17,7 @@ r.get('/', ah(async (req, res) => {
 }));
 
 r.get('/modules/:n', ah(async (req, res) => res.json(await academy.getModule(req, moduleNumber(req)))));
+r.get('/modules/:n/masterclass', ah(async (req, res) => res.json(await academy.getMasterclass(req, moduleNumber(req)))));
 
 r.put('/modules/:n/progress', validate(moduleProgressSchema), ah(async (req, res) => {
   const n = moduleNumber(req);
