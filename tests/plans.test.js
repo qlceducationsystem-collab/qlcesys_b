@@ -194,6 +194,18 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.match(spanish.subject, /Cliente terminó una Masterclass/);
   });
 
+  test('La prueba de correo sale en el idioma que tiene el panel', async () => {
+    testEmail.setReady(true);
+    const start = testEmail.outbox.length;
+    const res = await api('admin').post('/api/admin/integrations/gmail/test', { to: 'destino@test.qlc', language: 'en' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const mail = testEmail.outbox.slice(start).find((m) => m.template === 'test');
+    testEmail.setReady(false);
+    assert.equal(mail.lang, 'en');
+    assert.match(mail.subject, /Test email/);
+    await prisma.appSetting.deleteMany({ where: { key: 'mail-transport' } });
+  });
+
   test('El panel rechaza un Client ID que no es de Google', async () => {
     const res = await api('admin').put('/api/admin/mail-settings', { clientId: 'correo@gmail.com' });
     assert.equal(res.status, 400);
