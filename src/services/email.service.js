@@ -48,6 +48,7 @@ async function recipientLanguage(to) {
 export async function sendEmail(template, to, data = {}, { lang } = {}) {
   const language = lang ? normalizeLang(lang) : await recipientLanguage(to);
   const content = renderEmail(template, data, language);
+  const logSubject = content.subject.replace(/^\d{6}/, '••••••');
   if (env.isTest && testReady) {
     testEmail.outbox.push({ template, to, data, lang: language, subject: content.subject });
     return { sent: true };
@@ -64,10 +65,10 @@ export async function sendEmail(template, to, data = {}, { lang } = {}) {
       const from = gmail?.email && settings.senderName ? `${'=?UTF-8?B?' + Buffer.from(settings.senderName, 'utf8').toString('base64') + '?='} <${gmail.email}>` : null;
       await sendGmail({ to, subject: content.subject, html, text: content.text, from });
     }
-    await prisma.emailLog.create({ data: { to, subject: content.subject, template, status: 'SENT' } });
+    await prisma.emailLog.create({ data: { to, subject: logSubject, template, status: 'SENT' } });
     return { sent: true };
   } catch (err) {
-    await prisma.emailLog.create({ data: { to, subject: content.subject, template, status: 'FAILED', error: err.message.slice(0, 300) } }).catch(() => null);
+    await prisma.emailLog.create({ data: { to, subject: logSubject, template, status: 'FAILED', error: err.message.slice(0, 300) } }).catch(() => null);
     if (!env.isProd) console.info(`[email] ${template} → ${to} no enviado: ${err.message}`);
     return { sent: false, error: err.message };
   }
