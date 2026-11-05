@@ -5,7 +5,11 @@ const text = (max = 200) => z.string().trim().min(1, 'Requerido').max(max);
 const optText = (max = 1000) => z.string().trim().max(max).optional().nullable().transform((v) => v || null);
 const id = z.string().min(1).max(40);
 
+export const languageField = z.enum(['es', 'en']);
+export const languageSchema = z.object({ language: languageField });
+
 export const registerSchema = z.object({
+  language: languageField.optional(),
   name: text(120),
   email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
   password: z.string().min(8, 'Mínimo 8 caracteres').max(128),
@@ -17,6 +21,7 @@ export const registerSchema = z.object({
 });
 
 export const emailCodeSchema = z.object({
+  language: languageField.optional(),
   email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
 });
 

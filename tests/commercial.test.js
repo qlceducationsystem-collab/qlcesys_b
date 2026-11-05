@@ -104,7 +104,7 @@ run('Administración comercial: suscriptores, promociones, control de accesos y 
     assert.ok(types.includes('PAGO_FALLIDO'));
     const mails = testEmail.outbox.filter((m) => m.template === 'adminEvent' && m.data.type === 'ACTIVADA' && m.data.userEmail === `juan-${uid}@test.qlc`);
     assert.ok(mails.some((m) => m.to === `general-${uid}@admin.qlc`));
-    assert.ok(!mails.some((m) => m.to === `edit-${uid}@admin.qlc`));
+    assert.ok(mails.some((m) => m.to === `edit-${uid}@admin.qlc`));
     const mail = mails[0];
     assert.equal(mail.data.period, 'MENSUAL');
 

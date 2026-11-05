@@ -22,11 +22,11 @@ const RESET_COOLDOWN_MS = 60000;
 
 const codeHash = (email, code) => crypto.createHmac('sha256', env.jwtSecret).update(`${email}:${code}`).digest('hex');
 
-export async function sendRegisterCode({ email }) {
+export async function sendRegisterCode({ email, language }) {
   if (!(await emailReady())) return { required: false };
   if (await prisma.user.findUnique({ where: { email } })) throw conflict('Ya existe una cuenta con ese correo');
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-  const result = await sendEmail('verifyEmail', email, { code, minutes: EMAIL_CODE_MINUTES });
+  const result = await sendEmail('verifyEmail', email, { code, minutes: EMAIL_CODE_MINUTES }, { lang: language });
   if (!result.sent) throw new HttpError(502, 'No pudimos enviar el código a tu correo. Revisa la dirección e intenta de nuevo.');
   return { required: true, emailToken: signEmailToken(email, codeHash(email, code), EMAIL_CODE_MINUTES), minutes: EMAIL_CODE_MINUTES };
 }
@@ -42,8 +42,8 @@ async function assertEmailVerified({ email, emailToken, emailCode }) {
   }
 }
 
-export const publicUser = ({ id, email, name, role, adminLevel, phone, createdAt, totpEnabledAt }) => ({
-  id, email, name, role, adminLevel, phone, createdAt, twoFactorEnabled: !!totpEnabledAt,
+export const publicUser = ({ id, email, name, role, adminLevel, phone, createdAt, totpEnabledAt, language }) => ({
+  id, email, name, role, adminLevel, phone, createdAt, language, twoFactorEnabled: !!totpEnabledAt,
 });
 
 const twoFactorReady = () => {
@@ -58,12 +58,12 @@ async function startSession(user) {
 
 const setupChallenge = (user) => ({ status: 'SETUP_2FA', challengeToken: signChallenge(user), user: publicUser(user) });
 
-export async function register({ name, email, password, phone, legalVersion, emailToken, emailCode }) {
+export async function register({ name, email, password, phone, legalVersion, emailToken, emailCode, language }) {
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) throw conflict('Ya existe una cuenta con ese correo');
   await assertEmailVerified({ email, emailToken, emailCode });
   const user = await prisma.user.create({
-    data: { name, email, phone, role: 'CLIENT', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
+    data: { name, email, phone, role: 'CLIENT', language: language || 'es', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
   sendClientEmail('BIENVENIDA', 'welcome', user.email, { name: user.name }).catch(() => null);
   recordEvent({ category: 'PLATAFORMA', type: 'NUEVO_REGISTRO', actor: actorOf(user), user, status: 'Cuenta creada' }).catch(() => null);
@@ -192,6 +192,11 @@ export async function confirmPasswordReset({ email, code, password }) {
   sendEmail('passwordChanged', email, { name: user.name }).catch(() => null);
   recordEvent({ category: 'PLATAFORMA', type: 'CONTRASENA_RESTABLECIDA', actor: actorOf(user), user, status: 'Restablecida', result: 'Por código enviado al correo. Debe registrar de nuevo Google Authenticator.' }).catch(() => null);
   return { message: 'Contraseña restablecida. Al iniciar sesión deberás registrar de nuevo Google Authenticator.' };
+}
+
+export async function setLanguage(userId, language) {
+  await prisma.user.update({ where: { id: userId }, data: { language } });
+  return { language };
 }
 
 export async function me(userId) {

@@ -277,6 +277,7 @@ model User {
   resetCodeExpiresAt DateTime?
   resetCodeAttempts  Int         @default(0)
   sessionsValidFrom  DateTime?
+  language           String      @default("es")
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 

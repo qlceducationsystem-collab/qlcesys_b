@@ -148,6 +148,52 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.ok(mime.endsWith('--\r\n'));
   });
 
+  test('Cada persona recibe el correo en el idioma que eligió', async () => {
+    const { sendEmail } = await import('../src/services/email.service.js');
+    const { englishTemplateNames, renderEmail, templateNames, translateValue } = await import('../src/services/emailTemplates.js');
+    assert.deepEqual(englishTemplateNames().sort(), templateNames().sort());
+    assert.equal((await api('tools').put('/api/auth/language', { language: 'fr' })).status, 400);
+    assert.equal((await api('tools').put('/api/auth/language', { language: 'en' })).status, 200);
+    assert.equal((await api('tools').get('/api/auth/me')).body.user.language, 'en');
+    testEmail.setReady(true);
+    const start = testEmail.outbox.length;
+    const toolsEmail = `tools-${uid}@test.qlc`;
+    await sendEmail('accessExpired', toolsEmail, { name: 'Ana', product: 'Herramientas financieras QLC' });
+    await sendEmail('accessExpired', `mc-${uid}@test.qlc`, { name: 'Ana', product: 'Herramientas financieras QLC' });
+    await sendEmail('verifyEmail', `nuevo-${uid}@test.qlc`, { code: '123456', minutes: 10 }, { lang: 'en' });
+    const mine = testEmail.outbox.slice(start).filter((m) => ['accessExpired', 'verifyEmail'].includes(m.template));
+    const [en, es, fresh] = mine;
+    assert.equal(en.lang, 'en');
+    assert.match(en.subject, /Your QLC subscription/);
+    assert.equal(es.lang, 'es');
+    assert.match(es.subject, /Tu suscripción/);
+    assert.match(fresh.subject, /verification code/);
+    assert.ok(renderEmail('accessExpired', { name: 'Ana', product: 'Herramientas financieras QLC' }, 'en').body.includes('QLC financial tools'));
+    assert.equal(translateValue('Vigente hasta 2026-12-01', 'en'), 'Valid until 2026-12-01');
+    assert.equal(translateValue('Módulo 3 · Construcción de portafolio', 'en'), 'Module 3 · Portfolio construction');
+    assert.equal(translateValue('Vigente hasta 2026-12-01', 'es'), 'Vigente hasta 2026-12-01');
+    testEmail.setReady(false);
+  });
+
+  test('Lo que hace un cliente se avisa a cada administrador en su idioma', async () => {
+    const adminEn = `admin-en-${uid}@admin.qlc`;
+    await prisma.user.create({ data: { email: adminEn, name: 'Admin EN', role: 'ADMIN', adminLevel: 'VIEW', language: 'en', passwordHash: 'x' } });
+    testEmail.setReady(true);
+    const start = testEmail.outbox.length;
+    const done = await api('mc').post('/api/academy/modules/7/masterclass/complete');
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    const pick = () => testEmail.outbox.slice(start).filter((m) => m.template === 'adminEvent' && m.data.type === 'MASTERCLASS_TERMINADA');
+    for (let i = 0; i < 50 && !pick().some((m) => m.to === adminEn); i += 1) await new Promise((r) => setTimeout(r, 100));
+    const sent = pick();
+    const english = sent.find((m) => m.to === adminEn);
+    const spanish = sent.find((m) => m.to === `admin-${uid}@admin.qlc`);
+    testEmail.setReady(false);
+    assert.equal(english?.lang, 'en');
+    assert.match(english.subject, /Client finished a Masterclass/);
+    assert.equal(spanish?.lang, 'es');
+    assert.match(spanish.subject, /Cliente terminó una Masterclass/);
+  });
+
   test('El panel rechaza un Client ID que no es de Google', async () => {
     const res = await api('admin').put('/api/admin/mail-settings', { clientId: 'correo@gmail.com' });
     assert.equal(res.status, 400);

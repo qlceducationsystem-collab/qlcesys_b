@@ -111,8 +111,8 @@ r.patch('/appointments/:id', EDIT, validate(appointmentAdminSchema), ah(async (r
   if (req.body.status === 'CANCELLED') await releaseCredits(prisma, appointment.id);
   if ((req.body.status && req.body.status !== 'COMPLETED') || req.body.scheduledAt) {
     const owner = await prisma.user.findUnique({ where: { id: appointment.userId }, select: { name: true, email: true } });
-    const label = { PENDING: 'Pendiente', CONFIRMED: 'Confirmada', CANCELLED: 'Cancelada' }[appointment.status] || 'Actualizada';
-    if (owner) sendClientEmail('CITA_ACTUALIZADA', 'appointmentUpdate', owner.email, { name: owner.name, status: req.body.scheduledAt && !req.body.status ? 'Reprogramada' : label, scheduledAt: appointment.scheduledAt }).catch(() => null);
+    const status = req.body.scheduledAt && !req.body.status ? 'RESCHEDULED' : appointment.status;
+    if (owner) sendClientEmail('CITA_ACTUALIZADA', 'appointmentUpdate', owner.email, { name: owner.name, status, scheduledAt: appointment.scheduledAt }).catch(() => null);
   }
   res.json(appointment);
 }));

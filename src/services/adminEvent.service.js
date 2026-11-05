@@ -81,17 +81,20 @@ const eventView = (e) => ({
 });
 
 async function recipients() {
-  const account = await notificationAccount();
-  if (account) return [account];
-  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', adminLevel: 'FULL', isActive: true }, select: { email: true } });
-  return admins.map((a) => a.email);
+  const [account, admins] = await Promise.all([
+    notificationAccount(),
+    prisma.user.findMany({ where: { role: 'ADMIN', isActive: true }, select: { email: true, language: true } }),
+  ]);
+  const list = new Map(admins.map((a) => [a.email.toLowerCase(), a.language]));
+  if (account && !list.has(account.toLowerCase())) list.set(account.toLowerCase(), undefined);
+  return [...list.entries()];
 }
 
 async function notify(event) {
   const settings = await notificationSettings();
   if (!EVENT_LABELS[event.type] || settings.disabled?.includes(event.type)) return;
   const to = await recipients();
-  for (const address of to) await sendEmail('adminEvent', address, eventView(event));
+  await Promise.all(to.map(([address, lang]) => sendEmail('adminEvent', address, eventView(event), { lang })));
 }
 
 export async function recordEvent({ category, type, actor = SYSTEM, user = null, offer = null, status = null, amount = null, result = null, details = null }, db = prisma) {

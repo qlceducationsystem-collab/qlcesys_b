@@ -24,6 +24,7 @@ r.post('/data-share/start', authenticate, ah(async (req, res) => res.json(await 
 r.get('/data-share/messages', authenticate, ah(async (req, res) => res.json(await dataShare.clientMessages(req.user))));
 r.post('/data-share/messages', authenticate, ah(async (req, res) => res.status(201).json(await dataShare.clientSend(req.user, req.body?.body))));
 r.post('/data-share/stop', authenticate, ah(async (req, res) => res.json(await dataShare.stopShareByClient(req.user))));
+r.put('/language', authenticate, validate(schemas.languageSchema), ah(async (req, res) => res.json(await auth.setLanguage(req.user.id, req.body.language))));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 
 r.post('/password-reset/request', authLimiter, validate(schemas.emailCodeSchema), ah(async (req, res) => res.json(await auth.requestPasswordReset(req.body))));
