@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { HttpError } from '../../utils/httpError.js';
 import { getAccessToken } from './oauth.js';
 
@@ -5,12 +6,17 @@ const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
 const encodeHeader = (value) => `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 
+const encodeBody = (value) => (Buffer.from(value || '', 'utf8').toString('base64').match(/.{1,76}/g) || ['']).join('\r\n');
+
 export function buildMime({ to, subject, html, text, from }) {
-  const boundary = `qlc_${Date.now().toString(36)}`;
+  const boundary = `qlc_${crypto.randomBytes(12).toString('hex')}`;
+  const domain = /@([^>\s]+)/.exec(from || '')?.[1] || 'gmail.com';
   return [
     ...(from ? [`From: ${from}`] : []),
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
+    `Date: ${new Date().toUTCString().replace('GMT', '+0000')}`,
+    `Message-ID: <${crypto.randomUUID()}@${domain}>`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',
@@ -18,13 +24,14 @@ export function buildMime({ to, subject, html, text, from }) {
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(text || '', 'utf8').toString('base64'),
+    encodeBody(text),
     `--${boundary}`,
     'Content-Type: text/html; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(html, 'utf8').toString('base64'),
+    encodeBody(html),
     `--${boundary}--`,
+    '',
   ].join('\r\n');
 }
 

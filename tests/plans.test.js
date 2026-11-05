@@ -134,6 +134,20 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     }
   });
 
+  test('El correo va bien formado: líneas cortas, fecha, identificador y texto recuperable', async () => {
+    const { buildMime } = await import('../src/services/google/gmail.js');
+    const html = `<p>${'Información financiera '.repeat(400)}</p>`;
+    const mime = buildMime({ to: 'a@test.qlc', subject: 'Prueba · QLC', html, text: 'Hola', from: '=?UTF-8?B?UUxD?= <envia@gmail.com>' });
+    assert.ok(mime.split('\r\n').every((line) => line.length <= 998));
+    assert.match(mime, /^Date: /m);
+    assert.match(mime, /^Message-ID: <[^>]+@gmail\.com>$/m);
+    const parts = mime.split(/--qlc_[0-9a-f]+/);
+    const bodyOf = (part) => Buffer.from(part.split('\r\n\r\n')[1].replace(/\s+/g, ''), 'base64').toString('utf8');
+    assert.equal(bodyOf(parts[1]), 'Hola');
+    assert.equal(bodyOf(parts[2]), html);
+    assert.ok(mime.endsWith('--\r\n'));
+  });
+
   test('El panel rechaza un Client ID que no es de Google', async () => {
     const res = await api('admin').put('/api/admin/mail-settings', { clientId: 'correo@gmail.com' });
     assert.equal(res.status, 400);

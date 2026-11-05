@@ -165,10 +165,11 @@ r.delete('/integrations/:service', FULL, ah(async (req, res) => {
   res.json(await google.integrationStatus());
 }));
 r.post('/integrations/gmail/test', FULL, ah(async (req, res) => {
-  const result = await sendEmail('test', req.user.email, { name: req.user.name });
+  const to = z.string().trim().toLowerCase().email('Correo no válido').optional().parse(req.body?.to || undefined) || req.user.email;
+  const result = await sendEmail('test', to, { name: req.user.name });
   await recordMailTest(result);
   resetEmailReady();
-  res.json(result);
+  res.json({ ...result, to });
 }));
 
 r.get('/admins', FULL, ah(async (_req, res) => res.json(await admin.listAdmins())));
