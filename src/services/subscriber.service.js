@@ -3,7 +3,7 @@ import { isGrantActive } from '../domain/access.js';
 import { forbidden } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { actorOf, recordEvent, SYSTEM } from './adminEvent.service.js';
-import { sendClientEmail, sendEmail } from './email.service.js';
+import { emailReady, sendClientEmail, sendEmail } from './email.service.js';
 
 export const SUBSCRIBER_STATES = {
   ACTIVO: 'Activo',
@@ -134,6 +134,11 @@ export async function saveRetentionSettings({ enabled }) {
 export async function runRetention(now = new Date(), { only } = {}) {
   let settings = await retentionSettings();
   if (!settings.enabled) return { notified: 0, deleted: 0 };
+  if (!(await emailReady())) {
+    const value = { enabled: true, since: new Date(now).toISOString() };
+    await prisma.appSetting.upsert({ where: { key: RETENTION_KEY }, create: { key: RETENTION_KEY, value }, update: { value } });
+    return { notified: 0, deleted: 0, paused: true };
+  }
   if (!settings.since) settings = await saveRetentionSettings({ enabled: true });
   const since = new Date(settings.since);
   const users = await prisma.user.findMany({
@@ -162,11 +167,11 @@ export async function runRetention(now = new Date(), { only } = {}) {
     }
     const target = RETENTION_STEPS.reduce((acc, step, i) => (days >= step.day ? i + 1 : acc), 0);
     if (target <= user.retentionStage) continue;
-    const claimed = await prisma.user.updateMany({ where: { id: user.id, retentionStage: user.retentionStage }, data: { retentionStage: target } });
-    if (!claimed.count) continue;
     const left = RETENTION_STEPS[target - 1].left;
     const deleteOn = new Date(base.getTime() + RETENTION_DAYS * DAY);
-    await sendEmail('retention', user.email, { name: user.name, left, deleteOn, product: offer?.name }).catch(() => null);
+    const mail = await sendEmail('retention', user.email, { name: user.name, left, deleteOn, product: offer?.name }).catch(() => null);
+    if (!mail?.sent) continue;
+    await prisma.user.update({ where: { id: user.id }, data: { retentionStage: target } });
     await recordEvent({ category: 'SUSCRIPCION', type: 'AVISO_RENOVACION', actor: SYSTEM, user, offer, status: 'Vencido', result: `Aviso enviado: quedan ${left} día(s) antes de eliminar la cuenta` }).catch(() => null);
     notified += 1;
   }

@@ -138,6 +138,11 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     await prisma.accessGrant.create({ data: { userId: ids.gone, offerId: offer.id, accessType: 'TOOL_ONLY', startsAt: new Date('2025-12-01T00:00:00Z'), expiresAt: expired, source: 'PAGO' } });
     const at = (d) => new Date(expired.getTime() + d * 86400000 + 3600000);
     const only = [ids.gone];
+    const paused = await runRetention(at(40), { only });
+    assert.equal(paused.paused, true);
+    assert.equal(paused.deleted, 0);
+    assert.ok(await prisma.user.findUnique({ where: { id: ids.gone } }));
+    await prisma.appSetting.update({ where: { key: 'retention' }, data: { value } });
     testEmail.setReady(true);
     const before = testEmail.outbox.length;
     assert.equal((await runRetention(at(5), { only })).notified, 0);
@@ -146,10 +151,10 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.equal((await runRetention(at(20), { only })).notified, 1);
     assert.equal((await runRetention(at(29), { only })).notified, 1);
     const mails = testEmail.outbox.slice(before).filter((m) => m.template === 'retention' && m.to === `gone-${uid}@test.qlc`);
-    testEmail.setReady(false);
     assert.deepEqual(mails.map((m) => m.data.left), [20, 10, 1]);
     assert.equal((await runRetention(at(30), { only })).deleted, 1);
     assert.equal(await prisma.user.findUnique({ where: { id: ids.gone } }), null);
     assert.equal((await runRetention(at(400), { only: [ids.diamond] })).deleted, 0);
+    testEmail.setReady(false);
   });
 });
