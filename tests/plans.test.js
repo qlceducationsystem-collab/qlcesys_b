@@ -22,6 +22,7 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
       get: (url) => auth(request(app).get(url)),
       post: (url, body = {}) => auth(request(app).post(url)).send(body),
       patch: (url, body = {}) => auth(request(app).patch(url)).send(body),
+      put: (url, body = {}) => auth(request(app).put(url)).send(body),
     };
   };
 
@@ -110,6 +111,12 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.equal(items.find((m) => m.number === 8).state, 'LOCKED_ORDER');
     await buy('mc', { offerCode: 'MASTERCLASS_M7' });
     assert.equal((await api('mc').get('/api/academy/modules/7/masterclass')).status, 200);
+  });
+
+  test('El panel rechaza un Client ID que no es de Google', async () => {
+    const res = await api('admin').put('/api/admin/mail-settings', { clientId: 'correo@gmail.com' });
+    assert.equal(res.status, 400);
+    assert.match(JSON.stringify(res.body), /apps\.googleusercontent\.com/);
   });
 
   test('Sin acceso activo no se venden consultas, porque no hay donde usarlas', async () => {

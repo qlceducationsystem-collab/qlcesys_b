@@ -135,7 +135,7 @@ r.delete('/module-media/:id', EDIT, ah(async (req, res) => {
 r.get('/module-media/:id/link', ah(async (req, res) => res.json(await media.createMediaLink(req, req.params.id))));
 
 const mailSettingsSchema = z.object({
-  clientId: z.string().trim().max(200).optional(),
+  clientId: z.string().trim().max(200).regex(/^[\w-]+\.apps\.googleusercontent\.com$/, 'El Client ID no es válido: debe terminar en .apps.googleusercontent.com. Revisa que el navegador no haya escrito tu correo en ese campo.').optional(),
   clientSecret: z.string().trim().max(200).optional(),
   senderName: z.string().trim().min(1).max(120).optional(),
   recipients: z.array(z.string().trim().toLowerCase().email('Correo no válido')).max(20).optional(),
