@@ -34,7 +34,7 @@ export async function masterclassStatus(access, asAdmin = false, number = null, 
   const settings = await masterclassSettings();
   const available = asAdmin || canReadMasterclass(access, settings.includedWithFull, number);
   const offer = number ? await moduleOffer(number) : null;
-  const done = userId && number && number > 1 ? await completedSet(userId) : null;
+  const done = userId && number ? await completedSet(userId) : null;
   const previousDone = !number || number === 1 || asAdmin || (done ? done.has(number - 1) : false);
   const expiresAt = number ? (access.masterclassModules || []).find((m) => m.moduleNumber === number)?.expiresAt || null : null;
   return {
@@ -43,6 +43,7 @@ export async function masterclassStatus(access, asAdmin = false, number = null, 
     offer: offer?.active ? publicOffer(offer) : null,
     canBuy: !available && !!offer?.active && previousDone,
     previousDone,
+    completed: done ? done.has(number) : false,
     expiresAt,
   };
 }
