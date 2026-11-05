@@ -97,6 +97,10 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.equal((await api('mc').post('/api/payments/checkout', { offerCode: 'MASTERCLASS_M2' })).status, 409);
   });
 
+  test('Sin acceso activo no se venden consultas, porque no hay donde usarlas', async () => {
+    assert.equal((await api('gone').post('/api/payments/checkout', { offerCode: 'CONSULTA' })).status, 409);
+  });
+
   test('Las consultas se pagan, se responden y quedan en el historial', async () => {
     assert.equal((await api('tools').post('/api/academy/modules/1/questions', { question: '¿Cómo calculo mi flujo libre?' })).status, 402);
     await buy('tools', { offerCode: 'CONSULTA', quantity: 2 });

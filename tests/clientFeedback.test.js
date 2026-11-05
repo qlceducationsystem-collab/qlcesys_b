@@ -458,11 +458,11 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
   });
 
   test('Registro con código por correo cuando Gmail está conectado; sin Gmail no se exige', async () => {
-    testEmail.required = true;
-    const blocked = await request(app).post('/api/auth/register/email-code').send({ email: `nomail-${uid}@test.qlc` });
-    assert.equal(blocked.status, 503);
-    assert.equal((await request(app).post('/api/auth/register').send(registerBody('nomail'))).status, 400);
-    testEmail.required = false;
+    testEmail.setReady(false);
+    const skipped = await request(app).post('/api/auth/register/email-code').send({ email: `nomail-${uid}@test.qlc` });
+    assert.equal(skipped.status, 200);
+    assert.equal(skipped.body.required, false);
+    assert.equal((await request(app).post('/api/auth/register').send(registerBody('nomail'))).status, 201);
     testEmail.setReady(true);
     const email = `mail-${uid}@test.qlc`;
     const sent = await request(app).post('/api/auth/register/email-code').send({ email });

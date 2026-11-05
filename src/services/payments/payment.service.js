@@ -50,6 +50,7 @@ async function checkoutData(user, { offerCode, promoCode, gift, quantity: wanted
   const permanentTool = grantTools(offer).every((n) => access.toolAccess.some((t) => t.moduleNumber === n && !t.expiresAt));
   if (offer.type === 'TOOL_ONLY' && (access.full || permanentTool)) throw conflict('Ya tienes acceso a las herramientas');
   if (offer.type === 'MASTERCLASS') await assertCanBuyMasterclass(user.id, offer, access);
+  if (offer.type === 'CONSULTA' && !access.hasAny) throw conflict('Las consultas se envían desde Ejercicio y avance de cada módulo. Necesitas Herramientas o una membresía activa para usarlas.');
   if (SERVICE_TYPES.includes(offer.type)) {
     const quantity = Math.min(MAX_GIFTS, Math.max(1, Number(wanted) || 1));
     return { offer, kind: 'STANDARD', amount: offer.price === null ? null : round2(num(offer.price) * quantity), quantity };

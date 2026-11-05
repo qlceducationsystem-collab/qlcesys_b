@@ -23,7 +23,6 @@ let testReady = false;
 
 export const testEmail = {
   outbox: [],
-  required: false,
   setReady: (value) => {
     testReady = value;
   },

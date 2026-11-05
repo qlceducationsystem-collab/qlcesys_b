@@ -155,7 +155,8 @@ export async function authorizePromo(admin, id, { expiresAt, masterPassword, cod
         startsAt: expiresAt ? new Date() : window.startsAt, expiresAt: until, source: 'PROMOCION', reason: attempt.promotion ? `Promoción ${attempt.promotion.code} · ${attempt.promotion.discountPercent}%` : 'Pago promocional', grantedById: admin.id,
       },
     });
-    await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null } });
+    if (attempt.offer.sessions > 0) await tx.serviceCredit.createMany({ data: Array.from({ length: attempt.offer.sessions }, () => ({ userId: attempt.userId, kind: 'ORIENTACION', source: 'PROMOCION', grantId: grant.id, paymentAttemptId: attempt.id, expiresAt: until })) });
+    await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null, retentionStage: 0 } });
     return grant;
   });
   sendClientEmail('ACCESO_ACTIVADO', 'accessActivated', attempt.user.email, { name: attempt.user.name, product: attempt.offer.name, expiresAt: until }).catch(() => null);
