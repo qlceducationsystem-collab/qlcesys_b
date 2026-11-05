@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { sendClientEmail } from './email.service.js';
 import { notFound } from '../utils/httpError.js';
 
 const isPending = (p) => !p.adminReplyAt || (p.exerciseAt && p.exerciseAt > p.adminReplyAt);
@@ -33,8 +34,9 @@ export async function listExercises({ status } = {}) {
 }
 
 export async function replyExercise(id, { reply }) {
-  const row = await prisma.moduleProgress.findUnique({ where: { id }, select: { id: true } });
+  const row = await prisma.moduleProgress.findUnique({ where: { id }, select: { id: true, user: { select: { name: true, email: true } }, module: { select: { month: true } } } });
   if (!row) throw notFound('Registro no encontrado');
   await prisma.moduleProgress.update({ where: { id }, data: { adminReply: reply, adminReplyAt: new Date() } });
+  sendClientEmail('EJERCICIO_RESPONDIDO', 'exerciseAnswered', row.user.email, { name: row.user.name, moduleNumber: row.module.month }).catch(() => null);
   return { ok: true };
 }

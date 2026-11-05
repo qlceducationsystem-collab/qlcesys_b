@@ -7,6 +7,7 @@ import { actorOf, GATEWAY, notifyEvent, recordEvent } from '../adminEvent.servic
 import { createGiftCodes, emailGiftCodes } from '../gift.service.js';
 import { promoPrice, usablePromotion } from '../promotion.service.js';
 import { grantCredits } from '../credit.service.js';
+import { sendClientEmail } from '../email.service.js';
 import { assertCanBuyMasterclass } from '../masterclass.service.js';
 import { activeProvider, providerByCode } from './providers.js';
 
@@ -97,6 +98,7 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
     if (!updated.count) return { attempt: attemptView(attempt), changed: false };
     const events = [];
     let gifts = null;
+    let mail = null;
     if (status === 'REJECTED') {
       if (attempt.kind === 'PROMO') await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { promotionId: null } });
       events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_FALLIDO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Rechazado', amount: attempt.amount, result: attempt.kind === 'GIFT' ? 'Compra de regalo' : attempt.kind === 'PROMO' ? 'Pago promocional' : null }, tx));
@@ -114,7 +116,7 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
       if (SERVICE_TYPES.includes(attempt.offer.type)) {
         await grantCredits(tx, { userId: attempt.userId, kind: attempt.offer.type, quantity: attempt.quantity, source: 'PAGO', paymentAttemptId: attempt.id });
         events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'SERVICIO_COMPRADO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: `${attempt.quantity} disponible(s)`, amount: attempt.amount }, tx));
-        return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true, events, offer: attempt.offer, userId: attempt.userId };
+        return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true, events, offer: attempt.offer, userId: attempt.userId, mail: ['SERVICIO_DISPONIBLE', 'serviceCredits', attempt.user, { name: attempt.user.name, product: attempt.offer.name, quantity: attempt.quantity }] };
       }
       const type = await subscriptionEventType(tx, attempt);
       const grants = await tx.accessGrant.findMany({ where: { userId: attempt.userId, active: true } });
@@ -126,10 +128,12 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
       await tx.user.update({ where: { id: attempt.userId }, data: { retentionStage: 0 } });
       await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null } });
       events.push(await recordEvent({ category: 'SUSCRIPCION', type, actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Activo', amount: attempt.amount, result: `Vigente hasta ${expiresAt.toISOString().slice(0, 10)}` }, tx));
+      mail = ['ACCESO_ACTIVADO', 'accessActivated', attempt.user, { name: attempt.user.name, product: attempt.offer.name, expiresAt }];
     }
-    return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date(), authorization: attempt.kind === 'PROMO' && status === 'APPROVED' ? 'PENDING' : attempt.authorization }), changed: true, events, gifts, offer: attempt.offer, userId: attempt.userId };
+    return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date(), authorization: attempt.kind === 'PROMO' && status === 'APPROVED' ? 'PENDING' : attempt.authorization }), changed: true, events, gifts, mail, offer: attempt.offer, userId: attempt.userId };
   });
   for (const event of result.events || []) notifyEvent(event);
+  if (result.mail) sendClientEmail(result.mail[0], result.mail[1], result.mail[2].email, result.mail[3]).catch(() => null);
   if (result.gifts) await emailGiftCodes(result.userId, result.offer, result.gifts.codes, result.gifts.redeemBy).catch(() => null);
   return { attempt: result.attempt, changed: result.changed, gifts: result.gifts ? result.gifts.codes : undefined };
 }

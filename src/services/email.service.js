@@ -96,6 +96,48 @@ ${codes.map((c) => `<p style="margin:10px 0;font-size:22px;letter-spacing:3px;fo
     body: `<p>Hola ${escapeHtml(name)},</p><p>Tu suscripción${product ? ` a <b>${escapeHtml(product)}</b>` : ''} terminó. Si no la renuevas, el ${escapeHtml(when(deleteOn))} el sistema eliminará tu cuenta y toda la información que registraste en la plataforma.</p><p>Renueva ahora para conservar tu avance, tus registros y tu historial.</p>${button(`${env.frontendUrl}/app/acceso`, 'Renovar mi acceso')}`,
     text: `Hola ${name}, tu suscripción QLC terminó. Quedan ${left} día(s): si no renuevas, el ${when(deleteOn)} se eliminará tu cuenta y tu información. Renueva en ${env.frontendUrl}/app/acceso`,
   }),
+  accessActivated: ({ name, product, expiresAt }) => ({
+    subject: `Tu acceso a ${product} está activo`,
+    title: 'Tu acceso está activo',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Ya puedes usar <b>${escapeHtml(product)}</b>${expiresAt ? ` hasta el ${escapeHtml(when(expiresAt))}` : ''}.</p>${button(`${env.frontendUrl}/app`, 'Entrar a mi plataforma')}`,
+    text: `Hola ${name}, tu acceso a ${product} está activo${expiresAt ? ` hasta el ${when(expiresAt)}` : ''}.`,
+  }),
+  serviceCredits: ({ name, product, quantity }) => ({
+    subject: `Tu compra de ${product} está disponible`,
+    title: 'Compra disponible',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Ya tienes disponible: <b>${escapeHtml(String(quantity))} × ${escapeHtml(product)}</b>.</p>${button(`${env.frontendUrl}/app`, 'Entrar a mi plataforma')}`,
+    text: `Hola ${name}, ya tienes disponible ${quantity} x ${product}.`,
+  }),
+  accessExpired: ({ name, product }) => ({
+    subject: 'Tu suscripción de QLC venció',
+    title: 'Tu suscripción venció',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Tu acceso${product ? ` a <b>${escapeHtml(product)}</b>` : ''} terminó. Renueva para seguir usando la plataforma y conservar tu información.</p>${button(`${env.frontendUrl}/app/acceso`, 'Renovar mi acceso')}`,
+    text: `Hola ${name}, tu acceso${product ? ` a ${product}` : ''} terminó. Renueva en ${env.frontendUrl}/app/acceso`,
+  }),
+  questionAnswered: ({ name, moduleNumber }) => ({
+    subject: `El equipo QLC respondió tu consulta del Módulo ${moduleNumber}`,
+    title: 'Tu consulta tiene respuesta',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Ya puedes leer la respuesta en la pestaña Ejercicio y avance del Módulo ${escapeHtml(String(moduleNumber))}.</p>${button(`${env.frontendUrl}/app/academia/m/${moduleNumber}`, 'Ver la respuesta')}`,
+    text: `Hola ${name}, el equipo QLC respondió tu consulta del Módulo ${moduleNumber}.`,
+  }),
+  exerciseAnswered: ({ name, moduleNumber }) => ({
+    subject: `El equipo QLC respondió tu ejercicio del Módulo ${moduleNumber}`,
+    title: 'Tu ejercicio tiene respuesta',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Ya puedes leer la respuesta en la pestaña Ejercicio y avance del Módulo ${escapeHtml(String(moduleNumber))}.</p>${button(`${env.frontendUrl}/app/academia/m/${moduleNumber}`, 'Ver la respuesta')}`,
+    text: `Hola ${name}, el equipo QLC respondió tu ejercicio del Módulo ${moduleNumber}.`,
+  }),
+  appointmentUpdate: ({ name, status, scheduledAt }) => ({
+    subject: `Tu cita de asesoría: ${status}`,
+    title: `Cita ${status.toLowerCase()}`,
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Tu cita de asesoría del ${escapeHtml(new Date(scheduledAt).toISOString().slice(0, 16).replace('T', ' '))} UTC quedó: <b>${escapeHtml(status)}</b>.</p>${button(`${env.frontendUrl}/app/asesoria`, 'Ver mis citas')}`,
+    text: `Hola ${name}, tu cita de asesoría quedó: ${status}.`,
+  }),
+  giftRedeemed: ({ name, product, recipient }) => ({
+    subject: 'Tu regalo de QLC fue activado',
+    title: 'Tu regalo fue activado',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>${escapeHtml(recipient || 'La persona que recibió tu regalo')} activó su acceso a <b>${escapeHtml(product)}</b>. Gracias por regalar educación financiera.</p>`,
+    text: `Hola ${name}, tu regalo de ${product} fue activado.`,
+  }),
   test: ({ name }) => ({
     subject: 'Correo de prueba · QLC Financial Education',
     title: 'Integración de Gmail funcionando',
@@ -103,6 +145,12 @@ ${codes.map((c) => `<p style="margin:10px 0;font-size:22px;letter-spacing:3px;fo
     text: 'Integración de Gmail funcionando.',
   }),
 };
+
+export async function sendClientEmail(type, template, to, data = {}) {
+  const settings = await notificationSettings();
+  if (settings.clientDisabled?.includes(type)) return { sent: false, skipped: true };
+  return sendEmail(template, to, data);
+}
 
 export async function sendEmail(template, to, data = {}) {
   const content = TEMPLATES[template](data);

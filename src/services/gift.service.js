@@ -3,7 +3,7 @@ import { prisma } from '../config/prisma.js';
 import { grantWindow, renewalBase } from '../domain/access.js';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError.js';
 import { actorOf, notifyEvent, recordEvent } from './adminEvent.service.js';
-import { sendEmail } from './email.service.js';
+import { sendClientEmail } from './email.service.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const block = (n) => Array.from(crypto.randomBytes(n), (b) => ALPHABET[b % ALPHABET.length]).join('');
@@ -71,7 +71,7 @@ export async function createGiftCodes(tx, attempt) {
 
 export async function emailGiftCodes(userId, offer, codes, redeemBy) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
-  if (user) await sendEmail('giftCodes', user.email, { name: user.name, product: offer.name, codes, redeemBy });
+  if (user) await sendClientEmail('CODIGOS_REGALO', 'giftCodes', user.email, { name: user.name, product: offer.name, codes, redeemBy });
 }
 
 export async function myGifts(userId) {
@@ -102,7 +102,7 @@ export async function redeemGift(user, code) {
   if (user.role !== 'CLIENT') throw forbidden('Los regalos se canjean desde una cuenta de cliente');
   const normalized = normalizeCode(code);
   const result = await prisma.$transaction(async (tx) => {
-    const gift = await tx.giftCode.findUnique({ where: { code: normalized }, include: { offer: true } });
+    const gift = await tx.giftCode.findUnique({ where: { code: normalized }, include: { offer: true, purchaser: { select: { name: true, email: true } } } });
     if (!gift) throw notFound('No encontramos ese código de regalo. Revisa que esté escrito correctamente.');
     const status = giftStatus(gift);
     if (status === 'ACTIVADO') throw conflict('Este código de regalo ya fue utilizado');
@@ -119,9 +119,11 @@ export async function redeemGift(user, code) {
     if (gift.offer.sessions > 0) await tx.serviceCredit.createMany({ data: Array.from({ length: gift.offer.sessions }, () => ({ userId: user.id, kind: 'ORIENTACION', source: 'REGALO', grantId: grant.id, expiresAt })) });
     await tx.user.update({ where: { id: user.id }, data: { subscriptionCancelledAt: null } });
     const event = await recordEvent({ category: 'REGALO', type: 'REGALO_CANJEADO', actor: actorOf(user), user, offer: gift.offer, status: 'Activo', result: `Código ${gift.code} · vence ${expiresAt.toISOString().slice(0, 10)}` }, tx);
-    return { event, product: gift.offer.name, startsAt, expiresAt };
+    return { event, product: gift.offer.name, startsAt, expiresAt, purchaser: gift.purchaser, recipientName: gift.recipientName };
   });
   notifyEvent(result.event);
+  sendClientEmail('ACCESO_ACTIVADO', 'accessActivated', user.email, { name: user.name, product: result.product, expiresAt: result.expiresAt }).catch(() => null);
+  if (result.purchaser) sendClientEmail('REGALO_ACTIVADO', 'giftRedeemed', result.purchaser.email, { name: result.purchaser.name, product: result.product, recipient: result.recipientName || user.name }).catch(() => null);
   return { product: result.product, startsAt: result.startsAt, expiresAt: result.expiresAt };
 }
 

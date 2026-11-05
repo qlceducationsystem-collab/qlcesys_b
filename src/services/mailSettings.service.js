@@ -8,6 +8,25 @@ const NOTIFY_KEY = 'notifications';
 const serverGoogle = { clientId: env.google.clientId, clientSecret: env.google.clientSecret };
 let notifyCache = null;
 
+export const CLIENT_EMAIL_LABELS = {
+  BIENVENIDA: 'Bienvenida al crear su cuenta',
+  ACCESO_ACTIVADO: 'Acceso activado o renovado',
+  SERVICIO_DISPONIBLE: 'Consultas o sesiones adquiridas',
+  ACCESO_VENCIDO: 'Su suscripción venció',
+  CONSULTA_RESPONDIDA: 'Respuesta a su consulta pagada',
+  EJERCICIO_RESPONDIDO: 'Respuesta a su ejercicio o duda',
+  CITA_ACTUALIZADA: 'Su cita fue confirmada, reprogramada o cancelada',
+  CODIGOS_REGALO: 'Códigos de regalo comprados',
+  REGALO_ACTIVADO: 'La persona activó su regalo',
+  PROMOCION: 'Promociones personalizadas',
+};
+
+export const CLIENT_EMAIL_GROUPS = [
+  ['Cuenta y suscripción', ['BIENVENIDA', 'ACCESO_ACTIVADO', 'SERVICIO_DISPONIBLE', 'ACCESO_VENCIDO']],
+  ['Academia y asesoría', ['CONSULTA_RESPONDIDA', 'EJERCICIO_RESPONDIDO', 'CITA_ACTUALIZADA']],
+  ['Regalos y promociones', ['CODIGOS_REGALO', 'REGALO_ACTIVADO', 'PROMOCION']],
+].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: CLIENT_EMAIL_LABELS[type] })) }));
+
 const mask = (v) => (v ? `${v.slice(0, 6)}••••••••${v.slice(-4)}` : null);
 
 export async function applyGoogleCredentials() {
@@ -27,7 +46,7 @@ export async function applyGoogleCredentials() {
 export async function notificationSettings() {
   if (notifyCache) return notifyCache;
   const row = await prisma.appSetting.findUnique({ where: { key: NOTIFY_KEY } }).catch(() => null);
-  notifyCache = { recipients: [], senderName: 'QLC Financial Education', disabled: [], ...(row?.value || {}) };
+  notifyCache = { recipients: [], senderName: 'QLC Financial Education', disabled: [], clientDisabled: [], ...(row?.value || {}) };
   return notifyCache;
 }
 
@@ -48,10 +67,11 @@ export async function mailSettingsView() {
     senderName: notify.senderName,
     recipients: notify.recipients,
     disabled: notify.disabled,
+    clientDisabled: notify.clientDisabled,
   };
 }
 
-export async function saveMailSettings({ clientId, clientSecret, senderName, recipients, disabled }) {
+export async function saveMailSettings({ clientId, clientSecret, senderName, recipients, disabled, clientDisabled }) {
   if (clientId !== undefined || clientSecret) {
     if (!env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar las credenciales cifradas');
     const current = (await prisma.appSetting.findUnique({ where: { key: OAUTH_KEY } }))?.value || {};
@@ -67,6 +87,7 @@ export async function saveMailSettings({ clientId, clientSecret, senderName, rec
     senderName: senderName ?? notify.senderName,
     recipients: recipients ?? notify.recipients,
     disabled: disabled ?? notify.disabled,
+    clientDisabled: clientDisabled ?? notify.clientDisabled,
   };
   await prisma.appSetting.upsert({ where: { key: NOTIFY_KEY }, create: { key: NOTIFY_KEY, value }, update: { value } });
   notifyCache = null;

@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { badRequest, conflict, notFound } from '../utils/httpError.js';
 import { num, round2 } from '../utils/money.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
-import { sendEmail } from './email.service.js';
+import { sendClientEmail } from './email.service.js';
 import { newCode, normalizeCode } from './gift.service.js';
 
 export const promoStatus = (p, now = new Date()) => (p.status === 'ACTIVA' && new Date(p.validUntil) <= now ? 'VENCIDA' : p.status);
@@ -34,7 +34,7 @@ export async function listPromotions({ userId } = {}) {
 
 async function emailPromotion(promo) {
   if (promo.user.marketingOptOut) throw conflict('Este usuario pidió no recibir promociones por correo. Puedes compartirle el código por otro medio.');
-  const sent = await sendEmail('promotion', promo.user.email, {
+  const sent = await sendClientEmail('PROMOCION', 'promotion', promo.user.email, {
     name: promo.user.name,
     discount: promo.discountPercent,
     product: promo.offer.name,
@@ -42,6 +42,7 @@ async function emailPromotion(promo) {
     validUntil: promo.validUntil,
     message: promo.message,
   });
+  if (sent.skipped) throw conflict('Los correos de promociones a clientes están desactivados en Integraciones. Puedes compartir el código por otro medio.');
   if (!sent.sent) throw badRequest('No se pudo enviar el correo. Revisa que Gmail esté conectado en Integraciones.');
   return prisma.promotion.update({ where: { id: promo.id }, data: { emailedAt: new Date() }, include });
 }

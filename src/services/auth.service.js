@@ -9,7 +9,7 @@ import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 import { generateSecret, matchStep, otpauthUrl } from '../utils/totp.js';
 import { trackLogin } from './analytics.service.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
-import { emailReady, sendEmail, testEmail } from './email.service.js';
+import { emailReady, sendEmail, testEmail, sendClientEmail } from './email.service.js';
 
 export const SALT_ROUNDS = 12;
 const ISSUER = 'QLC Financial Education';
@@ -67,7 +67,7 @@ export async function register({ name, email, password, phone, legalVersion, ema
   const user = await prisma.user.create({
     data: { name, email, phone, role: 'CLIENT', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
-  sendEmail('welcome', user.email, { name: user.name });
+  sendClientEmail('BIENVENIDA', 'welcome', user.email, { name: user.name }).catch(() => null);
   recordEvent({ category: 'PLATAFORMA', type: 'NUEVO_REGISTRO', actor: actorOf(user), user, status: 'Cuenta creada' }).catch(() => null);
   return setupChallenge(user);
 }

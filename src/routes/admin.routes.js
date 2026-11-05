@@ -25,7 +25,8 @@ import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 import { EVENT_GROUPS, listEvents } from '../services/adminEvent.service.js';
-import { mailSettingsView, saveMailSettings } from '../services/mailSettings.service.js';
+import { CLIENT_EMAIL_GROUPS, mailSettingsView, saveMailSettings } from '../services/mailSettings.service.js';
+import { sendClientEmail } from '../services/email.service.js';
 import { adminQuestions, answerQuestion, releaseCredits } from '../services/credit.service.js';
 import { masterclassSettings, saveMasterclassSettings } from '../services/masterclass.service.js';
 import { listSubscribers, retentionSettings, saveRetentionSettings } from '../services/subscriber.service.js';
@@ -108,6 +109,11 @@ r.patch('/appointments/:id', EDIT, validate(appointmentAdminSchema), ah(async (r
     throw err;
   });
   if (req.body.status === 'CANCELLED') await releaseCredits(prisma, appointment.id);
+  if ((req.body.status && req.body.status !== 'COMPLETED') || req.body.scheduledAt) {
+    const owner = await prisma.user.findUnique({ where: { id: appointment.userId }, select: { name: true, email: true } });
+    const label = { PENDING: 'Pendiente', CONFIRMED: 'Confirmada', CANCELLED: 'Cancelada' }[appointment.status] || 'Actualizada';
+    if (owner) sendClientEmail('CITA_ACTUALIZADA', 'appointmentUpdate', owner.email, { name: owner.name, status: req.body.scheduledAt && !req.body.status ? 'Reprogramada' : label, scheduledAt: appointment.scheduledAt }).catch(() => null);
+  }
   res.json(appointment);
 }));
 
@@ -134,9 +140,10 @@ const mailSettingsSchema = z.object({
   senderName: z.string().trim().min(1).max(120).optional(),
   recipients: z.array(z.string().trim().toLowerCase().email('Correo no válido')).max(20).optional(),
   disabled: z.array(z.string().max(60)).max(100).optional(),
+  clientDisabled: z.array(z.string().max(60)).max(100).optional(),
 });
-r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS })));
-r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => res.json({ ...(await saveMailSettings(req.body)), groups: EVENT_GROUPS })));
+r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
+r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => res.json({ ...(await saveMailSettings(req.body)), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
 
 r.get('/integrations', ah(async (_req, res) => {
   const [items, emails] = await Promise.all([

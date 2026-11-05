@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { HttpError, badRequest, notFound } from '../utils/httpError.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
+import { sendClientEmail } from './email.service.js';
 
 export const SESSION_MINUTES = 20;
 export const CREDIT_KINDS = ['CONSULTA', 'ORIENTACION'];
@@ -85,5 +86,7 @@ export async function answerQuestion(admin, id, text) {
   if (!answer) throw badRequest('Escribe la respuesta');
   const row = await prisma.moduleQuestion.findUnique({ where: { id } });
   if (!row) throw notFound('Consulta no encontrada');
-  return questionView(await prisma.moduleQuestion.update({ where: { id }, data: { answer, answeredAt: new Date(), answeredById: admin.id } }));
+  const updated = await prisma.moduleQuestion.update({ where: { id }, data: { answer, answeredAt: new Date(), answeredById: admin.id }, include: { user: true } });
+  sendClientEmail('CONSULTA_RESPONDIDA', 'questionAnswered', updated.user.email, { name: updated.user.name, moduleNumber: updated.moduleNumber }).catch(() => null);
+  return questionView(updated);
 }

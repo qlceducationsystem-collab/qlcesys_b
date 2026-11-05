@@ -3,6 +3,7 @@ import { grantWindow, isGrantActive, renewalBase } from '../domain/access.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
+import { sendClientEmail } from './email.service.js';
 import { assertMaster } from './master.service.js';
 
 export const GRANT_REASONS = {
@@ -78,6 +79,7 @@ export async function grantManual(admin, { userId, offerCode, expiresAt, reason,
   });
   if (offer.sessions > 0) await prisma.serviceCredit.createMany({ data: Array.from({ length: offer.sessions }, () => ({ userId, kind: 'ORIENTACION', source: 'MANUAL', grantId: grant.id, expiresAt: until })) });
   await prisma.user.update({ where: { id: userId }, data: { subscriptionCancelledAt: null, retentionStage: 0 } });
+  sendClientEmail('ACCESO_ACTIVADO', 'accessActivated', user.email, { name: user.name, product: offer.name, expiresAt: until }).catch(() => null);
   await recordEvent({ category: 'ACCESO', type: 'ACCESO_CONCEDIDO', actor: actorOf(admin), user, offer, status: 'Activo', result: `Autorizado hasta ${day(until)} · ${label}` });
   return grantView(grant, new Map([[admin.id, admin.name]]));
 }
@@ -156,6 +158,7 @@ export async function authorizePromo(admin, id, { expiresAt, masterPassword, cod
     await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null } });
     return grant;
   });
+  sendClientEmail('ACCESO_ACTIVADO', 'accessActivated', attempt.user.email, { name: attempt.user.name, product: attempt.offer.name, expiresAt: until }).catch(() => null);
   await recordEvent({ category: 'ACCESO', type: 'ACCESO_AUTORIZADO', actor: actorOf(admin), user: attempt.user, offer: attempt.offer, status: 'Activo', amount: attempt.amount, result: `Autorizado hasta ${day(until)}` });
   await recordEvent({ category: 'SUSCRIPCION', type: 'RECUPERADA', actor: actorOf(admin), user: attempt.user, offer: attempt.offer, status: 'Activo', amount: attempt.amount, result: 'Recuperado con promoción' });
   return { id: result.id, expiresAt: until };

@@ -3,7 +3,7 @@ import { isGrantActive } from '../domain/access.js';
 import { forbidden } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { actorOf, recordEvent, SYSTEM } from './adminEvent.service.js';
-import { sendEmail } from './email.service.js';
+import { sendClientEmail, sendEmail } from './email.service.js';
 
 export const SUBSCRIBER_STATES = {
   ACTIVO: 'Activo',
@@ -107,6 +107,7 @@ export async function detectExpirations(now = new Date()) {
     const still = await prisma.accessGrant.findMany({ where: { userId: grant.userId, active: true, accessType: grant.accessType } });
     if (still.some((g) => isGrantActive(g, now))) continue;
     await recordEvent({ category: 'SUSCRIPCION', type: 'VENCIDA', actor: SYSTEM, user: grant.user, offer: grant.offer, status: 'Vencido', result: `Venció el ${new Date(grant.expiresAt).toISOString().slice(0, 10)}` });
+    if (grant.user.role === 'CLIENT') await sendClientEmail('ACCESO_VENCIDO', 'accessExpired', grant.user.email, { name: grant.user.name, product: grant.offer?.name }).catch(() => null);
     count += 1;
   }
   return count;
