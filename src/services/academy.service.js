@@ -3,7 +3,7 @@ import { ACTIVE_MODULES, BLOCK1_MODULES, BLOCK2_MODULES, canChooseRoute, canRead
 import { evaluateMarketFilter, professionalOperation, riskExposure, simulateTrade, buildAllocation } from '../domain/learning.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { accessFor } from './access.service.js';
-import { masterclassStatus, readMasterclass } from './masterclass.service.js';
+import { completeMasterclass, masterclassCatalog, masterclassStatus, readMasterclass } from './masterclass.service.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
 
 const STATE_MESSAGES = {
@@ -107,7 +107,7 @@ export async function getModule(req, number) {
     essentials: content.essentials || [],
     riskNotes: content.riskNotes || [],
     lesson: full ? content.lesson || [] : null,
-    masterclass: await masterclassStatus(ctx.access, req.asAdmin),
+    masterclass: await masterclassStatus(ctx.access, req.asAdmin, number, req.subjectId),
     exerciseGuide: full ? content.exercise || null : null,
     media: full
       ? mod.media.map((m) => ({ id: m.id, fileType: m.fileType, provider: m.provider, name: m.name, mimeType: m.mimeType, url: m.provider === 'CLOUDINARY' ? m.url : null }))
@@ -116,9 +116,20 @@ export async function getModule(req, number) {
 }
 
 export async function getMasterclass(req, number) {
-  const ctx = await learningContext(req);
-  await openModule(req, number, ctx);
-  return readMasterclass(ctx.access, req.asAdmin, number);
+  if (!ACTIVE_MODULES.includes(number)) throw notFound('Módulo no encontrado');
+  const access = await accessFor(req);
+  return readMasterclass(access, req.asAdmin, number, req.subjectId);
+}
+
+export async function masterclassOverview(req) {
+  const access = await accessFor(req);
+  return masterclassCatalog(access, req.asAdmin, req.subjectId);
+}
+
+export async function finishMasterclass(req, number) {
+  if (!ACTIVE_MODULES.includes(number)) throw notFound('Módulo no encontrado');
+  const access = await accessFor(req);
+  return completeMasterclass(access, req.asAdmin, req.subjectId, number);
 }
 
 export async function assertToolOpen(req, number) {

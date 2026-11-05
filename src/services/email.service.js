@@ -90,6 +90,12 @@ ${codes.map((c) => `<p style="margin:10px 0;font-size:22px;letter-spacing:3px;fo
     body: `<p>Tu cuenta fue creada correctamente. Desde tu plataforma podrás registrar tu situación financiera y avanzar en tu programa educativo.</p>${button(`${env.frontendUrl}/app`, 'Entrar a mi plataforma')}`,
     text: `Hola ${name}, tu cuenta en QLC Financial Education fue creada. Entra en ${env.frontendUrl}/app`,
   }),
+  retention: ({ name, left, deleteOn, product }) => ({
+    subject: left === 1 ? 'Último aviso: mañana se elimina tu cuenta QLC' : `Tu cuenta QLC se elimina en ${left} días`,
+    title: left === 1 ? 'Queda 1 día para renovar' : `Quedan ${left} días para renovar`,
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Tu suscripción${product ? ` a <b>${escapeHtml(product)}</b>` : ''} terminó. Si no la renuevas, el ${escapeHtml(when(deleteOn))} el sistema eliminará tu cuenta y toda la información que registraste en la plataforma.</p><p>Renueva ahora para conservar tu avance, tus registros y tu historial.</p>${button(`${env.frontendUrl}/app/acceso`, 'Renovar mi acceso')}`,
+    text: `Hola ${name}, tu suscripción QLC terminó. Quedan ${left} día(s): si no renuevas, el ${when(deleteOn)} se eliminará tu cuenta y tu información. Renueva en ${env.frontendUrl}/app/acceso`,
+  }),
   test: ({ name }) => ({
     subject: 'Correo de prueba · QLC Financial Education',
     title: 'Integración de Gmail funcionando',

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { prisma } from '../config/prisma.js';
-import { canReadMasterclass } from '../domain/access.js';
-import { forbidden, notFound } from '../utils/httpError.js';
+import { ACTIVE_MODULES, canReadMasterclass } from '../domain/access.js';
+import { badRequest, conflict, forbidden, notFound } from '../utils/httpError.js';
 import { publicOffer } from './access.service.js';
 
 const DIR = new URL('../content/masterclass/', import.meta.url);
@@ -20,10 +20,31 @@ export async function saveMasterclassSettings({ includedWithFull }) {
   return masterclassSettings();
 }
 
-export async function masterclassStatus(access, asAdmin = false) {
-  const [settings, offer] = await Promise.all([masterclassSettings(), prisma.productOffer.findUnique({ where: { code: 'MASTERCLASS' } })]);
-  const available = asAdmin || canReadMasterclass(access, settings.includedWithFull);
-  return { available, includedWithFull: settings.includedWithFull, offer: offer?.active ? publicOffer(offer) : null };
+const moduleOffer = (n) => prisma.productOffer.findUnique({ where: { code: `MASTERCLASS_M${n}` } });
+
+async function completedSet(userId) {
+  const [mc, progress] = await Promise.all([
+    prisma.masterclassProgress.findMany({ where: { userId }, select: { moduleNumber: true } }),
+    prisma.moduleProgress.findMany({ where: { userId, status: 'COMPLETED' }, select: { module: { select: { month: true } } } }),
+  ]);
+  return new Set([...mc.map((m) => m.moduleNumber), ...progress.map((p) => p.module.month)]);
+}
+
+export async function masterclassStatus(access, asAdmin = false, number = null, userId = null) {
+  const settings = await masterclassSettings();
+  const available = asAdmin || canReadMasterclass(access, settings.includedWithFull, number);
+  const offer = number ? await moduleOffer(number) : null;
+  const done = userId && number && number > 1 ? await completedSet(userId) : null;
+  const previousDone = !number || number === 1 || asAdmin || (done ? done.has(number - 1) : false);
+  const expiresAt = number ? (access.masterclassModules || []).find((m) => m.moduleNumber === number)?.expiresAt || null : null;
+  return {
+    available,
+    includedWithFull: settings.includedWithFull,
+    offer: offer?.active ? publicOffer(offer) : null,
+    canBuy: !available && !!offer?.active && previousDone,
+    previousDone,
+    expiresAt,
+  };
 }
 
 export async function masterclassBlocks(number) {
@@ -35,8 +56,49 @@ export async function masterclassBlocks(number) {
   return cache.get(number);
 }
 
-export async function readMasterclass(access, asAdmin, number) {
-  const status = await masterclassStatus(access, asAdmin);
-  if (!status.available) throw forbidden(status.offer ? 'La Masterclass se adquiere por separado' : 'La Masterclass está disponible con el acceso completo');
+export async function readMasterclass(access, asAdmin, number, userId) {
+  const status = await masterclassStatus(access, asAdmin, number, userId);
+  if (!status.available) throw forbidden(status.offer ? 'La Masterclass de este módulo se adquiere por separado' : 'La Masterclass está disponible con el acceso completo');
   return { number, blocks: await masterclassBlocks(number) };
+}
+
+export async function masterclassCatalog(access, asAdmin, userId) {
+  const [settings, modules, offers, done] = await Promise.all([
+    masterclassSettings(),
+    prisma.academyModule.findMany({ where: { month: { in: ACTIVE_MODULES } }, orderBy: { month: 'asc' }, select: { month: true, title: true } }),
+    prisma.productOffer.findMany({ where: { code: { in: ACTIVE_MODULES.map((n) => `MASTERCLASS_M${n}`) } } }),
+    completedSet(userId),
+  ]);
+  return modules.map((m) => {
+    const n = m.month;
+    const available = asAdmin || canReadMasterclass(access, settings.includedWithFull, n);
+    const offer = offers.find((o) => o.code === `MASTERCLASS_M${n}`);
+    const previousDone = n === 1 || done.has(n - 1) || asAdmin;
+    const expiresAt = (access.masterclassModules || []).find((x) => x.moduleNumber === n)?.expiresAt || null;
+    return {
+      number: n,
+      title: m.title,
+      completed: done.has(n),
+      available,
+      expiresAt,
+      previousDone,
+      offer: offer?.active ? publicOffer(offer) : null,
+      state: available ? 'AVAILABLE' : !previousDone ? 'LOCKED_ORDER' : offer?.active ? 'PURCHASABLE' : 'LOCKED',
+    };
+  });
+}
+
+export async function completeMasterclass(access, asAdmin, userId, number) {
+  const status = await masterclassStatus(access, asAdmin, number, userId);
+  if (!status.available) throw forbidden('No tienes acceso a esta Masterclass');
+  await prisma.masterclassProgress.upsert({ where: { userId_moduleNumber: { userId, moduleNumber: number } }, create: { userId, moduleNumber: number }, update: {} });
+  return { ok: true };
+}
+
+export async function assertCanBuyMasterclass(userId, offer, access) {
+  const n = offer.moduleNumber;
+  if (!n) return;
+  const settings = await masterclassSettings();
+  if (canReadMasterclass(access, settings.includedWithFull, n)) throw conflict('Ya tienes acceso a la Masterclass de este módulo');
+  if (n > 1 && !(await completedSet(userId)).has(n - 1)) throw badRequest(`Primero completa la Masterclass del Módulo ${n - 1}: los módulos no se pueden saltar`);
 }

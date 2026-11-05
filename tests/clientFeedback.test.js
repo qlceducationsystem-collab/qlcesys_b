@@ -157,6 +157,9 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     const scheduledAt = new Date(Date.now() + 2 * 86400000).toISOString();
     assert.equal((await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 45 })).status, 400);
     assert.equal((await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 40, channel: 'VIDEOLLAMADA' })).status, 400);
+    assert.equal((await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 40, channel: 'CHAT_INTERNO' })).status, 402);
+    const me = await prisma.user.findUnique({ where: { email: `c-${uid}@test.qlc` } });
+    await prisma.serviceCredit.createMany({ data: [{ userId: me.id, kind: 'ORIENTACION', source: 'MANUAL' }, { userId: me.id, kind: 'ORIENTACION', source: 'MANUAL' }] });
     const ok = await api('c').post('/api/appointments', { reason: 'Presupuesto', scheduledAt, durationMin: 40, channel: 'CHAT_INTERNO' });
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
     assert.equal(ok.body.channel, 'CHAT_INTERNO');

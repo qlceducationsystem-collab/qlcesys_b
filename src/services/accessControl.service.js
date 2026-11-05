@@ -76,7 +76,8 @@ export async function grantManual(admin, { userId, offerCode, expiresAt, reason,
     data: { userId, offerId: offer.id, accessType: offer.type, moduleNumber: offer.moduleNumber, startsAt: new Date(), expiresAt: until, source: 'MANUAL', reason: label, grantedById: admin.id },
     include: { offer: true },
   });
-  await prisma.user.update({ where: { id: userId }, data: { subscriptionCancelledAt: null } });
+  if (offer.sessions > 0) await prisma.serviceCredit.createMany({ data: Array.from({ length: offer.sessions }, () => ({ userId, kind: 'ORIENTACION', source: 'MANUAL', grantId: grant.id, expiresAt: until })) });
+  await prisma.user.update({ where: { id: userId }, data: { subscriptionCancelledAt: null, retentionStage: 0 } });
   await recordEvent({ category: 'ACCESO', type: 'ACCESO_CONCEDIDO', actor: actorOf(admin), user, offer, status: 'Activo', result: `Autorizado hasta ${day(until)} · ${label}` });
   return grantView(grant, new Map([[admin.id, admin.name]]));
 }

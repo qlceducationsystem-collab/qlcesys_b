@@ -3,6 +3,7 @@ import { isGrantActive } from '../domain/access.js';
 import { forbidden } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { actorOf, recordEvent, SYSTEM } from './adminEvent.service.js';
+import { sendEmail } from './email.service.js';
 
 export const SUBSCRIBER_STATES = {
   ACTIVO: 'Activo',
@@ -111,8 +112,68 @@ export async function detectExpirations(now = new Date()) {
   return count;
 }
 
+const RETENTION_KEY = 'retention';
+const DAY = 86400000;
+export const RETENTION_STEPS = [{ day: 10, left: 20 }, { day: 20, left: 10 }, { day: 29, left: 1 }];
+export const RETENTION_DAYS = 30;
+
+export async function retentionSettings() {
+  const row = await prisma.appSetting.findUnique({ where: { key: RETENTION_KEY } });
+  return { enabled: true, since: null, ...(row?.value || {}), steps: RETENTION_STEPS, days: RETENTION_DAYS };
+}
+
+export async function saveRetentionSettings({ enabled }) {
+  const current = await retentionSettings();
+  const value = { enabled: !!enabled, since: enabled ? current.since || new Date().toISOString() : current.since };
+  if (enabled && !current.enabled) value.since = new Date().toISOString();
+  await prisma.appSetting.upsert({ where: { key: RETENTION_KEY }, create: { key: RETENTION_KEY, value }, update: { value } });
+  return retentionSettings();
+}
+
+export async function runRetention(now = new Date(), { only } = {}) {
+  let settings = await retentionSettings();
+  if (!settings.enabled) return { notified: 0, deleted: 0 };
+  if (!settings.since) settings = await saveRetentionSettings({ enabled: true });
+  const since = new Date(settings.since);
+  const users = await prisma.user.findMany({
+    where: { role: 'CLIENT', accessGrants: { some: {} }, ...(only ? { id: { in: only } } : {}) },
+    select: { id: true, name: true, email: true, retentionStage: true, accessGrants: { include: { offer: true } } },
+    take: 2000,
+  });
+  let notified = 0;
+  let deleted = 0;
+  for (const user of users) {
+    const grants = user.accessGrants;
+    if (grants.some((g) => g.active && (isGrantActive(g, now) || !g.expiresAt))) {
+      if (user.retentionStage) await prisma.user.update({ where: { id: user.id }, data: { retentionStage: 0 } });
+      continue;
+    }
+    const lastExpiry = latest(grants.map((g) => g.revokedAt && (!g.expiresAt || g.revokedAt < g.expiresAt) ? g.revokedAt : g.expiresAt));
+    if (!lastExpiry) continue;
+    const base = lastExpiry > since ? lastExpiry : since;
+    const days = Math.floor((now - base) / DAY);
+    const offer = [...grants].sort((a, b) => new Date(b.expiresAt || 0) - new Date(a.expiresAt || 0))[0]?.offer || null;
+    if (days >= RETENTION_DAYS && user.retentionStage >= RETENTION_STEPS.length) {
+      await recordEvent({ category: 'SUSCRIPCION', type: 'CUENTA_ELIMINADA_INACTIVIDAD', actor: SYSTEM, user, offer, status: 'Eliminada', result: `Sin renovación ${days} días después del vencimiento` }).catch(() => null);
+      await prisma.user.delete({ where: { id: user.id } }).catch(() => null);
+      deleted += 1;
+      continue;
+    }
+    const target = RETENTION_STEPS.reduce((acc, step, i) => (days >= step.day ? i + 1 : acc), 0);
+    if (target <= user.retentionStage) continue;
+    const claimed = await prisma.user.updateMany({ where: { id: user.id, retentionStage: user.retentionStage }, data: { retentionStage: target } });
+    if (!claimed.count) continue;
+    const left = RETENTION_STEPS[target - 1].left;
+    const deleteOn = new Date(base.getTime() + RETENTION_DAYS * DAY);
+    await sendEmail('retention', user.email, { name: user.name, left, deleteOn, product: offer?.name }).catch(() => null);
+    await recordEvent({ category: 'SUSCRIPCION', type: 'AVISO_RENOVACION', actor: SYSTEM, user, offer, status: 'Vencido', result: `Aviso enviado: quedan ${left} día(s) antes de eliminar la cuenta` }).catch(() => null);
+    notified += 1;
+  }
+  return { notified, deleted };
+}
+
 export function startSubscriptionJob(intervalMinutes = 60) {
-  const run = () => detectExpirations().catch((err) => console.error('[qlc] vencimientos', err.message));
+  const run = () => detectExpirations().then(() => runRetention()).catch((err) => console.error('[qlc] vencimientos', err.message));
   run();
   return setInterval(run, intervalMinutes * 60000);
 }

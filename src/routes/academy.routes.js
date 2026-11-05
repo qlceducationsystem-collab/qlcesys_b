@@ -9,6 +9,7 @@ import * as academy from '../services/academy.service.js';
 import * as moduleData from '../services/moduleData.service.js';
 import { createMediaLink } from '../services/moduleMedia.service.js';
 
+import { askQuestion, listQuestions } from '../services/credit.service.js';
 const r = Router();
 const moduleNumber = (req) => z.coerce.number().int().min(1).max(12).parse(req.params.n);
 
@@ -18,6 +19,10 @@ r.get('/', ah(async (req, res) => {
 
 r.get('/modules/:n', ah(async (req, res) => res.json(await academy.getModule(req, moduleNumber(req)))));
 r.get('/modules/:n/masterclass', ah(async (req, res) => res.json(await academy.getMasterclass(req, moduleNumber(req)))));
+r.get('/masterclass', ah(async (req, res) => res.json(await academy.masterclassOverview(req))));
+r.post('/modules/:n/masterclass/complete', ah(async (req, res) => res.json(await academy.finishMasterclass(req, moduleNumber(req)))));
+r.get('/modules/:n/questions', ah(async (req, res) => res.json(await listQuestions(req.subjectId, moduleNumber(req)))));
+r.post('/modules/:n/questions', ah(async (req, res) => res.status(201).json(await askQuestion(req, moduleNumber(req), req.body?.question))));
 
 r.put('/modules/:n/progress', validate(moduleProgressSchema), ah(async (req, res) => {
   const n = moduleNumber(req);

@@ -8,11 +8,13 @@ import * as payments from '../services/payments/payment.service.js';
 import { activeProvider } from '../services/payments/providers.js';
 import { checkPromotion } from '../services/promotion.service.js';
 import * as subscribers from '../services/subscriber.service.js';
+import { creditBalance } from '../services/credit.service.js';
 
 const r = Router();
 const checkoutSchema = z.object({
   offerCode: z.string().trim().min(1).max(40).optional(),
   promoCode: z.string().trim().min(4).max(40).optional(),
+  quantity: z.coerce.number().int().min(1).max(payments.MAX_GIFTS).optional(),
   gift: z.object({
     quantity: z.coerce.number().int().min(1).max(payments.MAX_GIFTS).default(1),
     message: z.string().trim().max(500).optional().nullable(),
@@ -34,6 +36,8 @@ r.get('/attempts', ah(async (req, res) => res.json(await payments.listMyAttempts
 r.post('/checkout', requireRole('CLIENT'), validate(checkoutSchema), ah(async (req, res) => {
   res.status(201).json(await payments.createCheckout(req.user, req.body));
 }));
+
+r.get('/credits', ah(async (req, res) => res.json(await creditBalance(req.user.id))));
 
 r.post('/promo/check', requireRole('CLIENT'), validate(codeSchema), ah(async (req, res) => res.json(await checkPromotion(req.user.id, req.body.code))));
 

@@ -116,6 +116,7 @@ export async function redeemGift(user, code) {
       data: { userId: user.id, offerId: gift.offerId, accessType: gift.offer.type, moduleNumber: gift.offer.moduleNumber, startsAt, expiresAt, source: 'REGALO', reason: `Código de regalo ${gift.code}` },
     });
     await tx.giftCode.update({ where: { id: gift.id }, data: { grantId: grant.id } });
+    if (gift.offer.sessions > 0) await tx.serviceCredit.createMany({ data: Array.from({ length: gift.offer.sessions }, () => ({ userId: user.id, kind: 'ORIENTACION', source: 'REGALO', grantId: grant.id, expiresAt })) });
     await tx.user.update({ where: { id: user.id }, data: { subscriptionCancelledAt: null } });
     const event = await recordEvent({ category: 'REGALO', type: 'REGALO_CANJEADO', actor: actorOf(user), user, offer: gift.offer, status: 'Activo', result: `Código ${gift.code} · vence ${expiresAt.toISOString().slice(0, 10)}` }, tx);
     return { event, product: gift.offer.name, startsAt, expiresAt };

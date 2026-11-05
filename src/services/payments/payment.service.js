@@ -6,9 +6,12 @@ import { loadGrants } from '../access.service.js';
 import { actorOf, GATEWAY, notifyEvent, recordEvent } from '../adminEvent.service.js';
 import { createGiftCodes, emailGiftCodes } from '../gift.service.js';
 import { promoPrice, usablePromotion } from '../promotion.service.js';
+import { grantCredits } from '../credit.service.js';
+import { assertCanBuyMasterclass } from '../masterclass.service.js';
 import { activeProvider, providerByCode } from './providers.js';
 
 export const MAX_GIFTS = 20;
+const SERVICE_TYPES = ['CONSULTA', 'ORIENTACION'];
 
 const attemptView = (a) => ({
   id: a.id,
@@ -24,7 +27,7 @@ const attemptView = (a) => ({
   offer: a.offer ? { code: a.offer.code, name: a.offer.name, type: a.offer.type, moduleNumber: a.offer.moduleNumber } : undefined,
 });
 
-async function checkoutData(user, { offerCode, promoCode, gift }) {
+async function checkoutData(user, { offerCode, promoCode, gift, quantity: wanted }) {
   if (promoCode) {
     const promo = await usablePromotion(user.id, promoCode);
     if (promo.offer.price === null) throw conflict('Este producto todavía no tiene precio definido');
@@ -45,6 +48,11 @@ async function checkoutData(user, { offerCode, promoCode, gift }) {
   const access = summarizeAccess(await loadGrants(user.id));
   const permanentTool = grantTools(offer).every((n) => access.toolAccess.some((t) => t.moduleNumber === n && !t.expiresAt));
   if (offer.type === 'TOOL_ONLY' && (access.full || permanentTool)) throw conflict('Ya tienes acceso a las herramientas');
+  if (offer.type === 'MASTERCLASS') await assertCanBuyMasterclass(user.id, offer, access);
+  if (SERVICE_TYPES.includes(offer.type)) {
+    const quantity = Math.min(MAX_GIFTS, Math.max(1, Number(wanted) || 1));
+    return { offer, kind: 'STANDARD', amount: offer.price === null ? null : round2(num(offer.price) * quantity), quantity };
+  }
   return { offer, kind: 'STANDARD', amount: offer.price, quantity: 1 };
 }
 
@@ -103,12 +111,19 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
       gifts = await createGiftCodes(tx, attempt);
       events.push(await recordEvent({ category: 'REGALO', type: 'REGALO_COMPRADO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: `${attempt.quantity} código(s) disponible(s)`, amount: attempt.amount, result: gifts.codes.join(', ') }, tx));
     } else {
+      if (SERVICE_TYPES.includes(attempt.offer.type)) {
+        await grantCredits(tx, { userId: attempt.userId, kind: attempt.offer.type, quantity: attempt.quantity, source: 'PAGO', paymentAttemptId: attempt.id });
+        events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'SERVICIO_COMPRADO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: `${attempt.quantity} disponible(s)`, amount: attempt.amount }, tx));
+        return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true, events, offer: attempt.offer, userId: attempt.userId };
+      }
       const type = await subscriptionEventType(tx, attempt);
       const grants = await tx.accessGrant.findMany({ where: { userId: attempt.userId, active: true } });
       const { startsAt, expiresAt } = grantWindow(attempt.offer, renewalBase(grants, attempt.offer));
-      await tx.accessGrant.create({
+      const grant = await tx.accessGrant.create({
         data: { userId: attempt.userId, offerId: attempt.offerId, paymentAttemptId: attempt.id, accessType: attempt.offer.type, moduleNumber: attempt.offer.moduleNumber, startsAt, expiresAt, source: 'PAGO' },
       });
+      if (attempt.offer.sessions > 0) await grantCredits(tx, { userId: attempt.userId, kind: 'ORIENTACION', quantity: attempt.offer.sessions, source: 'MEMBRESIA', grantId: grant.id, paymentAttemptId: attempt.id, expiresAt });
+      await tx.user.update({ where: { id: attempt.userId }, data: { retentionStage: 0 } });
       await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null } });
       events.push(await recordEvent({ category: 'SUSCRIPCION', type, actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Activo', amount: attempt.amount, result: `Vigente hasta ${expiresAt.toISOString().slice(0, 10)}` }, tx));
     }

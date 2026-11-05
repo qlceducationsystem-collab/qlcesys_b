@@ -29,6 +29,10 @@ export const EVENT_LABELS = {
   REGALO_CANJEADO: 'Regalo canjeado',
   REGALO_CANCELADO: 'Regalo cancelado',
   NUEVO_REGISTRO: 'Nuevo usuario registrado',
+  SERVICIO_COMPRADO: 'Consulta u orientación adquirida',
+  NUEVA_CONSULTA: 'Nueva consulta sobre ejercicios',
+  AVISO_RENOVACION: 'Aviso de renovación enviado al cliente',
+  CUENTA_ELIMINADA_INACTIVIDAD: 'Cuenta eliminada por falta de renovación',
   NUEVA_SOLICITUD: 'Nueva solicitud de información',
   NUEVA_CITA: 'Nueva cita de asesoría',
   CITA_CANCELADA: 'Cita de asesoría cancelada',
@@ -39,11 +43,11 @@ export const EVENT_LABELS = {
 };
 
 export const EVENT_GROUPS = [
-  ['Suscriptores y pagos', ['CONTRATADA', 'ACTIVADA', 'RENOVADA', 'VENCIDA', 'CANCELADA', 'PAGO_FALLIDO', 'RECUPERADA', 'IMPORTE_NO_COINCIDE']],
+  ['Suscriptores y pagos', ['CONTRATADA', 'ACTIVADA', 'RENOVADA', 'VENCIDA', 'CANCELADA', 'PAGO_FALLIDO', 'RECUPERADA', 'IMPORTE_NO_COINCIDE', 'SERVICIO_COMPRADO', 'AVISO_RENOVACION', 'CUENTA_ELIMINADA_INACTIVIDAD']],
   ['Promociones', ['PROMOCION_CREADA', 'PROMOCION_ENVIADA', 'PROMOCION_CANCELADA', 'PAGO_PROMOCIONAL']],
   ['Control de accesos', ['ACCESO_CONCEDIDO', 'VENCIMIENTO_MODIFICADO', 'ACCESO_RETIRADO', 'ACCESO_AUTORIZADO', 'AUTORIZACION_RECHAZADA', 'CONTRASENA_MAESTRA', 'CONTRASENA_MAESTRA_CAMBIADA', 'AUTORIZACION_FALLIDA']],
   ['Regalos', ['REGALO_COMPRADO', 'REGALO_CANJEADO', 'REGALO_CANCELADO']],
-  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA']],
+  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_CONSULTA', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA']],
 ].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: EVENT_LABELS[type] })) }));
 
 export const periodOf = (offer) => {

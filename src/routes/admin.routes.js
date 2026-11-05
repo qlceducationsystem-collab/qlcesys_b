@@ -26,8 +26,9 @@ import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 import { EVENT_GROUPS, listEvents } from '../services/adminEvent.service.js';
 import { mailSettingsView, saveMailSettings } from '../services/mailSettings.service.js';
+import { adminQuestions, answerQuestion, releaseCredits } from '../services/credit.service.js';
 import { masterclassSettings, saveMasterclassSettings } from '../services/masterclass.service.js';
-import { listSubscribers } from '../services/subscriber.service.js';
+import { listSubscribers, retentionSettings, saveRetentionSettings } from '../services/subscriber.service.js';
 import * as promotions from '../services/promotion.service.js';
 import * as gifts from '../services/gift.service.js';
 import * as master from '../services/master.service.js';
@@ -58,6 +59,10 @@ r.post('/promotions/:id/send', EDIT, ah(async (req, res) => res.json(await promo
 r.post('/promotions/:id/cancel', EDIT, ah(async (req, res) => res.json(await promotions.cancelPromotion(req.user, req.params.id))));
 
 r.get('/gifts', ah(async (req, res) => res.json(await gifts.listGifts({ status: req.query.status }))));
+r.get('/retention', ah(async (_req, res) => res.json(await retentionSettings())));
+r.put('/retention', FULL, validate(z.object({ enabled: z.boolean() })), ah(async (req, res) => res.json(await saveRetentionSettings(req.body))));
+r.get('/questions', ah(async (req, res) => res.json(await adminQuestions({ status: req.query.status }))));
+r.patch('/questions/:id', EDIT, ah(async (req, res) => res.json(await answerQuestion(req.user, req.params.id, req.body?.answer))));
 r.get('/masterclass/settings', ah(async (_req, res) => res.json(await masterclassSettings())));
 r.put('/masterclass/settings', FULL, validate(z.object({ includedWithFull: z.boolean() })), ah(async (req, res) => res.json(await saveMasterclassSettings(req.body))));
 r.get('/gifts/settings', ah(async (_req, res) => res.json(await gifts.giftSettings())));
@@ -102,6 +107,7 @@ r.patch('/appointments/:id', EDIT, validate(appointmentAdminSchema), ah(async (r
     if (err.code === 'P2025') throw notFound('Cita no encontrada');
     throw err;
   });
+  if (req.body.status === 'CANCELLED') await releaseCredits(prisma, appointment.id);
   res.json(appointment);
 }));
 

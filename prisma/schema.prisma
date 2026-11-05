@@ -151,6 +151,8 @@ enum OfferType {
   FULL_ANNUAL
   TOOL_ONLY
   MASTERCLASS
+  CONSULTA
+  ORIENTACION
 }
 
 enum PaymentAttemptStatus {
@@ -270,6 +272,7 @@ model User {
   legalVersion       String?
   marketingOptOut    Boolean     @default(false)
   subscriptionCancelledAt DateTime?
+  retentionStage     Int         @default(0)
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -307,6 +310,52 @@ model User {
   promotions       Promotion[]
   giftsPurchased   GiftCode[]  @relation("GiftPurchaser")
   giftsReceived    GiftCode[]  @relation("GiftRecipient")
+  serviceCredits   ServiceCredit[]
+  moduleQuestions  ModuleQuestion[]
+  masterclassDone  MasterclassProgress[]
+}
+
+model ServiceCredit {
+  id               String    @id @default(cuid())
+  userId           String
+  kind             String
+  source           String
+  paymentAttemptId String?
+  grantId          String?
+  expiresAt        DateTime?
+  usedAt           DateTime?
+  usedRef          String?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, usedAt])
+  @@index([usedRef])
+}
+
+model ModuleQuestion {
+  id           String    @id @default(cuid())
+  userId       String
+  moduleNumber Int
+  question     String
+  answer       String?
+  answeredAt   DateTime?
+  answeredById String?
+  creditId     String?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, moduleNumber])
+  @@index([answeredAt])
+}
+
+model MasterclassProgress {
+  id           String   @id @default(cuid())
+  userId       String
+  moduleNumber Int
+  completedAt  DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleNumber])
 }
 
 model PasswordResetToken {
@@ -726,6 +775,7 @@ model ProductOffer {
   accessDays   Int?
   active       Boolean          @default(true)
   giftable     Boolean          @default(true)
+  sessions     Int              @default(0)
   sortOrder    Int              @default(0)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt

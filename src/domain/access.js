@@ -18,6 +18,10 @@ export function summarizeAccess(grants = [], now = new Date()) {
   const fullExpiry = fullGrants.reduce((max, g) => (!max || new Date(g.expiresAt) > max ? new Date(g.expiresAt) : max), null);
   const toolGrants = active.filter((g) => g.accessType === 'TOOL_ONLY');
   const masterclassGrants = active.filter((g) => g.accessType === 'MASTERCLASS');
+  const masterclassAll = masterclassGrants.some((g) => !g.moduleNumber);
+  const masterclassModules = masterclassAll ? ACTIVE_MODULES : [...new Set(masterclassGrants.map((g) => g.moduleNumber))].sort((a, b) => a - b);
+  const masterclassExpiry = (n) => latestDate(masterclassGrants.filter((g) => !g.moduleNumber || g.moduleNumber === n).map((g) => g.expiresAt));
+  const accessGrants = active.filter((g) => g.accessType === 'FULL_ANNUAL' || g.accessType === 'TOOL_ONLY');
   const tools = [...new Set(toolGrants.flatMap(grantTools))].sort((a, b) => a - b);
   const toolExpiry = (n) => {
     const list = toolGrants.filter((g) => grantTools(g).includes(n));
@@ -27,8 +31,9 @@ export function summarizeAccess(grants = [], now = new Date()) {
     full: fullGrants.length ? { active: true, expiresAt: fullExpiry } : null,
     tools,
     toolAccess: tools.map((n) => ({ moduleNumber: n, expiresAt: toolExpiry(n) })),
-    masterclass: masterclassGrants.length ? { active: true, expiresAt: latestDate(masterclassGrants.map((g) => g.expiresAt)) } : null,
-    hasAny: active.length > 0,
+    masterclass: masterclassGrants.length ? { active: true, expiresAt: latestDate(masterclassGrants.map((g) => g.expiresAt)), all: masterclassAll } : null,
+    masterclassModules: masterclassModules.map((n) => ({ moduleNumber: n, expiresAt: masterclassExpiry(n) })),
+    hasAny: accessGrants.length > 0,
     mode: fullGrants.length ? 'FULL' : tools.length ? 'TOOLS' : 'NONE',
   };
 }
@@ -54,14 +59,17 @@ export const canChooseRoute = (access, completed = []) => !access.full ? access.
 
 export const DEFAULT_ACCESS_DAYS = { FULL_ANNUAL: 365, TOOL_ONLY: 30, MASTERCLASS: 365 };
 
-export const canReadMasterclass = (access, includedWithFull) => !!access.masterclass || (includedWithFull && !!access.full);
+export const canReadMasterclass = (access, includedWithFull, moduleNumber = null) =>
+  (includedWithFull && !!access.full)
+  || !!access.masterclass?.all
+  || (moduleNumber !== null && (access.masterclassModules || []).some((m) => m.moduleNumber === moduleNumber));
 
 function latestDate(dates) {
   return dates.filter(Boolean).map((d) => new Date(d)).reduce((max, d) => (!max || d > max ? d : max), null);
 }
 
 export function renewalBase(grants, offer, now = new Date()) {
-  const same = grants.filter((g) => g.active && g.accessType === offer.type && (offer.type !== 'TOOL_ONLY' || g.moduleNumber === offer.moduleNumber));
+  const same = grants.filter((g) => g.active && g.accessType === offer.type && ((offer.type !== 'TOOL_ONLY' && offer.type !== 'MASTERCLASS') || g.moduleNumber === offer.moduleNumber));
   const latest = latestDate(same.map((g) => g.expiresAt));
   return latest && latest > now ? latest : null;
 }

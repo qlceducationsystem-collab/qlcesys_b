@@ -64,7 +64,7 @@ export function createApp() {
   priv('/api/business', businessRouter);
   priv('/api/monthly-closes', closeRoutes);
   priv('/api/annual-reports', annualRoutes);
-  priv('/api/appointments', appointmentRoutes);
+  app.use('/api/appointments', ...subjectAccess, appointmentRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
