@@ -37,6 +37,9 @@ export async function sendGmail(message) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    if (/insufficient authentication scopes/i.test(data.error?.message || '')) {
+      throw new HttpError(502, 'Google no dio permiso para enviar correos. Pulsa Reconectar con Google y marca la casilla de enviar correo electrónico en tu nombre.');
+    }
     throw new HttpError(502, `Gmail rechazó el envío (${data.error?.message || res.status})`);
   }
   return res.json();

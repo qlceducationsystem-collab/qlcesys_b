@@ -1,3 +1,4 @@
+import { resetEmailReady } from '../services/email.service.js';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env.js';
@@ -38,6 +39,7 @@ googleRouter.get('/callback', async (req, res) => {
   if (req.query.error) return res.redirect(`${target}?error=${encodeURIComponent(String(req.query.error))}`);
   try {
     const service = await handleCallback({ code: req.query.code, state: req.query.state });
+    resetEmailReady();
     res.redirect(`${target}?connected=${service}`);
   } catch (err) {
     res.redirect(`${target}?error=${encodeURIComponent(err.message)}`);

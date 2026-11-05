@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { env, googleConfigured } from '../config/env.js';
 import { sendGmail } from './google/gmail.js';
+import { hasGrantedScopes } from './google/oauth.js';
 import nodemailer from 'nodemailer';
 import { mailTransport, notificationSettings, smtpPassword } from './mailSettings.service.js';
 
@@ -29,6 +30,8 @@ export const testEmail = {
   },
 };
 
+export const gmailCanSend = (row) => row?.status === 'CONNECTED' && hasGrantedScopes('GMAIL', row.scopes);
+
 export const resetEmailReady = () => {
   ready = null;
 };
@@ -39,7 +42,7 @@ export async function emailReady() {
   const transport = await mailTransport();
   const value = transport.method === 'SMTP'
     ? !!(transport.email && transport.encryptedPassword && env.tokenEncryptionKey && transport.lastTest?.ok)
-    : googleConfigured() && (await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }))?.status === 'CONNECTED';
+    : googleConfigured() && gmailCanSend(await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }));
   ready = { value, exp: Date.now() + READY_CACHE_MS };
   return value;
 }

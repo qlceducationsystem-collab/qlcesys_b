@@ -14,6 +14,11 @@ export const SERVICE_SCOPES = {
   GMAIL: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send'],
 };
 
+export const hasGrantedScopes = (service, granted) => {
+  const list = String(granted || '').split(/\s+/);
+  return SERVICE_SCOPES[service].filter((s) => s.startsWith('https://')).every((s) => list.includes(s));
+};
+
 const tokenCache = new Map();
 
 function assertConfigured() {
@@ -58,6 +63,9 @@ export async function handleCallback({ code, state }) {
   const service = payload.svc;
   if (!SERVICE_SCOPES[service]) throw badRequest('Servicio no válido');
   const tokens = await tokenRequest({ code: String(code), grant_type: 'authorization_code', redirect_uri: env.google.redirectUri });
+  if (tokens.scope && !hasGrantedScopes(service, tokens.scope)) {
+    throw badRequest('Google no dio permiso para enviar correos. Pulsa Conectar con Google otra vez y marca la casilla de enviar correo electrónico en tu nombre.');
+  }
   if (!tokens.refresh_token) throw badRequest('Google no entregó un token de actualización. Revoca el acceso previo y vuelve a conectar.');
   const info = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } }).then((r) => r.json()).catch(() => ({}));
   tokenCache.set(service, { token: tokens.access_token, exp: Date.now() + (tokens.expires_in - 60) * 1000 });

@@ -129,7 +129,13 @@ export async function masterclassOverview(req) {
 export async function finishMasterclass(req, number) {
   if (!ACTIVE_MODULES.includes(number)) throw notFound('Módulo no encontrado');
   const access = await accessFor(req);
-  return completeMasterclass(access, req.asAdmin, req.subjectId, number);
+  const before = await prisma.masterclassProgress.findUnique({ where: { userId_moduleNumber: { userId: req.subjectId, moduleNumber: number } } });
+  const result = await completeMasterclass(access, req.asAdmin, req.subjectId, number);
+  if (!before && !req.asAdmin) {
+    const client = await prisma.user.findUnique({ where: { id: req.subjectId } });
+    recordEvent({ category: 'PLATAFORMA', type: 'MASTERCLASS_TERMINADA', actor: actorOf(client), user: client, status: `Módulo ${number}` }).catch(() => null);
+  }
+  return result;
 }
 
 export async function assertToolOpen(req, number) {

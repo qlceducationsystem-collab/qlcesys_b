@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 import { badRequest } from '../utils/httpError.js';
+import { hasGrantedScopes } from './google/oauth.js';
 
 const OAUTH_KEY = 'google-oauth';
 const NOTIFY_KEY = 'notifications';
@@ -70,8 +71,14 @@ export async function applyGoogleCredentials() {
 export async function notificationSettings() {
   if (notifyCache) return notifyCache;
   const row = await prisma.appSetting.findUnique({ where: { key: NOTIFY_KEY } }).catch(() => null);
-  notifyCache = { recipients: [], senderName: 'QLC Financial Education', disabled: [], clientDisabled: [], ...(row?.value || {}) };
+  notifyCache = { senderName: 'QLC Financial Education', disabled: [], clientDisabled: [], ...(row?.value || {}) };
   return notifyCache;
+}
+
+export async function notificationAccount() {
+  const transport = await mailTransport();
+  if (transport.method === 'SMTP') return transport.email;
+  return (await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }))?.email || null;
 }
 
 export async function mailSettingsView() {
@@ -82,7 +89,7 @@ export async function mailSettingsView() {
     mailTransport(),
   ]);
   const value = row?.value || {};
-  const oauthConnected = gmail?.status === 'CONNECTED';
+  const oauthConnected = gmail?.status === 'CONNECTED' && hasGrantedScopes('GMAIL', gmail.scopes);
   const smtpReady = !!(transport.email && transport.encryptedPassword && transport.lastTest?.ok);
   return {
     method: transport.method,
@@ -96,15 +103,14 @@ export async function mailSettingsView() {
     source: value.clientId ? 'PANEL' : serverGoogle.clientId ? 'SERVER' : null,
     encryptionReady: !!env.tokenEncryptionKey,
     redirectUri: env.google.redirectUri,
-    gmail: { status: gmail?.status || 'DISCONNECTED', email: gmail?.email || null, connectedAt: gmail?.connectedAt || null, lastError: gmail?.lastError || null },
+    gmail: { status: gmail?.status || 'DISCONNECTED', missingScope: gmail?.status === 'CONNECTED' && !oauthConnected, email: gmail?.email || null, connectedAt: gmail?.connectedAt || null, lastError: gmail?.lastError || null },
     senderName: notify.senderName,
-    recipients: notify.recipients,
     disabled: notify.disabled,
     clientDisabled: notify.clientDisabled,
   };
 }
 
-export async function saveMailSettings({ clientId, clientSecret, senderName, recipients, disabled, clientDisabled, method, smtpEmail, smtpPassword: newSmtpPassword }) {
+export async function saveMailSettings({ clientId, clientSecret, senderName, disabled, clientDisabled, method, smtpEmail, smtpPassword: newSmtpPassword }) {
   if (method !== undefined || smtpEmail !== undefined || newSmtpPassword) {
     if (newSmtpPassword && !env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar la contraseña cifrada');
     const current = await mailTransport();
@@ -130,7 +136,6 @@ export async function saveMailSettings({ clientId, clientSecret, senderName, rec
   const notify = await notificationSettings();
   const value = {
     senderName: senderName ?? notify.senderName,
-    recipients: recipients ?? notify.recipients,
     disabled: disabled ?? notify.disabled,
     clientDisabled: clientDisabled ?? notify.clientDisabled,
   };

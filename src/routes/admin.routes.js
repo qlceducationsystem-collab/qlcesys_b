@@ -138,7 +138,6 @@ const mailSettingsSchema = z.object({
   clientId: z.string().trim().max(200).regex(/^[\w-]+\.apps\.googleusercontent\.com$/, 'El Client ID no es válido: debe terminar en .apps.googleusercontent.com. Revisa que el navegador no haya escrito tu correo en ese campo.').optional(),
   clientSecret: z.string().trim().max(200).optional(),
   senderName: z.string().trim().min(1).max(120).optional(),
-  recipients: z.array(z.string().trim().toLowerCase().email('Correo no válido')).max(20).optional(),
   disabled: z.array(z.string().max(60)).max(100).optional(),
   clientDisabled: z.array(z.string().max(60)).max(100).optional(),
   method: z.enum(['OAUTH', 'SMTP']).optional(),

@@ -1,8 +1,7 @@
 import { prisma } from '../config/prisma.js';
-import { env } from '../config/env.js';
 import { num } from '../utils/money.js';
 import { sendEmail } from './email.service.js';
-import { notificationSettings } from './mailSettings.service.js';
+import { notificationAccount, notificationSettings } from './mailSettings.service.js';
 
 export const EVENT_LABELS = {
   CONTRATADA: 'Suscripción contratada',
@@ -40,6 +39,7 @@ export const EVENT_LABELS = {
   MODULO_COMPLETADO: 'Módulo completado',
   DATOS_COMPARTIDOS: 'Cliente compartió sus datos',
   CUENTA_ELIMINADA: 'Cuenta eliminada por el cliente',
+  MASTERCLASS_TERMINADA: 'Cliente terminó una Masterclass',
   CONTRASENA_RESTABLECIDA: 'Cliente restableció su contraseña por correo',
 };
 
@@ -48,7 +48,7 @@ export const EVENT_GROUPS = [
   ['Promociones', ['PROMOCION_CREADA', 'PROMOCION_ENVIADA', 'PROMOCION_CANCELADA', 'PAGO_PROMOCIONAL']],
   ['Control de accesos', ['ACCESO_CONCEDIDO', 'VENCIMIENTO_MODIFICADO', 'ACCESO_RETIRADO', 'ACCESO_AUTORIZADO', 'AUTORIZACION_RECHAZADA', 'CONTRASENA_MAESTRA', 'CONTRASENA_MAESTRA_CAMBIADA', 'AUTORIZACION_FALLIDA']],
   ['Regalos', ['REGALO_COMPRADO', 'REGALO_CANJEADO', 'REGALO_CANCELADO']],
-  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_CONSULTA', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA', 'CONTRASENA_RESTABLECIDA']],
+  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_CONSULTA', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'MASTERCLASS_TERMINADA', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA', 'CONTRASENA_RESTABLECIDA']],
 ].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: EVENT_LABELS[type] })) }));
 
 export const periodOf = (offer) => {
@@ -81,9 +81,8 @@ const eventView = (e) => ({
 });
 
 async function recipients() {
-  const settings = await notificationSettings();
-  if (settings.recipients?.length) return settings.recipients;
-  if (env.adminNotifyEmails.length) return env.adminNotifyEmails;
+  const account = await notificationAccount();
+  if (account) return [account];
   const admins = await prisma.user.findMany({ where: { role: 'ADMIN', adminLevel: 'FULL', isActive: true }, select: { email: true } });
   return admins.map((a) => a.email);
 }

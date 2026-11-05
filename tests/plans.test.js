@@ -113,6 +113,27 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.equal((await api('mc').get('/api/academy/modules/7/masterclass')).status, 200);
   });
 
+  test('Gmail solo cuenta como conectado si Google dio el permiso de enviar', async () => {
+    const { gmailCanSend } = await import('../src/services/email.service.js');
+    const { buildAuthUrl, handleCallback } = await import('../src/services/google/oauth.js');
+    const { env } = await import('../src/config/env.js');
+    assert.equal(gmailCanSend({ status: 'CONNECTED', scopes: 'openid email' }), false);
+    assert.equal(gmailCanSend({ status: 'CONNECTED', scopes: 'openid email https://www.googleapis.com/auth/gmail.send' }), true);
+    assert.equal(gmailCanSend({ status: 'ERROR', scopes: 'https://www.googleapis.com/auth/gmail.send' }), false);
+    const saved = { ...env.google };
+    const realFetch = global.fetch;
+    env.google.clientId = 'x.apps.googleusercontent.com';
+    env.google.clientSecret = 'secreto';
+    global.fetch = async () => ({ ok: true, json: async () => ({ access_token: 'a', refresh_token: 'r', expires_in: 3600, scope: 'openid email' }) });
+    try {
+      const state = new URL(buildAuthUrl('GMAIL', 'admin')).searchParams.get('state');
+      await assert.rejects(handleCallback({ code: 'c', state }), /no dio permiso/);
+    } finally {
+      global.fetch = realFetch;
+      Object.assign(env.google, saved);
+    }
+  });
+
   test('El panel rechaza un Client ID que no es de Google', async () => {
     const res = await api('admin').put('/api/admin/mail-settings', { clientId: 'correo@gmail.com' });
     assert.equal(res.status, 400);
