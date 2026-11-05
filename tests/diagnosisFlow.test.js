@@ -1,7 +1,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { completeTwoFactor } from './helpers.js';
+import { completeModules, completeTwoFactor } from './helpers.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
@@ -31,6 +31,7 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     token = (await completeTwoFactor(app, res.body.challengeToken)).token;
     const checkout = await post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
     await post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome: 'APPROVED' });
+    await completeModules(prisma, `${uid}@test.qlc`, [1, 2]);
   });
 
   after(async () => {

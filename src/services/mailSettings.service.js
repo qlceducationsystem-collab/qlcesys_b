@@ -5,8 +5,10 @@ import { badRequest } from '../utils/httpError.js';
 
 const OAUTH_KEY = 'google-oauth';
 const NOTIFY_KEY = 'notifications';
+const TRANSPORT_KEY = 'mail-transport';
 const serverGoogle = { clientId: env.google.clientId, clientSecret: env.google.clientSecret };
 let notifyCache = null;
+let transportCache = null;
 
 export const CLIENT_EMAIL_LABELS = {
   BIENVENIDA: 'Bienvenida al crear su cuenta',
@@ -28,6 +30,28 @@ export const CLIENT_EMAIL_GROUPS = [
 ].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: CLIENT_EMAIL_LABELS[type] })) }));
 
 const mask = (v) => (v ? `${v.slice(0, 6)}••••••••${v.slice(-4)}` : null);
+const maskEmail = (v) => {
+  if (!v) return null;
+  const [name, domain] = v.split('@');
+  return `${name.slice(0, 3)}••••••••@${domain}`;
+};
+
+export async function mailTransport() {
+  if (transportCache) return transportCache;
+  const row = await prisma.appSetting.findUnique({ where: { key: TRANSPORT_KEY } }).catch(() => null);
+  transportCache = { method: 'OAUTH', email: null, encryptedPassword: null, lastTest: null, ...(row?.value || {}) };
+  return transportCache;
+}
+
+async function saveTransport(changes) {
+  const value = { ...(await mailTransport()), ...changes };
+  await prisma.appSetting.upsert({ where: { key: TRANSPORT_KEY }, create: { key: TRANSPORT_KEY, value }, update: { value } });
+  transportCache = null;
+}
+
+export const smtpPassword = (transport) => decryptSecret(transport.encryptedPassword);
+
+export const recordMailTest = (result) => saveTransport({ lastTest: { at: new Date().toISOString(), ok: !!result.sent, error: result.sent ? null : String(result.error || '').slice(0, 300) } });
 
 export async function applyGoogleCredentials() {
   const row = await prisma.appSetting.findUnique({ where: { key: OAUTH_KEY } }).catch(() => null);
@@ -51,13 +75,22 @@ export async function notificationSettings() {
 }
 
 export async function mailSettingsView() {
-  const [row, notify, gmail] = await Promise.all([
+  const [row, notify, gmail, transport] = await Promise.all([
     prisma.appSetting.findUnique({ where: { key: OAUTH_KEY } }),
     notificationSettings(),
     prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }),
+    mailTransport(),
   ]);
   const value = row?.value || {};
+  const oauthConnected = gmail?.status === 'CONNECTED';
+  const smtpReady = !!(transport.email && transport.encryptedPassword && transport.lastTest?.ok);
   return {
+    method: transport.method,
+    connected: transport.method === 'SMTP' ? smtpReady : oauthConnected,
+    account: maskEmail(transport.method === 'SMTP' ? transport.email : gmail?.email),
+    smtpEmail: transport.email,
+    hasSmtpPassword: !!transport.encryptedPassword,
+    lastTest: transport.lastTest,
     clientId: mask(value.clientId || serverGoogle.clientId),
     hasSecret: !!(value.encryptedSecret || serverGoogle.clientSecret),
     source: value.clientId ? 'PANEL' : serverGoogle.clientId ? 'SERVER' : null,
@@ -71,7 +104,19 @@ export async function mailSettingsView() {
   };
 }
 
-export async function saveMailSettings({ clientId, clientSecret, senderName, recipients, disabled, clientDisabled }) {
+export async function saveMailSettings({ clientId, clientSecret, senderName, recipients, disabled, clientDisabled, method, smtpEmail, smtpPassword: newSmtpPassword }) {
+  if (method !== undefined || smtpEmail !== undefined || newSmtpPassword) {
+    if (newSmtpPassword && !env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar la contraseña cifrada');
+    const current = await mailTransport();
+    const emailChanged = smtpEmail !== undefined && (smtpEmail || null) !== current.email;
+    const methodChanged = method !== undefined && method !== current.method;
+    await saveTransport({
+      ...(emailChanged || methodChanged || newSmtpPassword ? { lastTest: null } : {}),
+      ...(method !== undefined ? { method } : {}),
+      ...(smtpEmail !== undefined ? { email: smtpEmail || null } : {}),
+      ...(newSmtpPassword ? { encryptedPassword: encryptSecret(newSmtpPassword.replace(/\s+/g, '')) } : emailChanged ? { encryptedPassword: null } : {}),
+    });
+  }
   if (clientId !== undefined || clientSecret) {
     if (!env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar las credenciales cifradas');
     const current = (await prisma.appSetting.findUnique({ where: { key: OAUTH_KEY } }))?.value || {};

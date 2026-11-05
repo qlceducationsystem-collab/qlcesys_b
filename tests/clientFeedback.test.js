@@ -2,7 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { completeTwoFactor, nextCode } from './helpers.js';
+import { completeModules, completeTwoFactor, nextCode } from './helpers.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
@@ -47,6 +47,7 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     await register('c');
     const checkout = await api('c').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
     await api('c').post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome: 'APPROVED' });
+    await completeModules(prisma, `c-${uid}@test.qlc`, [1, 2, 3, 7, 8, 9, 10, 11]);
     const email = `admin-${uid}@admin.qlc`;
     await prisma.user.create({ data: { email, name: 'admin', role: 'ADMIN', adminLevel: 'FULL', passwordHash: await bcrypt.hash('AdminPass123!', 4) } });
     const login = await request(app).post('/api/auth/login').send({ email, password: 'AdminPass123!' });

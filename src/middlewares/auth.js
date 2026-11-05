@@ -50,10 +50,12 @@ async function userFromToken(token) {
   }
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, name: true, role: true, adminLevel: true, isActive: true },
+    select: { id: true, email: true, name: true, role: true, adminLevel: true, isActive: true, sessionsValidFrom: true },
   });
   if (!user || !user.isActive) throw unauthorized('Usuario no disponible');
-  return user;
+  if (user.sessionsValidFrom && payload.iat * 1000 < user.sessionsValidFrom.getTime()) throw unauthorized('Sesión inválida o expirada');
+  const { sessionsValidFrom: _ignored, ...visible } = user;
+  return visible;
 }
 
 export async function authenticate(req, _res, next) {

@@ -2,7 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { completeTwoFactor } from './helpers.js';
+import { completeTwoFactor, completeModules } from './helpers.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const run = TEST_DB ? describe : describe.skip;
@@ -186,8 +186,13 @@ run('API (integración)', () => {
     assert.equal(await prisma.educationalSimulation.count({ where: { userId: ids.a } }), 3);
   });
 
-  test('Solo herramientas: un pago abre las 12 herramientas sin academia', async () => {
+  test('Solo herramientas: un pago da acceso sin academia y los módulos se abren en orden', async () => {
     await buy('tools', 'TOOLS_ALL');
+    assert.equal((await api('tools').get('/api/academy/modules/1')).status, 200);
+    assert.equal((await api('tools').get('/api/academy/modules/3')).status, 403);
+    assert.equal((await api('tools').get('/api/academy/modules/12')).status, 403);
+    const email = (await api('tools').get('/api/auth/me')).body.user.email;
+    await completeModules(prisma, email, [1, 2, 3, 7, 8, 9, 10, 11]);
     const m3 = await api('tools').get('/api/academy/modules/3');
     assert.equal(m3.status, 200);
     assert.equal(m3.body.mode, 'TOOL_ONLY');

@@ -97,6 +97,21 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     assert.equal((await api('mc').post('/api/payments/checkout', { offerCode: 'MASTERCLASS_M2' })).status, 409);
   });
 
+  test('En la Masterclass los módulos 4 a 6 son opcionales: tras el 3 se puede pasar al 7', async () => {
+    const userId = ids.mc;
+    await prisma.masterclassProgress.createMany({ data: [2, 3].map((moduleNumber) => ({ userId, moduleNumber })), skipDuplicates: true });
+    const items = await catalog('mc');
+    const seven = items.find((m) => m.number === 7);
+    assert.equal(seven.state, 'PURCHASABLE');
+    assert.equal(seven.previousNumber, 3);
+    assert.equal(items.find((m) => m.number === 4).state, 'PURCHASABLE');
+    assert.equal(items.find((m) => m.number === 4).optional, true);
+    assert.equal(items.find((m) => m.number === 5).state, 'LOCKED_ORDER');
+    assert.equal(items.find((m) => m.number === 8).state, 'LOCKED_ORDER');
+    await buy('mc', { offerCode: 'MASTERCLASS_M7' });
+    assert.equal((await api('mc').get('/api/academy/modules/7/masterclass')).status, 200);
+  });
+
   test('Sin acceso activo no se venden consultas, porque no hay donde usarlas', async () => {
     assert.equal((await api('gone').post('/api/payments/checkout', { offerCode: 'CONSULTA' })).status, 409);
   });

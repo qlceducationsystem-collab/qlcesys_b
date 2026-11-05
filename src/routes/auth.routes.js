@@ -26,6 +26,9 @@ r.post('/data-share/messages', authenticate, ah(async (req, res) => res.status(2
 r.post('/data-share/stop', authenticate, ah(async (req, res) => res.json(await dataShare.stopShareByClient(req.user))));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 
+r.post('/password-reset/request', authLimiter, validate(schemas.emailCodeSchema), ah(async (req, res) => res.json(await auth.requestPasswordReset(req.body))));
+r.post('/password-reset/confirm', authLimiter, validate(schemas.resetWithCodeSchema), ah(async (req, res) => res.json(await auth.confirmPasswordReset(req.body))));
+
 r.post('/reset-password', authLimiter, validate(schemas.resetWithCodeSchema), ah(async (req, res) => {
   await auth.resetPasswordWithCode(req.body);
   res.json({ message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });

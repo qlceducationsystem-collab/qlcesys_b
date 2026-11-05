@@ -2,7 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { completeTwoFactor } from './helpers.js';
+import { completeTwoFactor, completeModules } from './helpers.js';
 import { annualWindow, shiftMonth } from '../src/domain/patrimonial.js';
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
@@ -99,6 +99,8 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     const overview = await api('p').get('/api/academy');
     assert.equal(overview.body.block2[0].state, 'AVAILABLE');
     assert.equal(overview.body.block1.find((m) => m.number === 4).state, 'LOCKED_FILTER');
+    assert.equal((await api('tool7').get('/api/academy/modules/7')).status, 403);
+    await completeModules(prisma, (await api('tool7').get('/api/auth/me')).body.user.email, [1, 2, 3, 7]);
     const toolOnly = await api('tool7').get('/api/academy/modules/7');
     assert.equal(toolOnly.status, 200);
     assert.equal(toolOnly.body.mode, 'TOOL_ONLY');

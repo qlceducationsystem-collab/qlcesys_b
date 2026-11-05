@@ -45,6 +45,19 @@ test('Solo herramientas: cada herramienta requiere su compra; mercados requieren
   assert.equal(moduleState(1, { access: summarizeAccess([], now) }), 'LOCKED_ACCESS');
 });
 
+test('Herramientas completas: se desbloquean en orden y los módulos 4 a 6 son opcionales', () => {
+  const access = summarizeAccess([{ ...tool(null), expiresAt: new Date(+now + 30 * day) }], now);
+  assert.equal(moduleState(1, { access }), 'AVAILABLE');
+  assert.equal(moduleState(2, { access }), 'LOCKED_ORDER');
+  assert.equal(moduleState(2, { access, completed: [1] }), 'AVAILABLE');
+  assert.equal(canChooseRoute(access, [1, 2]), false);
+  assert.equal(canChooseRoute(access, [1, 2, 3]), true);
+  assert.equal(moduleState(4, { access, completed: [1, 2, 3], filterPassed: true }), 'LOCKED_ROUTE');
+  assert.equal(moduleState(7, { access, completed: [1, 2] }), 'LOCKED_ORDER');
+  assert.equal(moduleState(7, { access, completed: [1, 2, 3] }), 'AVAILABLE');
+  assert.equal(moduleState(8, { access, completed: [1, 2, 3] }), 'LOCKED_ORDER');
+});
+
 test('Ventana del acceso anual: renovación se suma al vencimiento vigente', () => {
   const offer = { type: 'FULL_ANNUAL', accessDays: 365 };
   const w = grantWindow(offer, null, now);

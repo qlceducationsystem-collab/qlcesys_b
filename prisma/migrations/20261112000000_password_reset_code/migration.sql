@@ -1,0 +1,4 @@
+ALTER TABLE "User" ADD COLUMN "resetCodeHash" TEXT;
+ALTER TABLE "User" ADD COLUMN "resetCodeExpiresAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "resetCodeAttempts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "sessionsValidFrom" TIMESTAMP(3);

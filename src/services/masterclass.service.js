@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { prisma } from '../config/prisma.js';
-import { ACTIVE_MODULES, canReadMasterclass } from '../domain/access.js';
+import { ACTIVE_MODULES, MARKET_MODULES, canReadMasterclass, prerequisiteOf } from '../domain/access.js';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError.js';
 import { publicOffer } from './access.service.js';
 
@@ -35,7 +35,8 @@ export async function masterclassStatus(access, asAdmin = false, number = null, 
   const available = asAdmin || canReadMasterclass(access, settings.includedWithFull, number);
   const offer = number ? await moduleOffer(number) : null;
   const done = userId && number ? await completedSet(userId) : null;
-  const previousDone = !number || number === 1 || asAdmin || (done ? done.has(number - 1) : false);
+  const previousNumber = number && number > 1 ? prerequisiteOf(number) : null;
+  const previousDone = !previousNumber || asAdmin || (done ? done.has(previousNumber) : false);
   const expiresAt = number ? (access.masterclassModules || []).find((m) => m.moduleNumber === number)?.expiresAt || null : null;
   return {
     available,
@@ -43,6 +44,8 @@ export async function masterclassStatus(access, asAdmin = false, number = null, 
     offer: offer?.active ? publicOffer(offer) : null,
     canBuy: !available && !!offer?.active && previousDone,
     previousDone,
+    previousNumber,
+    optional: MARKET_MODULES.includes(number),
     completed: done ? done.has(number) : false,
     expiresAt,
   };
@@ -74,7 +77,8 @@ export async function masterclassCatalog(access, asAdmin, userId) {
     const n = m.month;
     const available = asAdmin || canReadMasterclass(access, settings.includedWithFull, n);
     const offer = offers.find((o) => o.code === `MASTERCLASS_M${n}`);
-    const previousDone = n === 1 || done.has(n - 1) || asAdmin;
+    const previousNumber = n > 1 ? prerequisiteOf(n) : null;
+    const previousDone = !previousNumber || done.has(previousNumber) || asAdmin;
     const expiresAt = (access.masterclassModules || []).find((x) => x.moduleNumber === n)?.expiresAt || null;
     return {
       number: n,
@@ -83,6 +87,8 @@ export async function masterclassCatalog(access, asAdmin, userId) {
       available,
       expiresAt,
       previousDone,
+      previousNumber,
+      optional: MARKET_MODULES.includes(n),
       offer: offer?.active ? publicOffer(offer) : null,
       state: available ? 'AVAILABLE' : !previousDone ? 'LOCKED_ORDER' : offer?.active ? 'PURCHASABLE' : 'LOCKED',
     };
@@ -101,5 +107,6 @@ export async function assertCanBuyMasterclass(userId, offer, access) {
   if (!n) return;
   const settings = await masterclassSettings();
   if (canReadMasterclass(access, settings.includedWithFull, n)) throw conflict('Ya tienes acceso a la Masterclass de este módulo');
-  if (n > 1 && !(await completedSet(userId)).has(n - 1)) throw badRequest(`Primero completa la Masterclass del Módulo ${n - 1}: los módulos no se pueden saltar`);
+  const previous = n > 1 ? prerequisiteOf(n) : null;
+  if (previous && !(await completedSet(userId)).has(previous)) throw badRequest(`Primero completa la Masterclass del Módulo ${previous}: los módulos no se pueden saltar`);
 }

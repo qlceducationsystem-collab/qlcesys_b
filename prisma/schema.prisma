@@ -273,6 +273,10 @@ model User {
   marketingOptOut    Boolean     @default(false)
   subscriptionCancelledAt DateTime?
   retentionStage     Int         @default(0)
+  resetCodeHash      String?
+  resetCodeExpiresAt DateTime?
+  resetCodeAttempts  Int         @default(0)
+  sessionsValidFrom  DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 

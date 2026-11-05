@@ -1,7 +1,8 @@
 import { prisma } from '../config/prisma.js';
 import { env, googleConfigured } from '../config/env.js';
 import { sendGmail } from './google/gmail.js';
-import { notificationSettings } from './mailSettings.service.js';
+import nodemailer from 'nodemailer';
+import { mailTransport, notificationSettings, smtpPassword } from './mailSettings.service.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -28,10 +29,17 @@ export const testEmail = {
   },
 };
 
+export const resetEmailReady = () => {
+  ready = null;
+};
+
 export async function emailReady() {
   if (env.isTest) return testReady;
   if (ready && ready.exp > Date.now()) return ready.value;
-  const value = googleConfigured() && (await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }))?.status === 'CONNECTED';
+  const transport = await mailTransport();
+  const value = transport.method === 'SMTP'
+    ? !!(transport.email && transport.encryptedPassword && env.tokenEncryptionKey && transport.lastTest?.ok)
+    : googleConfigured() && (await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } }))?.status === 'CONNECTED';
   ready = { value, exp: Date.now() + READY_CACHE_MS };
   return value;
 }
@@ -137,6 +145,18 @@ ${codes.map((c) => `<p style="margin:10px 0;font-size:22px;letter-spacing:3px;fo
     body: `<p>Hola ${escapeHtml(name)},</p><p>${escapeHtml(recipient || 'La persona que recibió tu regalo')} activó su acceso a <b>${escapeHtml(product)}</b>. Gracias por regalar educación financiera.</p>`,
     text: `Hola ${name}, tu regalo de ${product} fue activado.`,
   }),
+  passwordReset: ({ name, code, minutes }) => ({
+    subject: `${code} es tu código para restablecer tu contraseña · QLC`,
+    title: 'Restablece tu contraseña',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Escribe este código en la pestaña Restablecer contraseña de la página de inicio de sesión:</p><p style="margin:22px 0;font-size:32px;letter-spacing:10px;font-weight:700;color:#5bd4ff">${escapeHtml(code)}</p><p>El código vence en ${minutes} minutos. Al restablecer tu contraseña también se reinicia tu Google Authenticator y deberás registrarlo de nuevo al iniciar sesión.</p><p>Si no lo solicitaste, ignora este mensaje: tu cuenta sigue igual.</p>`,
+    text: `Tu código para restablecer tu contraseña de QLC es ${code}. Vence en ${minutes} minutos. Si no lo solicitaste, ignora este mensaje.`,
+  }),
+  passwordChanged: ({ name }) => ({
+    subject: 'Tu contraseña de QLC se restableció',
+    title: 'Tu contraseña se restableció',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Tu contraseña se cambió y tu Google Authenticator se reinició. Al iniciar sesión deberás registrarlo de nuevo.</p><p>Si no fuiste tú, contacta de inmediato al equipo de QLC.</p>${button(`${env.frontendUrl}/login`, 'Iniciar sesión')}`,
+    text: `Hola ${name}, tu contraseña de QLC se restableció y tu Google Authenticator se reinició. Si no fuiste tú, contacta de inmediato al equipo de QLC.`,
+  }),
   test: ({ name }) => ({
     subject: 'Correo de prueba · QLC Financial Education',
     title: 'Integración de Gmail funcionando',
@@ -158,9 +178,17 @@ export async function sendEmail(template, to, data = {}) {
     return { sent: true };
   }
   try {
-    const [settings, gmail] = await Promise.all([notificationSettings(), prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } })]);
-    const from = gmail?.email && settings.senderName ? `${'=?UTF-8?B?' + Buffer.from(settings.senderName, 'utf8').toString('base64') + '?='} <${gmail.email}>` : null;
-    await sendGmail({ to, subject: content.subject, html: layout(content.title, content.body), text: content.text, from });
+    const [settings, transport] = await Promise.all([notificationSettings(), mailTransport()]);
+    const html = layout(content.title, content.body);
+    if (transport.method === 'SMTP') {
+      if (!transport.email || !transport.encryptedPassword) throw new Error('Falta la cuenta de Gmail o la contraseña de aplicación');
+      const smtp = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: transport.email, pass: smtpPassword(transport) }, connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 20000 });
+      await smtp.sendMail({ from: { name: settings.senderName || 'QLC', address: transport.email }, to, subject: content.subject, html, text: content.text });
+    } else {
+      const gmail = await prisma.googleIntegration.findUnique({ where: { service: 'GMAIL' } });
+      const from = gmail?.email && settings.senderName ? `${'=?UTF-8?B?' + Buffer.from(settings.senderName, 'utf8').toString('base64') + '?='} <${gmail.email}>` : null;
+      await sendGmail({ to, subject: content.subject, html, text: content.text, from });
+    }
     await prisma.emailLog.create({ data: { to, subject: content.subject, template, status: 'SENT' } });
     return { sent: true };
   } catch (err) {

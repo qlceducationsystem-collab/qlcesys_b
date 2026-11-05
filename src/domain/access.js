@@ -47,15 +47,16 @@ export function moduleState(moduleNumber, { access, completed = [], route = null
   if (!canUseTool(access, moduleNumber)) return 'LOCKED_ACCESS';
   const isMarket = MARKET_MODULES.includes(moduleNumber);
   if (isMarket && !filterPassed) return 'LOCKED_FILTER';
-  if (!access.full) return 'AVAILABLE';
-  if (moduleNumber === 4 && route !== 'MARKETS') return 'LOCKED_ROUTE';
-  if (moduleNumber > 1 && !done.has(prerequisiteOf(moduleNumber))) return 'LOCKED_ORDER';
+  const previous = prerequisiteOf(moduleNumber);
+  const followsOrder = moduleNumber > 1 && canUseTool(access, previous);
+  if (moduleNumber === 4 && followsOrder && route !== 'MARKETS') return 'LOCKED_ROUTE';
+  if (followsOrder && !done.has(previous)) return 'LOCKED_ORDER';
   return 'AVAILABLE';
 }
 
 export const isModuleOpen = (state) => state === 'AVAILABLE' || state === 'COMPLETED';
 
-export const canChooseRoute = (access, completed = []) => !access.full ? access.hasAny : completed.includes(3);
+export const canChooseRoute = (access, completed = []) => (canUseTool(access, 3) ? completed.includes(3) : access.hasAny);
 
 export const DEFAULT_ACCESS_DAYS = { FULL_ANNUAL: 365, TOOL_ONLY: 30, MASTERCLASS: 365 };
 

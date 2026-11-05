@@ -16,6 +16,9 @@ const ISSUER = 'QLC Financial Education';
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 const EMAIL_CODE_MINUTES = 10;
+const RESET_CODE_MINUTES = 15;
+const RESET_MAX_ATTEMPTS = 5;
+const RESET_COOLDOWN_MS = 60000;
 
 const codeHash = (email, code) => crypto.createHmac('sha256', env.jwtSecret).update(`${email}:${code}`).digest('hex');
 
@@ -141,6 +144,54 @@ export async function resetPasswordWithCode({ email, code, password }) {
   const user = await userWithTwoFactor(email);
   await verifyUserCode(user, code);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, SALT_ROUNDS) } });
+}
+
+const resetHash = (email, code) => codeHash(`reset:${email}`, code);
+const RESET_SENT = 'Si el correo está registrado, te enviamos un código para restablecer tu contraseña. Revisa también la carpeta de spam.';
+
+export async function requestPasswordReset({ email }) {
+  if (!(await emailReady())) throw new HttpError(503, 'El restablecimiento por correo todavía no está disponible. Usa tu código de Google Authenticator o contacta al equipo de QLC.');
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user && user.isActive && user.role === 'CLIENT') {
+    const issuedAt = user.resetCodeExpiresAt ? user.resetCodeExpiresAt.getTime() - RESET_CODE_MINUTES * 60000 : 0;
+    if (Date.now() - issuedAt >= RESET_COOLDOWN_MS) {
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetCodeHash: resetHash(email, code), resetCodeExpiresAt: new Date(Date.now() + RESET_CODE_MINUTES * 60000), resetCodeAttempts: 0 },
+      });
+      sendEmail('passwordReset', email, { name: user.name, code, minutes: RESET_CODE_MINUTES }).catch(() => null);
+    }
+  }
+  return { message: RESET_SENT, minutes: RESET_CODE_MINUTES };
+}
+
+export async function confirmPasswordReset({ email, code, password }) {
+  const invalid = badRequest('Código incorrecto o vencido. No se cambió tu contraseña.');
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive || user.role !== 'CLIENT' || !user.resetCodeHash || !user.resetCodeExpiresAt || user.resetCodeExpiresAt <= new Date()) throw invalid;
+  const expected = Buffer.from(user.resetCodeHash, 'hex');
+  const actual = Buffer.from(resetHash(email, code), 'hex');
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    const attempts = user.resetCodeAttempts + 1;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: attempts >= RESET_MAX_ATTEMPTS ? { resetCodeHash: null, resetCodeExpiresAt: null, resetCodeAttempts: 0 } : { resetCodeAttempts: attempts },
+    });
+    throw invalid;
+  }
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  const claimed = await prisma.user.updateMany({
+    where: { id: user.id, resetCodeHash: user.resetCodeHash },
+    data: {
+      passwordHash, resetCodeHash: null, resetCodeExpiresAt: null, resetCodeAttempts: 0, sessionsValidFrom: new Date(),
+      totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null, totpFailedAttempts: 0, totpLockedUntil: null,
+    },
+  });
+  if (!claimed.count) throw invalid;
+  sendEmail('passwordChanged', email, { name: user.name }).catch(() => null);
+  recordEvent({ category: 'PLATAFORMA', type: 'CONTRASENA_RESTABLECIDA', actor: actorOf(user), user, status: 'Restablecida', result: 'Por código enviado al correo. Debe registrar de nuevo Google Authenticator.' }).catch(() => null);
+  return { message: 'Contraseña restablecida. Al iniciar sesión deberás registrar de nuevo Google Authenticator.' };
 }
 
 export async function me(userId) {

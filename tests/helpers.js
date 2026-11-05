@@ -9,4 +9,13 @@ export async function completeTwoFactor(app, challengeToken) {
   return { token: activated.body.token, secret: setup.body.secret, setup, activated };
 }
 
+export async function completeModules(prisma, email, numbers) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  const modules = await prisma.academyModule.findMany({ where: { month: { in: numbers } } });
+  for (const mod of modules) {
+    const data = { status: 'COMPLETED', completedAt: new Date() };
+    await prisma.moduleProgress.upsert({ where: { userId_moduleId: { userId: user.id, moduleId: mod.id } }, create: { userId: user.id, moduleId: mod.id, ...data }, update: data });
+  }
+}
+
 export const nextCode = (secret, offset = 1) => codeAt(secret, currentStep() + offset);

@@ -25,8 +25,8 @@ import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 import { EVENT_GROUPS, listEvents } from '../services/adminEvent.service.js';
-import { CLIENT_EMAIL_GROUPS, mailSettingsView, saveMailSettings } from '../services/mailSettings.service.js';
-import { sendClientEmail } from '../services/email.service.js';
+import { CLIENT_EMAIL_GROUPS, mailSettingsView, recordMailTest, saveMailSettings } from '../services/mailSettings.service.js';
+import { resetEmailReady, sendClientEmail } from '../services/email.service.js';
 import { adminQuestions, answerQuestion, releaseCredits } from '../services/credit.service.js';
 import { masterclassSettings, saveMasterclassSettings } from '../services/masterclass.service.js';
 import { listSubscribers, retentionSettings, saveRetentionSettings } from '../services/subscriber.service.js';
@@ -141,9 +141,16 @@ const mailSettingsSchema = z.object({
   recipients: z.array(z.string().trim().toLowerCase().email('Correo no válido')).max(20).optional(),
   disabled: z.array(z.string().max(60)).max(100).optional(),
   clientDisabled: z.array(z.string().max(60)).max(100).optional(),
+  method: z.enum(['OAUTH', 'SMTP']).optional(),
+  smtpEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido')]).optional(),
+  smtpPassword: z.string().trim().max(100).optional(),
 });
 r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
-r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => res.json({ ...(await saveMailSettings(req.body)), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
+r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => {
+  const view = await saveMailSettings(req.body);
+  resetEmailReady();
+  res.json({ ...view, groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS });
+}));
 
 r.get('/integrations', ah(async (_req, res) => {
   const [items, emails] = await Promise.all([
@@ -155,9 +162,15 @@ r.get('/integrations', ah(async (_req, res) => {
 r.get('/integrations/:service/connect', FULL, ah(async (req, res) => res.json({ url: google.buildAuthUrl(service(req), req.user.id) })));
 r.delete('/integrations/:service', FULL, ah(async (req, res) => {
   await google.disconnect(service(req));
+  resetEmailReady();
   res.json(await google.integrationStatus());
 }));
-r.post('/integrations/gmail/test', FULL, ah(async (req, res) => res.json(await sendEmail('test', req.user.email, { name: req.user.name }))));
+r.post('/integrations/gmail/test', FULL, ah(async (req, res) => {
+  const result = await sendEmail('test', req.user.email, { name: req.user.name });
+  await recordMailTest(result);
+  resetEmailReady();
+  res.json(result);
+}));
 
 r.get('/admins', FULL, ah(async (_req, res) => res.json(await admin.listAdmins())));
 r.post('/admins', FULL, validate(createAdminSchema), ah(async (req, res) => res.status(201).json(await admin.createAdmin(req.body))));
