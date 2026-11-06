@@ -19,14 +19,6 @@ services:
         sync: false
       - key: BACKEND_URL
         sync: false
-      - key: PAYMENT_PROVIDER
-        value: mock
-      - key: MERCADOPAGO_ACCESS_TOKEN
-        sync: false
-      - key: MERCADOPAGO_PUBLIC_KEY
-        sync: false
-      - key: MERCADOPAGO_WEBHOOK_SECRET
-        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

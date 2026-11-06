@@ -24,7 +24,8 @@ import * as leads from '../services/lead.service.js';
 import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service.js';
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
-import { EVENT_GROUPS, listEvents } from '../services/adminEvent.service.js';
+import { EVENT_GROUPS, listEvents, actorOf, recordEvent } from '../services/adminEvent.service.js';
+import { paymentSettingsView, savePaymentSettings, testMercadoPagoConnection } from '../services/payments/paymentSettings.service.js';
 import { CLIENT_EMAIL_GROUPS, mailSettingsView, recordMailTest, saveMailSettings } from '../services/mailSettings.service.js';
 import { resetEmailReady, sendClientEmail } from '../services/email.service.js';
 import { adminQuestions, answerQuestion, releaseCredits } from '../services/credit.service.js';
@@ -144,6 +145,21 @@ const mailSettingsSchema = z.object({
   smtpEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido')]).optional(),
   smtpPassword: z.string().trim().max(100).optional(),
 });
+const paymentSettingsSchema = z.object({
+  accessToken: z.string().trim().max(300).optional(),
+  webhookSecret: z.string().trim().max(300).optional(),
+  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
+  enabled: z.boolean().optional(),
+});
+r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
+r.put('/payment-settings', FULL, validate(paymentSettingsSchema), ah(async (req, res) => {
+  const view = await savePaymentSettings(req.body);
+  if (req.body.accessToken || req.body.webhookSecret || req.body.enabled !== undefined) {
+    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Activo' : 'Desactivado', result: 'Configuración de Mercado Pago modificada' });
+  }
+  res.json(view);
+}));
+r.post('/payment-settings/test', FULL, ah(async (_req, res) => res.json(await testMercadoPagoConnection())));
 r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
 r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => {
   const view = await saveMailSettings(req.body);

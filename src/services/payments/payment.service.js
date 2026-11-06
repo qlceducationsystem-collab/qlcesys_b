@@ -9,7 +9,7 @@ import { promoPrice, usablePromotion } from '../promotion.service.js';
 import { grantCredits } from '../credit.service.js';
 import { sendClientEmail } from '../email.service.js';
 import { assertCanBuyMasterclass } from '../masterclass.service.js';
-import { activeProvider, providerByCode } from './providers.js';
+import { activeProvider, mercadoPagoProvider, providerByCode } from './providers.js';
 
 export const MAX_GIFTS = 20;
 const SERVICE_TYPES = ['CONSULTA', 'ORIENTACION'];
@@ -25,7 +25,9 @@ const attemptView = (a) => ({
   kind: a.kind,
   quantity: a.quantity,
   authorization: a.authorization || null,
-  offer: a.offer ? { code: a.offer.code, name: a.offer.name, type: a.offer.type, moduleNumber: a.offer.moduleNumber } : undefined,
+  chargedAmount: a.chargedAmount === null || a.chargedAmount === undefined ? null : Number(a.chargedAmount),
+  chargedCurrency: a.chargedCurrency || null,
+  offer: a.offer ? { code: a.offer.code, name: a.offer.name, type: a.offer.type, moduleNumber: a.offer.moduleNumber, sessions: a.offer.sessions } : undefined,
 });
 
 async function checkoutData(user, { offerCode, promoCode, gift, quantity: wanted }) {
@@ -61,15 +63,23 @@ async function checkoutData(user, { offerCode, promoCode, gift, quantity: wanted
 export async function createCheckout(user, input) {
   const params = typeof input === 'string' ? { offerCode: input } : input;
   const data = await checkoutData(user, params);
-  const provider = activeProvider();
+  const provider = await activeProvider();
+  const charge = await provider.quote(data.amount, data.offer.currency);
   const attempt = await prisma.paymentAttempt.create({
     data: {
       userId: user.id, offerId: data.offer.id, amount: data.amount, currency: data.offer.currency, provider: provider.code,
+      chargedAmount: charge?.amount ?? null, chargedCurrency: charge?.currency ?? null,
       kind: data.kind, quantity: data.quantity, promotionId: data.promotionId || null, giftMessage: data.giftMessage || null, giftRecipientName: data.giftRecipientName || null,
     },
     include: { offer: true },
   });
-  const checkout = await provider.createCheckout({ attempt, offer: data.offer, user });
+  let checkout;
+  try {
+    checkout = await provider.createCheckout({ attempt, offer: data.offer, user, charge });
+  } catch (err) {
+    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: 'REJECTED', resolvedAt: new Date() } });
+    throw err;
+  }
   if (checkout.providerRef) await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerRef: checkout.providerRef } });
   if (data.kind === 'STANDARD') {
     await recordEvent({ category: 'SUSCRIPCION', type: 'CONTRATADA', actor: actorOf(user), user, offer: data.offer, status: 'Pago pendiente', amount: data.amount });
@@ -86,16 +96,20 @@ async function subscriptionEventType(tx, attempt) {
   return 'ACTIVADA';
 }
 
-export async function resolveAttempt(attemptId, status, db = prisma, { paidAmount } = {}) {
+const canRecover = (attempt, status) => status === 'APPROVED' && attempt.status === 'REJECTED' && attempt.provider === 'MERCADOPAGO';
+
+export async function resolveAttempt(attemptId, status, db = prisma, { paidAmount, paidCurrency, paymentId } = {}) {
   const result = await db.$transaction(async (tx) => {
     const attempt = await tx.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, user: true, promotion: true } });
     if (!attempt) throw notFound('Intento de pago no encontrado');
-    if (attempt.status !== 'PENDING') return { attempt: attemptView(attempt), changed: false };
-    if (status === 'APPROVED' && paidAmount !== undefined && paidAmount !== null && attempt.amount !== null && Math.abs(num(paidAmount) - num(attempt.amount)) > 0.01) {
-      const event = await recordEvent({ category: 'SUSCRIPCION', type: 'IMPORTE_NO_COINCIDE', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Sin activar', amount: paidAmount, result: `Se esperaba ${num(attempt.amount)}; el acceso no se activó` }, tx);
+    if (attempt.status !== 'PENDING' && !canRecover(attempt, status)) return { attempt: attemptView(attempt), changed: false };
+    const expected = attempt.chargedAmount ?? attempt.amount;
+    const wrongCurrency = status === 'APPROVED' && paidCurrency && attempt.chargedCurrency && paidCurrency !== attempt.chargedCurrency;
+    if (status === 'APPROVED' && ((paidAmount !== undefined && paidAmount !== null && expected !== null && Math.abs(num(paidAmount) - num(expected)) > 0.01) || wrongCurrency)) {
+      const event = await recordEvent({ category: 'SUSCRIPCION', type: 'IMPORTE_NO_COINCIDE', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Sin activar', amount: paidAmount, result: `Se esperaba ${num(expected)}${attempt.chargedCurrency ? ` ${attempt.chargedCurrency}` : ''}; el acceso no se activó` }, tx);
       return { attempt: attemptView(attempt), changed: false, events: [event] };
     }
-    const updated = await tx.paymentAttempt.updateMany({ where: { id: attemptId, status: 'PENDING' }, data: { status, resolvedAt: new Date() } });
+    const updated = await tx.paymentAttempt.updateMany({ where: { id: attemptId, status: attempt.status }, data: { status, resolvedAt: new Date(), ...(paymentId ? { providerPaymentId: String(paymentId) } : {}) } });
     if (!updated.count) return { attempt: attemptView(attempt), changed: false };
     const events = [];
     let gifts = null;
@@ -142,9 +156,26 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
 export async function resolveSimulated(user, attemptId, outcome) {
   const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
   if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
-  if (!providerByCode(attempt.provider)?.supportsManualResolution) throw forbidden('Este pago solo puede confirmarlo el proveedor');
+  if (!providerByCode(attempt.provider)?.supportsManualResolution || !(await activeProvider()).supportsManualResolution) throw forbidden('Este pago solo puede confirmarlo el proveedor');
   if (attempt.status !== 'PENDING') throw badRequest('Este intento ya fue resuelto');
   return resolveAttempt(attemptId, outcome);
+}
+
+export async function syncAttempt(user, attemptId, { search = (id) => mercadoPagoProvider.searchByAttempt(id) } = {}) {
+  let attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true } });
+  if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
+  if (attempt.provider === 'MERCADOPAGO' && attempt.status !== 'APPROVED') {
+    const payments = await search(attempt.id);
+    const best = payments.find((p) => p.status === 'APPROVED') || (payments.length && payments.every((p) => p.status === 'REJECTED') ? payments[0] : null);
+    if (best) {
+      await resolveAttempt(attempt.id, best.status, prisma, { paidAmount: best.amount, paidCurrency: best.currency, paymentId: best.paymentId });
+      attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true } });
+    }
+  }
+  const gifts = attempt.kind === 'GIFT' && attempt.status === 'APPROVED'
+    ? (await prisma.giftCode.findMany({ where: { paymentAttemptId: attempt.id }, select: { code: true } })).map((g) => g.code)
+    : undefined;
+  return { attempt: attemptView(attempt), gifts };
 }
 
 export const listMyAttempts = async (userId) =>

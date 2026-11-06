@@ -1,3 +1,4 @@
+import { publicChargeInfo } from '../services/payments/paymentSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { ah } from '../utils/asyncHandler.js';
@@ -26,9 +27,9 @@ const codeSchema = z.object({ code: z.string().trim().min(4).max(40) });
 const preferencesSchema = z.object({ marketingOptOut: z.boolean() });
 
 r.get('/access', ah(async (req, res) => {
-  const [access, offers] = await Promise.all([getAccess(req.user.id), cachedActiveOffers()]);
+  const [access, offers, provider, charge] = await Promise.all([getAccess(req.user.id), cachedActiveOffers(), activeProvider(), publicChargeInfo()]);
   const subscription = req.user.role === 'CLIENT' ? await subscribers.subscriptionStatus(req.user) : null;
-  res.json({ access, offers, provider: activeProvider().code, subscription });
+  res.json({ access, offers, provider: provider.code, charge, subscription });
 }));
 
 r.get('/attempts', ah(async (req, res) => res.json(await payments.listMyAttempts(req.user.id))));
@@ -44,6 +45,12 @@ r.post('/promo/check', requireRole('CLIENT'), validate(codeSchema), ah(async (re
 r.post('/subscription/cancel', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.cancelSubscription(req.user))));
 r.post('/subscription/resume', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.resumeSubscription(req.user))));
 r.put('/preferences', requireRole('CLIENT'), validate(preferencesSchema), ah(async (req, res) => res.json(await subscribers.setMarketing(req.user, req.body))));
+
+r.post('/attempts/:id/sync', requireRole('CLIENT'), ah(async (req, res) => {
+  const result = await payments.syncAttempt(req.user, req.params.id);
+  const [access, credits] = await Promise.all([getAccess(req.user.id), creditBalance(req.user.id)]);
+  res.json({ ...result, access, credits });
+}));
 
 r.post('/attempts/:id/simulate', requireRole('CLIENT'), validate(resolveSchema), ah(async (req, res) => {
   const result = await payments.resolveSimulated(req.user, req.params.id, req.body.outcome);

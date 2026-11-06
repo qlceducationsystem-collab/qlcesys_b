@@ -22,13 +22,7 @@ export const env = {
   frontendUrls,
   frontendUrl: frontendUrls[0],
   backendUrl,
-  paymentProvider: (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase(),
   generalAdminEmail: (process.env.GENERAL_ADMIN_EMAIL || '').trim().toLowerCase(),
-  mercadoPago: {
-    accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || '',
-    publicKey: process.env.MERCADOPAGO_PUBLIC_KEY || '',
-    webhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET || '',
-  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     apiKey: process.env.CLOUDINARY_API_KEY || '',

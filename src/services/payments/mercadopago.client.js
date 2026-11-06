@@ -1,17 +1,16 @@
 import crypto from 'node:crypto';
-import { env } from '../../config/env.js';
 import { HttpError } from '../../utils/httpError.js';
+import { mercadoPagoToken } from './paymentSettings.service.js';
 
 const API = 'https://api.mercadopago.com';
 
-export const mpConfigured = () => !!env.mercadoPago.accessToken;
-
 export async function mpRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
-  if (!mpConfigured()) throw new HttpError(503, 'Mercado Pago no está configurado');
+  const token = await mercadoPagoToken();
+  if (!token) throw new HttpError(503, 'Mercado Pago no está configurado');
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${env.mercadoPago.accessToken}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
     },
@@ -25,7 +24,7 @@ export async function mpRequest(path, { method = 'GET', body, idempotencyKey } =
   return data;
 }
 
-export function verifyWebhookSignature({ signature, requestId, dataId, secret = env.mercadoPago.webhookSecret }) {
+export function verifyWebhookSignature({ signature, requestId, dataId, secret }) {
   if (!secret || !signature) return false;
   const parts = Object.fromEntries(
     String(signature)

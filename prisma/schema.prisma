@@ -798,6 +798,9 @@ model PaymentAttempt {
   currency    String
   provider    String
   providerRef String?              @unique
+  providerPaymentId String?
+  chargedAmount Decimal?           @db.Decimal(14, 2)
+  chargedCurrency String?
   status      PaymentAttemptStatus @default(PENDING)
   resolvedAt  DateTime?
   kind        String               @default("STANDARD")
