@@ -3,13 +3,17 @@ import { badRequest } from '../utils/httpError.js';
 import { absorbExpenseChange } from '../services/moduleData.service.js';
 import { releaseDebtPayment } from '../services/debt.service.js';
 import { periodCrudRouter } from './periodCrud.js';
-import { onExpenseWrite, onMovementWrite } from '../services/incomeUse.service.js';
+import { onExpenseWrite, onIncomeWrite, onMovementWrite } from '../services/incomeUse.service.js';
 import { ah } from '../utils/asyncHandler.js';
 import { policyUpload } from '../middlewares/upload.js';
 import { attachPolicy, policyUrl, removePolicy } from '../services/policy.service.js';
 import { expenseSchema, incomeSchema, movementSchema, protectionSchema } from '../validations/schemas.js';
 
-export const incomesRouter = periodCrudRouter({ model: 'income', schema: incomeSchema });
+export const incomesRouter = periodCrudRouter({
+  model: 'income',
+  schema: incomeSchema,
+  afterWrite: (tx, _req, before, after) => onIncomeWrite(tx, before, after),
+});
 export const expensesRouter = periodCrudRouter({
   model: 'expense',
   schema: expenseSchema,

@@ -66,6 +66,8 @@ const EVENT_LABELS_EN = {
   EJERCICIO_ENVIADO: 'Exercise or question submitted',
   MODULO_COMPLETADO: 'Module completed',
   DATOS_COMPARTIDOS: 'Client shared their data',
+  EDICION_AUTORIZADA: 'Client authorized changes to their data',
+  DATOS_MODIFICADOS: 'Administrator changed client data',
   CUENTA_ELIMINADA: 'Account deleted by the client',
   MASTERCLASS_TERMINADA: 'Client finished a Masterclass',
   CONTRASENA_RESTABLECIDA: 'Client reset their password by email',

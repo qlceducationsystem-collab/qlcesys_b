@@ -40,6 +40,8 @@ export const EVENT_LABELS = {
   EJERCICIO_ENVIADO: 'Ejercicio o duda enviada',
   MODULO_COMPLETADO: 'Módulo completado',
   DATOS_COMPARTIDOS: 'Cliente compartió sus datos',
+  EDICION_AUTORIZADA: 'Cliente autorizó modificar sus datos',
+  DATOS_MODIFICADOS: 'Administrador modificó datos de un cliente',
   CUENTA_ELIMINADA: 'Cuenta eliminada por el cliente',
   MASTERCLASS_TERMINADA: 'Cliente terminó una Masterclass',
   CONTRASENA_RESTABLECIDA: 'Cliente restableció su contraseña por correo',
@@ -50,7 +52,7 @@ export const EVENT_GROUPS = [
   ['Promociones', ['PROMOCION_CREADA', 'PROMOCION_ENVIADA', 'PROMOCION_CANCELADA', 'PAGO_PROMOCIONAL']],
   ['Control de accesos', ['ACCESO_CONCEDIDO', 'VENCIMIENTO_MODIFICADO', 'ACCESO_RETIRADO', 'ACCESO_AUTORIZADO', 'AUTORIZACION_RECHAZADA', 'CONTRASENA_MAESTRA', 'CONTRASENA_MAESTRA_CAMBIADA', 'AUTORIZACION_FALLIDA']],
   ['Regalos', ['REGALO_COMPRADO', 'REGALO_CANJEADO', 'REGALO_CANCELADO']],
-  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_CONSULTA', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'MASTERCLASS_TERMINADA', 'DATOS_COMPARTIDOS', 'CUENTA_ELIMINADA', 'CONTRASENA_RESTABLECIDA']],
+  ['Clientes y academia', ['NUEVO_REGISTRO', 'NUEVA_CONSULTA', 'NUEVA_SOLICITUD', 'NUEVA_CITA', 'CITA_CANCELADA', 'EJERCICIO_ENVIADO', 'MODULO_COMPLETADO', 'MASTERCLASS_TERMINADA', 'DATOS_COMPARTIDOS', 'EDICION_AUTORIZADA', 'CUENTA_ELIMINADA', 'CONTRASENA_RESTABLECIDA']],
 ].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: EVENT_LABELS[type] })) }));
 
 export const periodOf = (offer) => {
@@ -99,7 +101,7 @@ async function notify(event) {
   await Promise.all(to.map(([address, lang]) => sendEmail('adminEvent', address, eventView(event), { lang })));
 }
 
-export async function recordEvent({ category, type, actor = SYSTEM, user = null, offer = null, status = null, amount = null, result = null, details = null }, db = prisma) {
+export async function recordEvent({ category, type, actor = SYSTEM, user = null, offer = null, status = null, amount = null, result = null, details = null, silent = false }, db = prisma) {
   const event = await db.adminEvent.create({
     data: {
       category,
@@ -118,7 +120,7 @@ export async function recordEvent({ category, type, actor = SYSTEM, user = null,
       details,
     },
   });
-  if (db === prisma) notify(event).catch((err) => console.error('[qlc] aviso al administrador', err.message));
+  if (db === prisma && !silent) notify(event).catch((err) => console.error('[qlc] aviso al administrador', err.message));
   return event;
 }
 

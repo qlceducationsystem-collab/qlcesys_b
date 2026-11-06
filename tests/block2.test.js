@@ -216,7 +216,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     assert.equal(await prisma.expense.count({ where: { userId: ids.p, source: 'M1_DEBT_PAYMENT' } }), 0);
     assert.equal(Number((await prisma.debtBalance.findUnique({ where: { id: state.balanceId } })).balance), 25870);
     assert.equal((await api('q').put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 403);
-    await prisma.dataShare.create({ data: { clientId: ids.q } });
+    await prisma.dataShare.create({ data: { clientId: ids.q, allowEdit: true } });
     assert.equal((await api('full', ids.q).put(`/api/academy/obligations/${state.balanceId}`, { name: 'x', balance: 1, payment: 1 })).status, 404);
     await complete('p', 9);
   });
@@ -287,7 +287,7 @@ run('Bloque 2 · M7–M12 (integración)', () => {
     };
     await seedMonth(shiftMonth(window.start, -1), 300000, 300000, 100000, 140000);
     const last = await seedMonth(window.end, 300000, 325000, 120000, 105000);
-    await prisma.dataShare.create({ data: { clientId: userId } });
+    await prisma.dataShare.create({ data: { clientId: userId, allowEdit: true } });
     const admin = api('full', userId);
     assert.equal((await admin.put('/api/academy/annual-review/goal', { targetAmount: 500000 })).status, 200);
     assert.equal((await admin.put('/api/academy/annual-review/note', { note: 'Reducir deuda y aumentar liquidez' })).status, 200);

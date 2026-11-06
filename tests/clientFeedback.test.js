@@ -239,7 +239,7 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     assert.equal((await api('c').post(`/api/portfolio/positions/${casa.id}/carry`, {})).status, 400);
   });
 
-  test('Un producto nuevo no descuadra la conciliación y la rentabilidad se puede mover a gastos y deshacer', async () => {
+  test('Un producto nuevo no descuadra la conciliación y la rentabilidad se puede pasar a ingresos y deshacer', async () => {
     const summary = async () => (await api('c').get(`/api/periods/${state.periodId}/summary`)).body.summary;
     const before = await summary();
     const diff0 = before.reconciliation.difference;
@@ -255,33 +255,49 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
 
     const use = (positionId, body) => api('c').post(`/api/portfolio/positions/${positionId}/use-income`, body);
     const options = async () => (await api('c').get(`/api/portfolio/income-uses?periodId=${state.periodId}`)).body;
-    assert.equal((await use(created.body.id, { origin: 'MONTH', kind: 'EXPENSE', amount: 25000, category: 'VIAJES' })).status, 400);
-    const spent = await use(created.body.id, { origin: 'MONTH', kind: 'EXPENSE', amount: 5000, category: 'VIAJES', description: 'Viaje' });
-    assert.equal(spent.status, 201, JSON.stringify(spent.body));
+    const budgetNow = async () => (await api('c').get(`/api/academy/budget?${query()}`)).body;
+    const income0 = s1.cashflow.income;
+    const net0 = (await budgetNow()).netIncome;
+    assert.equal((await use(created.body.id, { origin: 'MONTH', kind: 'INCOME', amount: 25000 })).status, 400);
+    assert.equal((await use(created.body.id, { origin: 'MONTH', kind: 'EXPENSE', amount: 1000, category: 'VIAJES' })).status, 400);
+    const passed = await use(created.body.id, { origin: 'MONTH', kind: 'INCOME', amount: 5000 });
+    assert.equal(passed.status, 201, JSON.stringify(passed.body));
     s1 = await summary();
     assert.equal(s1.reconciliation.difference, diff0);
     assert.equal(s1.patrimony.final, round(patrimony0 - 5000));
-    assert.ok(s1.cashflow.expenses >= expenses0);
+    assert.equal(s1.cashflow.income, round(income0 + 5000));
+    assert.equal(s1.cashflow.incomeFromPortfolio, 5000);
+    assert.equal(s1.cashflow.expenses, expenses0);
+    const budgetAfter = await budgetNow();
+    assert.equal(budgetAfter.netIncome, round(net0 + 5000));
+    assert.equal(budgetAfter.incomeFromPortfolio, 5000);
     const pos = await prisma.assetPosition.findUnique({ where: { id: created.body.id } });
     assert.equal(Number(pos.initialCapital), 145000);
     assert.equal(Number(pos.finalCapital), 165000);
     assert.equal((await options()).month.find((m) => m.positionId === created.body.id).available, 15000);
-    assert.equal((await api('c').put(`/api/expenses/${spent.body.expenseId}`, { periodId: state.periodId, category: 'VIAJES', description: 'x', amount: 1 })).status, 400);
+    assert.equal((await api('c').put(`/api/incomes/${passed.body.incomeId}`, { periodId: state.periodId, category: 'OTROS', description: 'x', amount: 1 })).status, 400);
     assert.ok(!(await options()).carry.some((g) => g.positionId === created.body.id));
-    assert.equal((await api('c').del(`/api/portfolio/income-uses/${spent.body.id}`)).status, 204);
+    assert.equal((await api('c').del(`/api/portfolio/income-uses/${passed.body.id}`)).status, 204);
     s1 = await summary();
     assert.equal(s1.patrimony.final, patrimony0);
     assert.equal(s1.reconciliation.difference, diff0);
+    assert.equal(s1.cashflow.income, income0);
+    assert.equal((await budgetNow()).netIncome, net0);
     assert.equal(Number((await prisma.assetPosition.findUnique({ where: { id: created.body.id } })).initialCapital), 150000);
 
-    const custom = await use(created.body.id, { origin: 'MONTH', kind: 'EXPENSE', amount: 2000, newCategory: 'Regalos rentabilidad' });
-    assert.equal(custom.status, 201, JSON.stringify(custom.body));
-    const budget = await api('c').get(`/api/academy/budget?${query()}`);
-    assert.ok(budget.body.lines.some((l) => l.category === 'CUSTOM:Regalos rentabilidad'));
-    assert.equal(budget.body.actuals['CUSTOM:Regalos rentabilidad'], 2000);
-    assert.equal((await api('c').del(`/api/expenses/${custom.body.expenseId}`)).status, 204);
-    assert.equal(await prisma.incomeUse.count({ where: { id: custom.body.id } }), 0);
+    const again = await use(created.body.id, { origin: 'MONTH', kind: 'INCOME', amount: 2000 });
+    assert.equal(again.status, 201, JSON.stringify(again.body));
+    assert.equal((await api('c').del(`/api/incomes/${again.body.incomeId}`)).status, 204);
+    assert.equal(await prisma.incomeUse.count({ where: { id: again.body.id } }), 0);
+    assert.equal((await budgetNow()).netIncome, net0);
     assert.equal(Number((await prisma.assetPosition.findUnique({ where: { id: created.body.id } })).initialCapital), 150000);
+
+    const user = await prisma.user.findFirst({ where: { assets: { some: { id: created.body.assetId } } } });
+    const oldExpense = await prisma.expense.create({ data: { userId: user.id, periodId: state.periodId, category: 'VIAJES', description: 'Decision anterior', amount: 700 } });
+    const oldUse = await prisma.incomeUse.create({ data: { userId: user.id, periodId: state.periodId, positionId: created.body.id, origin: 'CARRY', kind: 'EXPENSE', amount: 700, category: 'VIAJES', expenseId: oldExpense.id } });
+    assert.equal((await api('c').put(`/api/expenses/${oldExpense.id}`, { periodId: state.periodId, category: 'VIAJES', description: 'x', amount: 1 })).status, 400);
+    assert.equal((await api('c').del(`/api/portfolio/income-uses/${oldUse.id}`)).status, 204);
+    assert.equal(await prisma.expense.count({ where: { id: oldExpense.id } }), 0);
 
     const moved = await use(created.body.id, { origin: 'MONTH', kind: 'INVEST', amount: 4000, newProduct: { categoryCode: 'RENTA_FIJA', name: 'Pagaré nuevo' } });
     assert.equal(moved.status, 201, JSON.stringify(moved.body));

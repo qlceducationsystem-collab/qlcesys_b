@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { badRequest, forbidden, notFound } from '../utils/httpError.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
 
-const view = (share) => share && { id: share.id, grantedAt: share.grantedAt, endedAt: share.endedAt };
+const view = (share) => share && { id: share.id, grantedAt: share.grantedAt, endedAt: share.endedAt, allowEdit: share.allowEdit, editGrantedAt: share.editGrantedAt };
 
 export const activeShare = (clientId, db = prisma) => db.dataShare.findFirst({ where: { clientId, endedAt: null }, orderBy: { grantedAt: 'desc' } });
 
@@ -17,6 +17,20 @@ export async function startShare(user) {
   if (current) return { active: view(current) };
   const share = await prisma.dataShare.create({ data: { clientId: user.id } });
   recordEvent({ category: 'PLATAFORMA', type: 'DATOS_COMPARTIDOS', actor: actorOf(user), user, status: 'Compartiendo datos' }).catch(() => null);
+  return { active: view(share) };
+}
+
+export async function setShareEdit(user, allow) {
+  if (user.role !== 'CLIENT') throw forbidden('Solo el cliente puede autorizar cambios en sus datos');
+  const current = await activeShare(user.id);
+  if (!allow) {
+    if (!current) return { active: null };
+    return { active: view(await prisma.dataShare.update({ where: { id: current.id }, data: { allowEdit: false, editGrantedAt: null } })) };
+  }
+  if (current?.allowEdit) return { active: view(current) };
+  const data = { allowEdit: true, editGrantedAt: new Date() };
+  const share = current ? await prisma.dataShare.update({ where: { id: current.id }, data }) : await prisma.dataShare.create({ data: { clientId: user.id, ...data } });
+  recordEvent({ category: 'PLATAFORMA', type: 'EDICION_AUTORIZADA', actor: actorOf(user), user, status: 'Puede modificar sus datos' }).catch(() => null);
   return { active: view(share) };
 }
 
@@ -82,5 +96,7 @@ export async function stopShareByAdmin(admin, clientId) {
 }
 
 export async function assertShared(clientId) {
-  if (!(await activeShare(clientId))) throw forbidden('El cliente no ha autorizado compartir sus datos, o ya dejó de compartirlos.');
+  const share = await activeShare(clientId);
+  if (!share) throw forbidden('El cliente no ha autorizado compartir sus datos, o ya dejó de compartirlos.');
+  return share;
 }

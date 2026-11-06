@@ -73,7 +73,11 @@ function defaultLines(netIncome, debtPlan) {
 
 export async function getBudget(userId, month, db = prisma) {
   const [budget, period] = await Promise.all([findBudget(userId, month, db), findPeriod(userId, month, db)]);
-  const [actuals, income] = await Promise.all([monthActuals(userId, period?.id, db), realIncome(userId, period?.id, db)]);
+  const [actuals, income, fromPortfolio] = await Promise.all([
+    monthActuals(userId, period?.id, db),
+    realIncome(userId, period?.id, db),
+    period ? db.income.aggregate({ where: { userId, periodId: period.id, source: { startsWith: 'INCOME_USE:' } }, _sum: { amount: true } }) : null,
+  ]);
   const netIncome = budget ? num(budget.netIncome) : income;
   const lines = budget ? sortLines(budget.lines.map((l) => ({ category: l.category, percent: num(l.percent) }))) : defaultLines(netIncome, actuals[DEBT_PLAN] || 0);
   return {
@@ -82,6 +86,7 @@ export async function getBudget(userId, month, db = prisma) {
     updatedAt: budget?.updatedAt || null,
     period: period ? { id: period.id, status: period.status } : null,
     realIncome: income,
+    incomeFromPortfolio: num(fromPortfolio?._sum.amount),
     netIncome,
     lines,
     actuals,

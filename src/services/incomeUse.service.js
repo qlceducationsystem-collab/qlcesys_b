@@ -1,18 +1,16 @@
 import { prisma } from '../config/prisma.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { num, round2 } from '../utils/money.js';
-import { customCategory, customName, isCustomCategory } from '../domain/patrimonial.js';
+import { customName, isCustomCategory } from '../domain/patrimonial.js';
 import { CATEGORY_PRODUCT } from '../domain/learning.js';
 import { getOpenPeriod } from './period.service.js';
 import { absorbDiagnosisExpense } from './moduleData.service.js';
 import { carriedPositionIds, carryForward, carryGaps, syncCarry } from './productIncome.service.js';
-import { getBudget } from './budget.service.js';
 import { adjustRecord } from './emergency.service.js';
 
 const SAVE_LABELS = { FONDO_EMERGENCIA: 'fondo de emergencia', META_PATRIMONIAL: 'meta patrimonial' };
 
 export const INCOME_USE = 'INCOME_USE:';
-export const SPEND_CATEGORIES = ['VIVIENDA', 'ALIMENTACION', 'SERVICIOS', 'TRANSPORTE', 'SEGUROS', 'EDUCACION', 'ENTRETENIMIENTO', 'VIAJES', 'OTROS'];
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
 async function shiftCapital(tx, positionId, delta) {
@@ -34,16 +32,12 @@ const movementDate = (period, pos) => {
   return now < start ? start : now > end ? end : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12));
 };
 
-async function ensureCustomLine(tx, userId, period, key) {
+async function shiftBudgetIncome(tx, userId, periodId, delta) {
+  const period = await tx.financialPeriod.findUnique({ where: { id: periodId } });
+  if (!period) return;
   const where = { userId_year_month: { userId, year: period.year, month: period.month } };
-  const budget = await tx.budget.findUnique({ where, include: { lines: true } });
-  if (budget) {
-    if (!budget.lines.some((l) => l.category === key)) await tx.budgetLine.create({ data: { budgetId: budget.id, category: key, percent: 0 } });
-    return;
-  }
-  const current = await getBudget(userId, { year: period.year, month: period.month }, tx);
-  const created = await tx.budget.create({ data: { userId, year: period.year, month: period.month, netIncome: current.netIncome } });
-  await tx.budgetLine.createMany({ data: [...current.lines, { category: key, percent: 0 }].map((l) => ({ budgetId: created.id, category: l.category, percent: l.percent })) });
+  const budget = await tx.budget.findUnique({ where });
+  if (budget) await tx.budget.update({ where, data: { netIncome: Math.max(0, round2(num(budget.netIncome) + delta)) } });
 }
 
 const usedFromMonth = async (db, positionId) =>
@@ -82,12 +76,6 @@ export async function incomeOptions(userId, period) {
   };
 }
 
-async function categoryOf(userId, { category, newCategory }) {
-  if (newCategory) return { key: customCategory(newCategory), created: true };
-  if (SPEND_CATEGORIES.includes(category) || isCustomCategory(category)) return { key: category, created: false };
-  throw badRequest('Elige una categoría de gasto o escribe una nueva');
-}
-
 export async function useIncome(req, positionId, body) {
   const userId = req.subjectId;
   const pos = await prisma.assetPosition.findFirst({ where: { id: positionId, asset: { userId } }, include: { asset: true, period: true } });
@@ -105,7 +93,6 @@ export async function useIncome(req, positionId, body) {
   if (amount <= 0) throw badRequest('El monto debe ser mayor a 0');
   if (amount > available + 0.004) throw badRequest(`Solo puedes usar hasta ${mxn.format(available)}`);
 
-  const category = body.kind === 'EXPENSE' ? await categoryOf(userId, body) : null;
   if (body.kind === 'SAVE' && !SAVE_LABELS[body.destination]) throw badRequest('Elige si va al fondo de emergencia o a la meta patrimonial');
   if (body.kind === 'SAVE' && body.destination === 'META_PATRIMONIAL' && !(await prisma.goal.findFirst({ where: { userId, kind: 'PATRIMONIO' } }))) throw badRequest('Primero define tu meta patrimonial en el Módulo 8');
   let target = null;
@@ -120,7 +107,7 @@ export async function useIncome(req, positionId, body) {
 
   return prisma.$transaction(async (tx) => {
     const use = await tx.incomeUse.create({
-      data: { userId, periodId: pos.periodId, positionId: pos.id, origin: body.origin === 'CARRY' ? 'CARRY' : 'MONTH', kind: body.kind, amount, category: category?.key || (body.kind === 'SAVE' ? body.destination : null) },
+      data: { userId, periodId: pos.periodId, positionId: pos.id, origin: body.origin === 'CARRY' ? 'CARRY' : 'MONTH', kind: body.kind, amount, category: body.kind === 'SAVE' ? body.destination : null },
     });
     let createdTarget = false;
     if (body.kind === 'INVEST' && !target) {
@@ -138,24 +125,17 @@ export async function useIncome(req, positionId, body) {
     const out = await tx.patrimonialMovement.create({
       data: {
         userId, periodId: pos.periodId, assetId: pos.assetId, type: 'DEDUCCION', amount, date,
-        description: body.kind === 'EXPENSE' ? `Rentabilidad usada en gastos · ${pos.asset.name}` : body.kind === 'SAVE' ? `Rentabilidad enviada a ${SAVE_LABELS[body.destination]} · ${pos.asset.name}` : `Rentabilidad pasada a ${target.asset.name} · ${pos.asset.name}`,
+        description: body.kind === 'INCOME' ? `Rentabilidad pasada a ingresos · ${pos.asset.name}` : body.kind === 'SAVE' ? `Rentabilidad enviada a ${SAVE_LABELS[body.destination]} · ${pos.asset.name}` : `Rentabilidad pasada a ${target.asset.name} · ${pos.asset.name}`,
       },
     });
     if (use.origin === 'MONTH') await shiftCapital(tx, pos.id, -amount);
     const data = { outMovementId: out.id, createdTarget };
-    if (body.kind === 'EXPENSE') {
-      const custom = isCustomCategory(category.key);
-      const expenseCategory = custom ? 'OTROS' : category.key;
-      const expense = await tx.expense.create({
-        data: {
-          userId, periodId: pos.periodId, category: expenseCategory, amount,
-          description: body.description || `Rentabilidad de ${pos.asset.name}`,
-          source: `${INCOME_USE}${use.id}${custom ? `|${category.key}` : ''}`,
-        },
+    if (body.kind === 'INCOME') {
+      const income = await tx.income.create({
+        data: { userId, periodId: pos.periodId, category: 'OTROS', amount, description: `Rentabilidad de ${pos.asset.name} pasada desde tu portafolio`, source: `${INCOME_USE}${use.id}` },
       });
-      await absorbDiagnosisExpense(tx, { userId, periodId: pos.periodId, category: expenseCategory, delta: amount });
-      if (custom) await ensureCustomLine(tx, userId, period, category.key);
-      data.expenseId = expense.id;
+      await shiftBudgetIncome(tx, userId, pos.periodId, amount);
+      data.incomeId = income.id;
     } else if (body.kind === 'SAVE') {
       const contribution = await tx.savingContribution.create({
         data: { userId, periodId: pos.periodId, destination: body.destination, amount, date: new Date(), description: body.description || `Rentabilidad de ${pos.asset.name}` },
@@ -174,7 +154,11 @@ export async function useIncome(req, positionId, body) {
   });
 }
 
-export async function revertUse(tx, use, { skipExpense = false, skipMovement = null } = {}) {
+export async function revertUse(tx, use, { skipExpense = false, skipIncome = false, skipMovement = null } = {}) {
+  if (use.incomeId) {
+    if (!skipIncome) await tx.income.deleteMany({ where: { id: use.incomeId } });
+    await shiftBudgetIncome(tx, use.userId, use.periodId, -num(use.amount));
+  }
   if (use.contributionId) {
     const contribution = await tx.savingContribution.findUnique({ where: { id: use.contributionId } });
     if (contribution) {
@@ -215,6 +199,14 @@ export async function onExpenseWrite(tx, before, after) {
   if (!use) return;
   if (after) throw badRequest('Este gasto viene de la rentabilidad de un producto: cámbielo o deshágalo desde Mi portafolio de inversión.');
   await revertUse(tx, use, { skipExpense: true });
+}
+
+export async function onIncomeWrite(tx, before, after) {
+  if (!before) return;
+  const use = await tx.incomeUse.findFirst({ where: { incomeId: before.id } });
+  if (!use) return;
+  if (after) throw badRequest('Este ingreso viene de la rentabilidad de un producto: cámbielo o deshágalo desde Mi portafolio de inversión.');
+  await revertUse(tx, use, { skipIncome: true });
 }
 
 export async function onMovementWrite(tx, before, after) {

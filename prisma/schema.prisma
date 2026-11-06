@@ -415,6 +415,8 @@ model DataShare {
   endedAt     DateTime?
   endedById   String?
   endedByRole String?
+  allowEdit     Boolean   @default(false)
+  editGrantedAt DateTime?
   client      User           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   messages    ShareMessage[]
 
@@ -444,6 +446,7 @@ model IncomeUse {
   amount           Decimal         @db.Decimal(14, 2)
   category         String?
   expenseId        String?
+  incomeId         String?
   outMovementId    String?
   inMovementId     String?
   targetPositionId String?
@@ -455,6 +458,7 @@ model IncomeUse {
 
   @@index([userId, periodId])
   @@index([expenseId])
+  @@index([incomeId])
   @@index([outMovementId])
   @@index([inMovementId])
 }

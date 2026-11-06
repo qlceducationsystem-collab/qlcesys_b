@@ -133,7 +133,21 @@ run('API (integración)', () => {
     assert.equal((await api('view').get('/api/academy/products', h)).status, 200);
     const body = { name: 'CETES', productType: 'RENTA_FIJA', capital: 45000, horizon: 'CORTO', liquidityLevel: 'ALTA', perceivedRisk: 'BAJO' };
     assert.equal((await api('view').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
+    assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
+    assert.equal((await api('edit').post('/api/auth/data-share/edit', { allow: true })).status, 403);
+    const granted = await api('a').post('/api/auth/data-share/edit', { allow: true });
+    assert.equal(granted.body.active.id, started.body.active.id);
+    assert.equal(granted.body.active.allowEdit, true);
+    assert.equal((await api('edit').get(`/api/admin/clients/${ids.a}`)).body.dataShare.allowEdit, true);
+    assert.equal((await api('view').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
+    const audited = await prisma.adminEvent.count({ where: { type: 'DATOS_MODIFICADOS', userId: ids.a } });
     assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, { ...body, name: 'CETES 28 días' }, h)).status, 200);
+    for (let i = 0; i < 20 && (await prisma.adminEvent.count({ where: { type: 'DATOS_MODIFICADOS', userId: ids.a } })) === audited; i += 1) await new Promise((done) => setTimeout(done, 25));
+    assert.equal(await prisma.adminEvent.count({ where: { type: 'DATOS_MODIFICADOS', userId: ids.a } }), audited + 1);
+    assert.equal((await api('a').post('/api/auth/data-share/edit', { allow: false })).body.active.allowEdit, false);
+    assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, { ...body, name: 'Sin permiso' }, h)).status, 403);
+    assert.equal((await api('edit').get('/api/academy/products', h)).status, 200);
+    await api('a').post('/api/auth/data-share/edit', { allow: true });
     const products = (await api('a').get('/api/academy/products')).body.products;
     assert.equal(products[0].name, 'CETES 28 días');
     assert.equal(products[0].capital, 45000);
@@ -154,6 +168,7 @@ run('API (integración)', () => {
     assert.equal((await api('view').get('/api/academy/products', h)).status, 403);
     assert.equal((await api('a').get('/api/auth/data-share')).body.active, null);
     await api('a').post('/api/auth/data-share/start', {});
+    assert.equal((await api('edit').put(`/api/academy/products/${ids.asset}`, body, h)).status, 403);
   });
 
   test('Ruta y filtro de mercados: criterio exacto y bloqueo de M4', async () => {

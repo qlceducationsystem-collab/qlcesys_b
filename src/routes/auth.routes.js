@@ -21,6 +21,7 @@ r.post('/reset-profile', authenticate, authLimiter, ah(async (req, res) => res.j
 r.post('/delete-account', authenticate, authLimiter, ah(async (req, res) => res.json(await auth.deleteAccount(req.user.id, req.body || {}))));
 r.get('/data-share', authenticate, ah(async (req, res) => res.json(await dataShare.shareStatus(req.user))));
 r.post('/data-share/start', authenticate, ah(async (req, res) => res.json(await dataShare.startShare(req.user))));
+r.post('/data-share/edit', authenticate, ah(async (req, res) => res.json(await dataShare.setShareEdit(req.user, req.body?.allow === true))));
 r.get('/data-share/messages', authenticate, ah(async (req, res) => res.json(await dataShare.clientMessages(req.user))));
 r.post('/data-share/messages', authenticate, ah(async (req, res) => res.status(201).json(await dataShare.clientSend(req.user, req.body?.body))));
 r.post('/data-share/stop', authenticate, ah(async (req, res) => res.json(await dataShare.stopShareByClient(req.user))));

@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma.js';
 import { badRequest, forbidden, notFound, unauthorized } from '../utils/httpError.js';
 import { getAccess } from '../services/access.service.js';
 import { assertShared } from '../services/dataShare.service.js';
+import { actorOf, recordEvent } from '../services/adminEvent.service.js';
 
 export const signToken = (user) => jwt.sign({ sub: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 
@@ -89,15 +90,26 @@ export const requireAdminLevel = (level) => (req, _res, next) =>
 
 const isWrite = (method) => !['GET', 'HEAD', 'OPTIONS'].includes(method);
 
-export async function resolveSubject(req, _res, next) {
+const auditAdminWrite = (req, res, client) => {
+  res.on('finish', () => {
+    if (res.statusCode >= 400) return;
+    recordEvent({ category: 'PLATAFORMA', type: 'DATOS_MODIFICADOS', actor: actorOf(req.user), user: client, details: { action: `${req.method} ${req.originalUrl.split('?')[0]}` }, silent: true }).catch(() => null);
+  });
+};
+
+export async function resolveSubject(req, res, next) {
   try {
     const clientId = req.headers['x-client-id'];
     if (req.user.role === 'ADMIN') {
       if (!clientId) throw badRequest('Selecciona un cliente para gestionar');
-      const client = await prisma.user.findFirst({ where: { id: String(clientId), role: 'CLIENT' }, select: { id: true } });
+      const client = await prisma.user.findFirst({ where: { id: String(clientId), role: 'CLIENT' }, select: { id: true, name: true, email: true } });
       if (!client) throw notFound('Cliente no encontrado');
-      await assertShared(client.id);
-      if (isWrite(req.method) && !adminCan(req.user, 'EDIT')) throw forbidden('Tu nivel de administrador es de solo visualización');
+      const share = await assertShared(client.id);
+      if (isWrite(req.method)) {
+        if (!adminCan(req.user, 'EDIT')) throw forbidden('Tu nivel de administrador es de solo visualización');
+        if (!share.allowEdit) throw forbidden('El cliente autorizó ver sus datos, pero no modificarlos. Pídele que active «Autorizar modificar mis datos».');
+        auditAdminWrite(req, res, client);
+      }
       req.subjectId = client.id;
       req.asAdmin = true;
     } else {

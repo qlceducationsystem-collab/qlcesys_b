@@ -106,6 +106,7 @@ export function summarizeCashflow(incomes = [], expenses = []) {
     expenses: expense,
     savings,
     savingsRate: income === 0 ? null : pct(savings, income),
+    incomeFromPortfolio: sum(incomes.filter((i) => String(i.source || '').startsWith('INCOME_USE:')), (i) => i.amount),
     incomeByCategory: groupTotals(incomes, 'category'),
     expenseByCategory: groupTotals(expenses, 'category'),
   };

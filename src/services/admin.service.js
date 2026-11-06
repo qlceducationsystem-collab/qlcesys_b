@@ -10,7 +10,7 @@ const clientSelect = {
   accessGrants: { where: { active: true } },
   progress: { where: { status: 'COMPLETED' }, select: { id: true } },
   _count: { select: { periods: true, monthlyCloses: true, appointments: true } },
-  dataShares: { where: { endedAt: null }, select: { id: true, grantedAt: true }, take: 1 },
+  dataShares: { where: { endedAt: null }, select: { id: true, grantedAt: true, allowEdit: true, editGrantedAt: true }, take: 1 },
 };
 
 const toClient = ({ accessGrants, progress, _count, totpEnabledAt, dataShares, ...u }) => ({
