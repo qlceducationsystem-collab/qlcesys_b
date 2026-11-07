@@ -22,6 +22,7 @@ run('PayPal y suscripciones recurrentes', () => {
   const preapprovals = new Map();
   let signatureOk = true;
   let counter = 0;
+  const payBase = Date.now();
 
   const api = (who) => {
     const auth = (r) => r.set('Authorization', `Bearer ${tokens[who]}`);
@@ -262,19 +263,19 @@ run('PayPal y suscripciones recurrentes', () => {
     assert.equal(sub.status, 'ACTIVE');
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.luis } }), 0);
 
-    invoices.set('8001', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: 7001, status: 'approved' } });
+    invoices.set('8001', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: payBase + 1, status: 'approved' } });
     assert.equal((await mpEvent('subscription_authorized_payment', '8001', 'a1')).status, 200);
     assert.equal((await prisma.paymentAttempt.findUnique({ where: { id } })).status, 'APPROVED');
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.luis, accessType: 'TOOL_ONLY' } }), 1);
     assert.equal((await mpEvent('subscription_authorized_payment', '8001', 'a2')).status, 200);
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.luis, accessType: 'TOOL_ONLY' } }), 1);
 
-    invoices.set('8002', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: 7002, status: 'rejected', status_detail: 'cc_rejected_insufficient_amount' } });
+    invoices.set('8002', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: payBase + 2, status: 'rejected', status_detail: 'cc_rejected_insufficient_amount' } });
     assert.equal((await mpEvent('subscription_authorized_payment', '8002', 'a3')).status, 200);
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.luis, accessType: 'TOOL_ONLY' } }), 1);
     assert.ok(await prisma.adminEvent.findFirst({ where: { userId: ids.luis, type: 'PAGO_FALLIDO' } }));
 
-    invoices.set('8003', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: 7003, status: 'approved' } });
+    invoices.set('8003', { preapproval_id: sub.providerSubscriptionId, transaction_amount: 180, currency_id: 'MXN', payment: { id: payBase + 3, status: 'approved' } });
     assert.equal((await mpEvent('subscription_authorized_payment', '8003', 'a4')).status, 200);
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.luis, accessType: 'TOOL_ONLY' } }), 2);
 
