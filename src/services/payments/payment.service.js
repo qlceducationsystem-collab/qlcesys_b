@@ -84,7 +84,7 @@ export async function createCheckout(user, input) {
   if (data.kind === 'STANDARD') {
     await recordEvent({ category: 'SUSCRIPCION', type: 'CONTRATADA', actor: actorOf(user), user, offer: data.offer, status: 'Pago pendiente', amount: data.amount });
   }
-  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, initPoint: checkout.initPoint || null } };
+  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, publicKey: checkout.publicKey || null } };
 }
 
 async function subscriptionEventType(tx, attempt) {
@@ -176,6 +176,30 @@ export async function syncAttempt(user, attemptId, { search = (id) => mercadoPag
     ? (await prisma.giftCode.findMany({ where: { paymentAttemptId: attempt.id }, select: { code: true } })).map((g) => g.code)
     : undefined;
   return { attempt: attemptView(attempt), gifts };
+}
+
+const NO_SEARCH = { search: async () => [] };
+
+export async function payWithCard(user, attemptId, card) {
+  const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true } });
+  if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
+  if (attempt.provider !== 'MERCADOPAGO') throw forbidden('Este pago no se procesa con tarjeta');
+  const claimed = await prisma.paymentAttempt.updateMany({ where: { id: attempt.id, status: 'PENDING', providerRef: null }, data: { providerRef: attempt.id } });
+  if (!claimed.count) throw conflict('Este pago ya se está procesando. Revisa tu historial en Mi acceso.');
+  let payment;
+  try {
+    payment = await mercadoPagoProvider.chargeCard({ attempt, offer: attempt.offer, user, card });
+  } catch (err) {
+    if (err.providerStatus >= 400 && err.providerStatus < 500) {
+      await resolveAttempt(attempt.id, 'REJECTED');
+      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
+    }
+    console.error('[pagos] cobro sin confirmar:', attempt.id, err.message);
+    return syncAttempt(user, attempt.id).catch(() => syncAttempt(user, attempt.id, NO_SEARCH));
+  }
+  if (payment.status === 'PENDING') await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: payment.paymentId } });
+  else await resolveAttempt(attempt.id, payment.status, prisma, { paidAmount: payment.amount, paidCurrency: payment.currency, paymentId: payment.paymentId });
+  return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: payment.statusDetail, challenge: payment.challenge };
 }
 
 export const listMyAttempts = async (userId) =>

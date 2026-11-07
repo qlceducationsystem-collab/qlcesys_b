@@ -7,7 +7,7 @@ import { round2 } from '../../utils/money.js';
 const KEY = 'mercadopago';
 const SITE_CURRENCY = { MLM: 'MXN', MLA: 'ARS', MLB: 'BRL', MLC: 'CLP', MCO: 'COP', MPE: 'PEN', MLU: 'UYU' };
 const WHOLE_CURRENCIES = ['CLP', 'COP'];
-const DEFAULTS = { enabled: false, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, account: null, lastTest: null };
+const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, account: null, lastTest: null };
 let cache = null;
 
 export async function paymentSettings() {
@@ -59,9 +59,13 @@ export function convertForCharge(amount, currency, settings) {
   return { amount: WHOLE_CURRENCIES.includes(target) ? Math.ceil(converted) : round2(converted), currency: target };
 }
 
-const missingRequirements = (settings, currencies) => {
+const sameKind = (publicKey, token) => isTestToken(publicKey) === isTestToken(token);
+
+const missingRequirements = (settings, currencies, token) => {
   const missing = [];
   if (!settings.encryptedToken) missing.push('el Access Token');
+  if (!settings.publicKey) missing.push('la Public Key');
+  else if (token && !sameKind(settings.publicKey, token)) missing.push('una Public Key del mismo tipo que el Access Token (prueba o producción)');
   if (!settings.encryptedWebhookSecret) missing.push('la clave secreta del webhook');
   if (!settings.lastTest?.ok) missing.push('una prueba de conexión correcta');
   const target = chargeCurrency(settings);
@@ -77,6 +81,7 @@ export async function paymentSettingsView() {
   return {
     enabled: !!settings.enabled,
     hasToken: !!settings.encryptedToken,
+    publicKey: settings.publicKey || '',
     hasWebhookSecret: !!settings.encryptedWebhookSecret,
     testMode: isTestToken(token) || !!settings.account?.testUser,
     encryptionReady: !!env.tokenEncryptionKey,
@@ -86,11 +91,11 @@ export async function paymentSettingsView() {
     ratesNeeded: target ? currencies.filter((c) => c !== target) : [],
     lastTest: settings.lastTest,
     webhookUrl: `${env.backendUrl}/api/webhooks/mercadopago`,
-    missing: missingRequirements(settings, currencies),
+    missing: missingRequirements(settings, currencies, token),
   };
 }
 
-export async function savePaymentSettings({ accessToken, webhookSecret, rates, enabled }) {
+export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, rates, enabled }) {
   const changes = {};
   if (accessToken || webhookSecret) {
     if (!env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar las credenciales cifradas');
@@ -98,11 +103,12 @@ export async function savePaymentSettings({ accessToken, webhookSecret, rates, e
   if (accessToken) {
     Object.assign(changes, { encryptedToken: encryptSecret(accessToken), lastTest: null, account: null, enabled: false });
   }
+  if (publicKey) changes.publicKey = publicKey;
   if (webhookSecret) changes.encryptedWebhookSecret = encryptSecret(webhookSecret);
   if (rates) changes.rates = Object.fromEntries(Object.entries(rates).map(([k, v]) => [k.toUpperCase(), Number(v)]).filter(([, v]) => v > 0));
   const next = await write(changes);
   if (enabled === true) {
-    const missing = missingRequirements(next, await offerCurrencies());
+    const missing = missingRequirements(next, await offerCurrencies(), await mercadoPagoToken());
     if (missing.length) throw badRequest(`Para activar Mercado Pago falta: ${missing.join(', ')}.`);
   }
   if (enabled !== undefined) await write({ enabled: !!enabled && !changes.encryptedToken });

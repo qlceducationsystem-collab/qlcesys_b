@@ -4,7 +4,7 @@ import { mercadoPagoToken } from './paymentSettings.service.js';
 
 const API = 'https://api.mercadopago.com';
 
-export async function mpRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
+export async function mpRequest(path, { method = 'GET', body, idempotencyKey, deviceId } = {}) {
   const token = await mercadoPagoToken();
   if (!token) throw new HttpError(503, 'Mercado Pago no está configurado');
   const res = await fetch(`${API}${path}`, {
@@ -13,13 +13,16 @@ export async function mpRequest(path, { method = 'GET', body, idempotencyKey } =
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+      ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`[mercadopago] ${method} ${path} → ${res.status}: ${data?.message || 'error'}`);
-    throw new HttpError(502, 'Error al comunicarse con Mercado Pago');
+    const error = new HttpError(502, 'No pudimos comunicarnos con el procesador de pagos');
+    error.providerStatus = res.status;
+    throw error;
   }
   return data;
 }

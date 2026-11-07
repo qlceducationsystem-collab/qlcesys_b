@@ -18,7 +18,7 @@ run('Mercado Pago configurado desde el panel', () => {
   const TOKEN = 'APP_USR-token-super-privado';
   const SECRET = 'clave-webhook-privada';
   const payments = new Map();
-  const preferences = [];
+  const charges = [];
 
   const api = (who) => {
     const auth = (r) => r.set('Authorization', `Bearer ${tokens[who]}`);
@@ -35,10 +35,20 @@ run('Mercado Pago configurado desde el panel', () => {
     const u = String(url);
     assert.equal(opt.headers?.Authorization, `Bearer ${TOKEN}`);
     if (u.endsWith('/users/me')) return json({ id: 1, nickname: 'QLC', site_id: 'MLM', tags: [] });
-    if (u.endsWith('/checkout/preferences')) {
+    if (u.endsWith('/v1/payments')) {
       const body = JSON.parse(opt.body);
-      preferences.push(body);
-      return json({ id: `pref-${uid}-${preferences.length}`, init_point: 'https://mp.test/pagar', sandbox_init_point: 'https://mp.test/sandbox' });
+      charges.push({ body, headers: opt.headers });
+      if (body.token === 'tok-invalid') return json({ message: 'invalid token' }, 400);
+      if (body.token === 'tok-down') return json({ message: 'down' }, 500);
+      const id = 9000 + charges.length;
+      const base = { id, external_reference: body.external_reference, transaction_amount: body.transaction_amount, currency_id: 'MXN' };
+      const result = {
+        'tok-ok': { ...base, status: 'approved', status_detail: 'accredited' },
+        'tok-no': { ...base, status: 'rejected', status_detail: 'cc_rejected_insufficient_amount' },
+        'tok-3ds': { ...base, status: 'pending', status_detail: 'pending_challenge', three_ds_info: { external_resource_url: 'https://banco.test/3ds', creq: 'abc' } },
+      }[body.token];
+      payments.set(String(id), result);
+      return json(result, 201);
     }
     const found = /\/v1\/payments\/([^/?]+)$/.exec(u);
     if (found) return json(payments.get(found[1]));
@@ -81,7 +91,7 @@ run('Mercado Pago configurado desde el panel', () => {
     await prisma.user.create({ data: { email: editEmail, name: 'Admin edit', role: 'ADMIN', adminLevel: 'EDIT', passwordHash: await bcrypt.hash('AdminPass123!', 4) } });
     const editLogin = await request(app).post('/api/auth/login').send({ email: editEmail, password: 'AdminPass123!' });
     tokens.edit = (await completeTwoFactor(app, editLogin.body.challengeToken)).token;
-    for (const k of ['ana', 'luis', 'eva', 'old']) await register(k);
+    for (const k of ['ana', 'luis', 'eva', 'old', 'card', 'otro']) await register(k);
     await prisma.productOffer.update({ where: { code: 'FULL_ANNUAL' }, data: { price: 60, currency: 'USDT', active: true } });
     realFetch = global.fetch;
   });
@@ -96,7 +106,7 @@ run('Mercado Pago configurado desde el panel', () => {
   test('Solo el administrador general configura; las credenciales quedan cifradas y no se devuelven', async () => {
     assert.equal((await api('edit').get('/api/admin/payment-settings')).status, 403);
     assert.equal((await api('ana').get('/api/admin/payment-settings')).status, 403);
-    const saved = await api('admin').put('/api/admin/payment-settings', { accessToken: TOKEN, webhookSecret: SECRET });
+    const saved = await api('admin').put('/api/admin/payment-settings', { accessToken: TOKEN, publicKey: 'APP_USR-llave-publica', webhookSecret: SECRET });
     assert.equal(saved.status, 200, JSON.stringify(saved.body));
     assert.equal(saved.body.hasToken, true);
     assert.equal(saved.body.enabled, false);
@@ -138,15 +148,10 @@ run('Mercado Pago configurado desde el panel', () => {
     assert.ok(!JSON.stringify(access.body).includes('encrypted'));
     const checkout = await api('ana').post('/api/payments/checkout', { offerCode: 'FULL_ANNUAL' });
     assert.equal(checkout.status, 201, JSON.stringify(checkout.body));
-    assert.equal(checkout.body.checkout.mode, 'REDIRECT');
-    assert.equal(checkout.body.checkout.initPoint, 'https://mp.test/pagar');
+    assert.equal(checkout.body.checkout.mode, 'CARD');
+    assert.equal(checkout.body.checkout.publicKey, 'APP_USR-llave-publica');
     assert.equal(checkout.body.attempt.chargedAmount, 1110);
     assert.equal(checkout.body.attempt.chargedCurrency, 'MXN');
-    const pref = preferences.at(-1);
-    assert.equal(pref.items[0].unit_price, 1110);
-    assert.equal(pref.items[0].currency_id, 'MXN');
-    assert.equal(pref.external_reference, checkout.body.attempt.id);
-    assert.match(pref.back_urls.success, new RegExp(`pago=${checkout.body.attempt.id}`));
     ids.anaAttempt = checkout.body.attempt.id;
     assert.equal((await api('ana').post(`/api/payments/attempts/${ids.anaAttempt}/simulate`, { outcome: 'APPROVED' })).status, 403);
     assert.equal((await api('old').post(`/api/payments/attempts/${ids.legacyAttempt}/simulate`, { outcome: 'APPROVED' })).status, 403);
@@ -197,6 +202,62 @@ run('Mercado Pago configurado desde el panel', () => {
     assert.equal((await api('luis').post(`/api/payments/attempts/${id}/sync`)).status, 404);
     await webhook('3002', 'req-6');
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.eva } }), 1);
+  });
+
+  test('El pago con tarjeta cobra el importe del servidor y no se puede enviar dos veces', async () => {
+    const start = async () => (await api('card').post('/api/payments/checkout', { offerCode: 'FULL_ANNUAL' })).body.attempt.id;
+    const pay = (id, token, who = 'card') => api(who).post(`/api/payments/attempts/${id}/card`, { token, paymentMethodId: 'visa', issuerId: '160', transaction_amount: 1 });
+    const grants = () => prisma.accessGrant.count({ where: { userId: ids.card, accessType: 'FULL_ANNUAL' } });
+
+    const rejected = await start();
+    assert.equal((await pay(rejected, 'tok-ok', 'otro')).status, 404);
+    const no = await pay(rejected, 'tok-no');
+    assert.equal(no.status, 200, JSON.stringify(no.body));
+    assert.equal(no.body.attempt.status, 'REJECTED');
+    assert.equal(no.body.reason, 'cc_rejected_insufficient_amount');
+    assert.equal(await grants(), 0);
+    assert.equal((await pay(rejected, 'tok-ok')).status, 409);
+
+    const invalid = await start();
+    const bad = await pay(invalid, 'tok-invalid');
+    assert.equal(bad.body.attempt.status, 'REJECTED');
+
+    const unknown = await start();
+    const down = await pay(unknown, 'tok-down');
+    assert.equal(down.status, 200, JSON.stringify(down.body));
+    assert.equal(down.body.attempt.status, 'PENDING');
+    assert.equal((await pay(unknown, 'tok-ok')).status, 409);
+    assert.equal(await grants(), 0);
+
+    const challenged = await start();
+    const challenge = await pay(challenged, 'tok-3ds');
+    assert.equal(challenge.body.attempt.status, 'PENDING');
+    assert.deepEqual(challenge.body.challenge, { url: 'https://banco.test/3ds', creq: 'abc' });
+    const paymentId = (await prisma.paymentAttempt.findUnique({ where: { id: challenged } })).providerPaymentId;
+    payments.set(paymentId, { ...payments.get(paymentId), status: 'rejected', status_detail: 'cc_rejected_3ds_challenge' });
+    assert.equal((await api('card').post(`/api/payments/attempts/${challenged}/sync`)).body.attempt.status, 'REJECTED');
+
+    const approved = await start();
+    const ok = await pay(approved, 'tok-ok');
+    assert.equal(ok.body.attempt.status, 'APPROVED');
+    assert.equal(ok.body.access.full?.active, true);
+    assert.equal(await grants(), 1);
+    const sent = charges.at(-1);
+    assert.equal(sent.body.transaction_amount, 1110);
+    assert.equal(sent.body.external_reference, approved);
+    assert.equal(sent.body.installments, 1);
+    assert.equal(sent.body.issuer_id, 160);
+    assert.ok(sent.headers['X-Idempotency-Key']);
+    assert.ok(!JSON.stringify(ok.body).includes(TOKEN));
+  });
+
+  test('No se activa con Public Key de un tipo distinto al Access Token', async () => {
+    const off = await api('admin').put('/api/admin/payment-settings', { enabled: false, publicKey: 'TEST-otra' });
+    assert.equal(off.body.publicKey, 'TEST-otra');
+    const on = await api('admin').put('/api/admin/payment-settings', { enabled: true });
+    assert.equal(on.status, 400);
+    assert.match(on.body.error, /Public Key/);
+    assert.equal((await api('admin').put('/api/admin/payment-settings', { publicKey: 'APP_USR-llave-publica', enabled: true })).body.enabled, true);
   });
 
   test('Un reembolso avisa al administrador y no se confunde con un rechazo', async () => {

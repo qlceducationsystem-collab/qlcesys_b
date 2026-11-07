@@ -10,6 +10,7 @@ import { activeProvider } from '../services/payments/providers.js';
 import { checkPromotion } from '../services/promotion.service.js';
 import * as subscribers from '../services/subscriber.service.js';
 import { creditBalance } from '../services/credit.service.js';
+import { authLimiter } from '../middlewares/rateLimit.js';
 
 const r = Router();
 const checkoutSchema = z.object({
@@ -22,6 +23,12 @@ const checkoutSchema = z.object({
     recipientName: z.string().trim().max(120).optional().nullable(),
   }).optional().nullable(),
 }).refine((v) => v.offerCode || v.promoCode, { message: 'Selecciona un producto', path: ['offerCode'] });
+const cardSchema = z.object({
+  token: z.string().trim().min(1).max(200),
+  paymentMethodId: z.string().trim().min(1).max(40),
+  issuerId: z.string().trim().max(40).optional(),
+  deviceId: z.string().trim().max(200).optional(),
+});
 const resolveSchema = z.object({ outcome: z.enum(['APPROVED', 'REJECTED']) });
 const codeSchema = z.object({ code: z.string().trim().min(4).max(40) });
 const preferencesSchema = z.object({ marketingOptOut: z.boolean() });
@@ -45,6 +52,12 @@ r.post('/promo/check', requireRole('CLIENT'), validate(codeSchema), ah(async (re
 r.post('/subscription/cancel', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.cancelSubscription(req.user))));
 r.post('/subscription/resume', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.resumeSubscription(req.user))));
 r.put('/preferences', requireRole('CLIENT'), validate(preferencesSchema), ah(async (req, res) => res.json(await subscribers.setMarketing(req.user, req.body))));
+
+r.post('/attempts/:id/card', requireRole('CLIENT'), authLimiter, validate(cardSchema), ah(async (req, res) => {
+  const result = await payments.payWithCard(req.user, req.params.id, req.body);
+  const [access, credits] = await Promise.all([getAccess(req.user.id), creditBalance(req.user.id)]);
+  res.json({ ...result, access, credits });
+}));
 
 r.post('/attempts/:id/sync', requireRole('CLIENT'), ah(async (req, res) => {
   const result = await payments.syncAttempt(req.user, req.params.id);
