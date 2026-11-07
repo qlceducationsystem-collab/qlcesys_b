@@ -117,6 +117,30 @@ export async function detectExpirations(now = new Date()) {
   return count;
 }
 
+const RENEWAL_NOTICE_DAYS = 3;
+
+export async function sendRenewalReminders(now = new Date(), send = sendClientEmail) {
+  const limit = new Date(now.getTime() + RENEWAL_NOTICE_DAYS * 86400000);
+  const grants = await prisma.accessGrant.findMany({
+    where: { active: true, renewalNoticeAt: null, expiresAt: { gt: now, lte: limit }, paymentAttempt: { provider: 'DLOCALGO' }, offer: { billingCycle: { not: null } }, user: { role: 'CLIENT' } },
+    include: { offer: true, user: true },
+    take: 500,
+  });
+  let count = 0;
+  for (const grant of grants) {
+    const later = await prisma.accessGrant.count({ where: { userId: grant.userId, active: true, accessType: grant.accessType, expiresAt: { gt: grant.expiresAt } } });
+    if (later) {
+      await prisma.accessGrant.update({ where: { id: grant.id }, data: { renewalNoticeAt: now } });
+      continue;
+    }
+    const mail = await send('RENOVACION_PENDIENTE', 'renewalDue', grant.user.email, { name: grant.user.name, product: grant.offer.name, offerCode: grant.offer.code, expiresAt: grant.expiresAt }).catch(() => null);
+    if (!mail?.sent) continue;
+    await prisma.accessGrant.update({ where: { id: grant.id }, data: { renewalNoticeAt: now } });
+    count += 1;
+  }
+  return count;
+}
+
 const RETENTION_KEY = 'retention';
 const DAY = 86400000;
 export const RETENTION_STEPS = [{ day: 10, left: 20 }, { day: 20, left: 10 }, { day: 29, left: 1 }];
@@ -188,7 +212,7 @@ export async function runRetention(now = new Date(), { only } = {}) {
 }
 
 export function startSubscriptionJob(intervalMinutes = 60) {
-  const run = () => detectExpirations().then(() => runRetention()).catch((err) => console.error('[qlc] vencimientos', err.message));
+  const run = () => detectExpirations().then(() => sendRenewalReminders()).then(() => runRetention()).catch((err) => console.error('[qlc] vencimientos', err.message));
   run();
   return setInterval(run, intervalMinutes * 60000);
 }

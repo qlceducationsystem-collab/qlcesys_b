@@ -250,6 +250,12 @@ ${codes.map((c) => codeBlock(c, 3, 22)).join('')}
     body: `<p>Hola ${escapeHtml(name)},</p><p>Ya tienes disponible: <b>${escapeHtml(String(quantity))} × ${escapeHtml(product)}</b>.</p>${button(url('/app'), 'Entrar a mi plataforma')}`,
     text: `Hola ${name}, ya tienes disponible ${quantity} x ${product}.`,
   }),
+  renewalDue: ({ name, product, offerCode, expiresAt }) => ({
+    subject: 'Tu acceso a QLC está por vencer: renueva tu pago',
+    title: 'Tu acceso está por vencer',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>Tu acceso a <b>${escapeHtml(product)}</b> vence el ${escapeHtml(new Date(expiresAt).toISOString().slice(0, 10))}. Este pago no se renueva solo: realízalo a tiempo para no perder el acceso.</p>${button(url(`/app/acceso?renovar=${encodeURIComponent(offerCode)}`), 'Renovar mi acceso')}`,
+    text: `Hola ${name}, tu acceso a ${product} vence el ${new Date(expiresAt).toISOString().slice(0, 10)}. Renueva en ${url(`/app/acceso?renovar=${encodeURIComponent(offerCode)}`)}`,
+  }),
   accessExpired: ({ name, product }) => ({
     subject: 'Tu suscripción de QLC venció',
     title: 'Tu suscripción venció',
@@ -374,6 +380,12 @@ ${codes.map((c) => codeBlock(c, 3, 22)).join('')}
     title: 'Purchase available',
     body: `<p>Hi ${escapeHtml(name)},</p><p>You now have available: <b>${escapeHtml(String(quantity))} × ${escapeHtml(productName(product, 'en'))}</b>.</p>${button(url('/app'), 'Go to my platform')}`,
     text: `Hi ${name}, you now have available ${quantity} x ${productName(product, 'en')}.`,
+  }),
+  renewalDue: ({ name, product, offerCode, expiresAt }) => ({
+    subject: 'Your QLC access is about to expire: renew your payment',
+    title: 'Your access is about to expire',
+    body: `<p>Hi ${escapeHtml(name)},</p><p>Your access to <b>${escapeHtml(productName(product, 'en'))}</b> expires on ${escapeHtml(new Date(expiresAt).toISOString().slice(0, 10))}. This payment does not renew automatically: make it in time to keep your access.</p>${button(url(`/app/acceso?renovar=${encodeURIComponent(offerCode)}`), 'Renew my access')}`,
+    text: `Hi ${name}, your access to ${productName(product, 'en')} expires on ${new Date(expiresAt).toISOString().slice(0, 10)}. Renew at ${url(`/app/acceso?renovar=${encodeURIComponent(offerCode)}`)}`,
   }),
   accessExpired: ({ name, product }) => ({
     subject: 'Your QLC subscription has expired',

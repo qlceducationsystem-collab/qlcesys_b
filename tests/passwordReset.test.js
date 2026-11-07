@@ -17,6 +17,9 @@ run('Restablecer contraseña con código por correo', () => {
   const post = (url, body) => request(app).post(url).send(body);
   const lastCode = (to) => testEmail.outbox.filter((m) => m.to === to && m.template === 'passwordReset').at(-1)?.data.code;
   const wait = () => new Promise((r) => setTimeout(r, 50));
+  const until = async (check) => {
+    for (let i = 0; i < 100 && !check(); i += 1) await new Promise((r) => setTimeout(r, 20));
+  };
 
   before(async () => {
     process.env.DATABASE_URL = TEST_DB;
@@ -42,7 +45,7 @@ run('Restablecer contraseña con código por correo', () => {
     const real = await post('/api/auth/password-reset/request', { email });
     assert.equal(ghost.status, 200);
     assert.equal(ghost.body.message, real.body.message);
-    await wait();
+    await until(() => lastCode(email));
     assert.equal(lastCode(`nadie-${uid}@test.qlc`), undefined);
     assert.ok(lastCode(email));
     assert.equal((await post('/api/auth/password-reset/request', { email })).status, 200);

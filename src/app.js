@@ -36,7 +36,12 @@ export function createApp() {
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     }),
   );
-  app.use(express.json({ limit: '200kb' }));
+  app.use(express.json({
+    limit: '200kb',
+    verify: (req, _res, buf) => {
+      if (req.originalUrl.startsWith('/api/webhooks/')) req.rawBody = buf.toString('utf8');
+    },
+  }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 

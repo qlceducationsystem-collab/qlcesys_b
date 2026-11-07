@@ -873,6 +873,7 @@ model AccessGrant {
   revokedAt        DateTime?
   revokedById      String?
   expiryNotifiedAt DateTime?
+  renewalNoticeAt  DateTime?
   createdAt        DateTime        @default(now())
   user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   offer            ProductOffer    @relation(fields: [offerId], references: [id])

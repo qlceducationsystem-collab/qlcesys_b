@@ -4,6 +4,8 @@ import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
 import { convertForCharge, paymentSettings } from './paymentSettings.service.js';
 import { paypalQuote, paypalRequest, paypalSettings, writePaypalSettings } from './paypalSettings.service.js';
+import { DLOCAL_COUNTRIES, dlocalQuote, dlocalRequest, dlocalSettings } from './dlocalSettings.service.js';
+import { badRequest } from '../../utils/httpError.js';
 
 const mockProvider = {
   code: 'MOCK',
@@ -39,6 +41,7 @@ const paymentResult = (payment) => ({
 const mercadoPagoProvider = {
   code: 'MERCADOPAGO',
   supportsManualResolution: false,
+  supportsRecurring: true,
   async quote(amount, currency) {
     if (amount === null || amount === undefined) throw new HttpError(409, 'Este acceso todavía no tiene precio definido');
     return convertForCharge(amount, currency, await paymentSettings());
@@ -146,6 +149,7 @@ async function ensurePaypalPlan(offer, cycle, charge) {
 const paypalProvider = {
   code: 'PAYPAL',
   supportsManualResolution: false,
+  supportsRecurring: true,
   quote: (amount, currency) => paypalQuote(amount, currency),
   async createCheckout() {
     const settings = await paypalSettings();
@@ -187,9 +191,43 @@ const paypalProvider = {
   },
 };
 
+const DLOCAL_STATUS = { PAID: 'APPROVED', REJECTED: 'REJECTED', CANCELLED: 'REJECTED', EXPIRED: 'REJECTED' };
+
+const dlocalProvider = {
+  code: 'DLOCALGO',
+  supportsManualResolution: false,
+  supportsRecurring: false,
+  quote: (amount, currency) => dlocalQuote(amount, currency),
+  async createCheckout({ attempt, offer, user, charge, country }) {
+    if (!DLOCAL_COUNTRIES.includes(country)) throw badRequest('Elige tu país');
+    const settings = await dlocalSettings();
+    const payment = await dlocalRequest('/v1/payments', {
+      method: 'POST',
+      body: {
+        amount: charge.amount,
+        currency: charge.currency,
+        country,
+        order_id: attempt.id,
+        description: String(offer.name).slice(0, 100),
+        payer: { name: String(user.name || '').slice(0, 100), email: user.email, user_reference: user.id },
+        success_url: `${env.frontendUrl}/app/acceso?pago=${attempt.id}`,
+        back_url: `${env.frontendUrl}/app/acceso`,
+        ...(isHttps(env.backendUrl) ? { notification_url: `${env.backendUrl}/api/webhooks/dlocalgo` } : {}),
+        ...(settings.methods === 'NO_CARDS' ? { payment_type: 'BANK_TRANSFER,VOUCHER' } : {}),
+      },
+    });
+    return { mode: 'REDIRECT', initPoint: payment.redirect_url, providerRef: String(payment.id) };
+  },
+  async fetchPayment(id) {
+    const payment = await dlocalRequest(`/v1/payments/${encodeURIComponent(id)}`);
+    return { id: String(payment.id), attemptId: payment.order_id, status: DLOCAL_STATUS[payment.status] || 'PENDING', amount: payment.amount, currency: payment.currency };
+  },
+  listChargebacks: async () => (await dlocalRequest('/v1/chargebacks')).data || [],
+};
+
 export async function activeProviders() {
-  const [mp, paypal] = await Promise.all([paymentSettings(), paypalSettings()]);
-  return [...(mp.enabled ? [mercadoPagoProvider] : []), ...(paypal.enabled ? [paypalProvider] : [])];
+  const [mp, paypal, dlocal] = await Promise.all([paymentSettings(), paypalSettings(), dlocalSettings()]);
+  return [...(mp.enabled ? [mercadoPagoProvider] : []), ...(paypal.enabled ? [paypalProvider] : []), ...(dlocal.enabled ? [dlocalProvider] : [])];
 }
 
 export async function activeProvider(code) {
@@ -202,6 +240,6 @@ export async function activeProvider(code) {
   return list[0] || mockProvider;
 }
 
-const ALL = [mockProvider, mercadoPagoProvider, paypalProvider];
+const ALL = [mockProvider, mercadoPagoProvider, paypalProvider, dlocalProvider];
 export const providerByCode = (code) => ALL.find((p) => p.code === code);
-export { mercadoPagoProvider, paypalProvider };
+export { dlocalProvider, mercadoPagoProvider, paypalProvider };

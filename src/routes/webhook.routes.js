@@ -6,7 +6,8 @@ import { resolveAttempt } from '../services/payments/payment.service.js';
 import { mercadoPagoWebhookSecret } from '../services/payments/paymentSettings.service.js';
 import { GATEWAY, recordEvent } from '../services/adminEvent.service.js';
 import { verifyPaypalWebhook } from '../services/payments/paypalSettings.service.js';
-import { processMpAuthorizedPayment, processMpPreapproval, processPaypalEvent } from '../services/payments/subscriptionEvents.service.js';
+import { processDlocalNotification, processMpAuthorizedPayment, processMpPreapproval, processPaypalEvent } from '../services/payments/subscriptionEvents.service.js';
+import { verifyDlocalSignature } from '../services/payments/dlocalSettings.service.js';
 
 const r = Router();
 
@@ -55,6 +56,18 @@ r.post('/mercadopago', async (req, res) => {
     res.status(200).json(await processMercadoPagoPayment({ dataId: String(dataId), eventId: requestId }));
   } catch (err) {
     console.error('[webhook] error procesando notificación:', err.message);
+    res.status(500).json({ error: 'Error procesando notificación' });
+  }
+});
+
+r.post('/dlocalgo', async (req, res) => {
+  if (!(await verifyDlocalSignature(req.headers.authorization, req.rawBody))) return res.status(401).json({ error: 'Firma inválida' });
+  const paymentId = req.body?.payment_id;
+  if (!paymentId) return res.status(200).json({ ignored: true });
+  try {
+    res.status(200).json(await processDlocalNotification(String(paymentId)));
+  } catch (err) {
+    console.error('[webhook] error procesando dLocal Go:', err.message);
     res.status(500).json({ error: 'Error procesando notificación' });
   }
 });

@@ -16,6 +16,7 @@ export const CLIENT_EMAIL_LABELS = {
   ACCESO_ACTIVADO: 'Acceso activado o renovado',
   SERVICIO_DISPONIBLE: 'Consultas o sesiones adquiridas',
   ACCESO_VENCIDO: 'Su suscripción venció',
+  RENOVACION_PENDIENTE: 'Aviso para pagar su renovación (pagos locales)',
   CONSULTA_RESPONDIDA: 'Respuesta a su consulta pagada',
   EJERCICIO_RESPONDIDO: 'Respuesta a su ejercicio o duda',
   CITA_ACTUALIZADA: 'Su cita fue confirmada, reprogramada o cancelada',
@@ -25,7 +26,7 @@ export const CLIENT_EMAIL_LABELS = {
 };
 
 export const CLIENT_EMAIL_GROUPS = [
-  ['Cuenta y suscripción', ['BIENVENIDA', 'ACCESO_ACTIVADO', 'SERVICIO_DISPONIBLE', 'ACCESO_VENCIDO']],
+  ['Cuenta y suscripción', ['BIENVENIDA', 'ACCESO_ACTIVADO', 'SERVICIO_DISPONIBLE', 'ACCESO_VENCIDO', 'RENOVACION_PENDIENTE']],
   ['Academia y asesoría', ['CONSULTA_RESPONDIDA', 'EJERCICIO_RESPONDIDO', 'CITA_ACTUALIZADA']],
   ['Regalos y promociones', ['CODIGOS_REGALO', 'REGALO_ACTIVADO', 'PROMOCION']],
 ].map(([label, types]) => ({ label, events: types.map((type) => ({ type, label: CLIENT_EMAIL_LABELS[type] })) }));

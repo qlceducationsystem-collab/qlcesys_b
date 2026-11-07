@@ -1,3 +1,4 @@
+import { DLOCAL_CURRENCIES, DLOCAL_METHODS, dlocalSettingsView, saveDlocalSettings, testDlocalConnection } from '../services/payments/dlocalSettings.service.js';
 import { PAYPAL_CURRENCIES, paypalSettingsView, savePaypalSettings, testPaypalConnection } from '../services/payments/paypalSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -153,6 +154,24 @@ const paymentSettingsSchema = z.object({
   rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
   enabled: z.boolean().optional(),
 });
+const dlocalSettingsSchema = z.object({
+  apiKey: z.string().trim().max(300).optional(),
+  secretKey: z.string().trim().max(300).optional(),
+  mode: z.enum(['SANDBOX', 'LIVE']).optional(),
+  currency: z.enum(DLOCAL_CURRENCIES).optional(),
+  methods: z.enum(DLOCAL_METHODS).optional(),
+  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
+  enabled: z.boolean().optional(),
+});
+r.get('/dlocal-settings', FULL, ah(async (_req, res) => res.json(await dlocalSettingsView())));
+r.put('/dlocal-settings', FULL, validate(dlocalSettingsSchema), ah(async (req, res) => {
+  const view = await saveDlocalSettings(req.body);
+  if (req.body.apiKey || req.body.secretKey || req.body.mode || req.body.enabled !== undefined) {
+    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'dLocal Go activo' : 'dLocal Go desactivado', result: `Modo ${view.mode}` });
+  }
+  res.json(view);
+}));
+r.post('/dlocal-settings/test', FULL, ah(async (_req, res) => res.json(await testDlocalConnection())));
 const paypalSettingsSchema = z.object({
   clientId: z.string().trim().max(200).optional(),
   clientSecret: z.string().trim().max(300).optional(),

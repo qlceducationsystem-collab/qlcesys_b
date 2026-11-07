@@ -1,5 +1,6 @@
 import { publicChargeInfo } from '../services/payments/paymentSettings.service.js';
 import { publicPaypalInfo } from '../services/payments/paypalSettings.service.js';
+import { publicDlocalInfo } from '../services/payments/dlocalSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { ah } from '../utils/asyncHandler.js';
@@ -16,7 +17,8 @@ import { authLimiter } from '../middlewares/rateLimit.js';
 const r = Router();
 const checkoutSchema = z.object({
   offerCode: z.string().trim().min(1).max(40).optional(),
-  provider: z.enum(['MERCADOPAGO', 'PAYPAL']).optional(),
+  provider: z.enum(['MERCADOPAGO', 'PAYPAL', 'DLOCALGO']).optional(),
+  country: z.string().trim().regex(/^[A-Z]{2}$/).optional(),
   promoCode: z.string().trim().min(4).max(40).optional(),
   quantity: z.coerce.number().int().min(1).max(payments.MAX_GIFTS).optional(),
   gift: z.object({
@@ -37,9 +39,9 @@ const codeSchema = z.object({ code: z.string().trim().min(4).max(40) });
 const preferencesSchema = z.object({ marketingOptOut: z.boolean() });
 
 r.get('/access', ah(async (req, res) => {
-  const [access, offers, provider, providers, charge, paypal] = await Promise.all([getAccess(req.user.id), cachedActiveOffers(), activeProvider(), activeProviders(), publicChargeInfo(), publicPaypalInfo()]);
+  const [access, offers, provider, providers, charge, paypal, dlocal] = await Promise.all([getAccess(req.user.id), cachedActiveOffers(), activeProvider(), activeProviders(), publicChargeInfo(), publicPaypalInfo(), publicDlocalInfo()]);
   const subscription = req.user.role === 'CLIENT' ? await subscribers.subscriptionStatus(req.user) : null;
-  res.json({ access, offers, provider: provider.code, providers: providers.map((p) => p.code), charge, paypal, subscription });
+  res.json({ access, offers, provider: provider.code, providers: providers.map((p) => p.code), charge, paypal, dlocal, subscription });
 }));
 
 r.get('/attempts', ah(async (req, res) => res.json(await payments.listMyAttempts(req.user.id))));

@@ -9,7 +9,7 @@ import { promoPrice, usablePromotion } from '../promotion.service.js';
 import { grantCredits } from '../credit.service.js';
 import { sendClientEmail } from '../email.service.js';
 import { assertCanBuyMasterclass } from '../masterclass.service.js';
-import { activeProvider, mercadoPagoProvider, paypalProvider, providerByCode } from './providers.js';
+import { activeProvider, dlocalProvider, mercadoPagoProvider, paypalProvider, providerByCode } from './providers.js';
 
 export const MAX_GIFTS = 20;
 const NO_SEARCH = { search: async () => [] };
@@ -67,8 +67,9 @@ export async function createCheckout(user, input) {
   const data = await checkoutData(user, params);
   const provider = await activeProvider(params.provider);
   const charge = await provider.quote(data.amount, data.offer.currency);
-  const billingCycle = provider.code !== 'MOCK' && data.kind === 'STANDARD' && RECURRING_OFFER_TYPES.includes(data.offer.type) ? data.offer.billingCycle || null : null;
-  if (billingCycle && (await prisma.subscription.findFirst({ where: { userId: user.id, OR: [{ status: { in: ['ACTIVE', 'SUSPENDED'] } }, { status: 'PENDING', provider: 'MERCADOPAGO' }] } }))) {
+  const recurringOffer = provider.code !== 'MOCK' && data.kind === 'STANDARD' && RECURRING_OFFER_TYPES.includes(data.offer.type) && !!data.offer.billingCycle;
+  const billingCycle = recurringOffer && provider.supportsRecurring ? data.offer.billingCycle : null;
+  if (recurringOffer && (await prisma.subscription.findFirst({ where: { userId: user.id, OR: [{ status: { in: ['ACTIVE', 'SUSPENDED'] } }, { status: 'PENDING', provider: 'MERCADOPAGO' }] } }))) {
     throw conflict('Ya tienes una suscripción activa. Cancélala en Mi acceso para contratar otra.');
   }
   const attempt = await prisma.paymentAttempt.create({
@@ -81,7 +82,7 @@ export async function createCheckout(user, input) {
   });
   let checkout;
   try {
-    checkout = await provider.createCheckout({ attempt, offer: data.offer, user, charge });
+    checkout = await provider.createCheckout({ attempt, offer: data.offer, user, charge, country: params.country });
   } catch (err) {
     await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: 'REJECTED', resolvedAt: new Date() } });
     throw err;
@@ -90,7 +91,7 @@ export async function createCheckout(user, input) {
   if (data.kind === 'STANDARD') {
     await recordEvent({ category: 'SUSCRIPCION', type: 'CONTRATADA', actor: actorOf(user), user, offer: data.offer, status: 'Pago pendiente', amount: data.amount });
   }
-  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, publicKey: checkout.publicKey || null, clientId: checkout.clientId || null, currency: checkout.currency || null } };
+  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, initPoint: checkout.initPoint || null, publicKey: checkout.publicKey || null, clientId: checkout.clientId || null, currency: checkout.currency || null } };
 }
 
 async function subscriptionEventType(tx, attempt) {
@@ -102,7 +103,7 @@ async function subscriptionEventType(tx, attempt) {
   return 'ACTIVADA';
 }
 
-const canRecover = (attempt, status) => status === 'APPROVED' && attempt.status === 'REJECTED' && attempt.provider === 'MERCADOPAGO';
+const canRecover = (attempt, status) => status === 'APPROVED' && attempt.status === 'REJECTED' && ['MERCADOPAGO', 'DLOCALGO'].includes(attempt.provider);
 
 export async function resolveAttempt(attemptId, status, db = prisma, { paidAmount, paidCurrency, paymentId } = {}) {
   const result = await db.$transaction(async (tx) => {
@@ -166,6 +167,15 @@ export async function resolveSimulated(user, attemptId, outcome) {
   if (!providerByCode(attempt.provider)?.supportsManualResolution || !(await activeProvider()).supportsManualResolution) throw forbidden('Este pago solo puede confirmarlo el proveedor');
   if (attempt.status !== 'PENDING') throw badRequest('Este intento ya fue resuelto');
   return resolveAttempt(attemptId, outcome);
+}
+
+export async function applyDlocalPayment(attempt, payment) {
+  if (attempt.provider !== 'DLOCALGO' || attempt.providerRef !== payment.id || payment.status === 'PENDING') return;
+  const sameCurrency = payment.currency === attempt.chargedCurrency;
+  await resolveAttempt(attempt.id, payment.status, prisma, {
+    paymentId: payment.id,
+    ...(sameCurrency ? { paidAmount: payment.amount, paidCurrency: payment.currency } : {}),
+  });
 }
 
 export async function closeSubscription(sub, status) {
@@ -276,7 +286,10 @@ export async function paypalConfirm(user, attemptId, { orderId, subscriptionId }
 export async function syncAttempt(user, attemptId, { search = (id) => mercadoPagoProvider.searchByAttempt(id) } = {}) {
   let attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, subscription: true } });
   if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
-  if (search !== NO_SEARCH.search && attempt.status === 'PENDING' && attempt.subscription?.providerSubscriptionId) {
+  if (search !== NO_SEARCH.search && attempt.provider === 'DLOCALGO' && attempt.status !== 'APPROVED' && attempt.providerRef) {
+    await applyDlocalPayment(attempt, await dlocalProvider.fetchPayment(attempt.providerRef));
+    attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, subscription: true } });
+  } else if (search !== NO_SEARCH.search && attempt.status === 'PENDING' && attempt.subscription?.providerSubscriptionId) {
     if (attempt.provider === 'PAYPAL') await refreshPaypalSubscription(attempt.subscription).catch(() => null);
     else {
       const preapproval = await mercadoPagoProvider.getSubscription(attempt.subscription.providerSubscriptionId).catch(() => null);
