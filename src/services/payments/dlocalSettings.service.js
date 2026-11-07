@@ -3,7 +3,7 @@ import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { decryptSecret, encryptSecret } from '../../utils/crypto.js';
 import { badRequest, conflict, HttpError } from '../../utils/httpError.js';
-import { convertTo } from './paymentSettings.service.js';
+import { round2 } from '../../utils/money.js';
 
 const KEY = 'dlocalgo';
 const API = { SANDBOX: 'https://api-sbx.dlocalgo.com', LIVE: 'https://api.dlocalgo.com' };
@@ -126,6 +126,15 @@ export async function testDlocalConnection() {
     await write({ lastTest: { at, ok: false, error: err.providerStatus === 403 || err.providerStatus === 401 ? 'dLocal Go rechazó las llaves' : err.message.slice(0, 200) }, enabled: false });
   }
   return dlocalSettingsView();
+}
+
+function convertTo(amount, currency, target, rates) {
+  if (amount === null || amount === undefined) throw conflict('Este acceso todavía no tiene precio definido');
+  const source = String(currency).toUpperCase();
+  if (source === target) return { amount: round2(Number(amount)), currency: target };
+  const rate = Number(rates?.[source]);
+  if (!(rate > 0)) throw conflict(`Falta el tipo de cambio de ${source} a ${target}. Configúralo en Pasarela de pago.`);
+  return { amount: round2(Number(amount) * rate), currency: target };
 }
 
 export async function dlocalQuote(amount, currency) {

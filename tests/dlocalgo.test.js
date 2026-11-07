@@ -119,14 +119,14 @@ run('dLocal Go', () => {
     const on = await api('admin').put('/api/admin/dlocal-settings', { rates: { USDT: 1, MXN: 0.055 }, enabled: true });
     assert.equal(on.body.enabled, true, JSON.stringify(on.body));
     const access = await api('ana').get('/api/payments/access');
-    assert.deepEqual(access.body.providers, ['DLOCALGO']);
+    assert.equal(access.body.provider, 'DLOCALGO');
     assert.ok(access.body.dlocal.countries.includes('CO'));
     assert.ok(!JSON.stringify(access.body).includes(SECRET));
   });
 
   test('El pago pide país, no crea cobro recurrente y activa el acceso con un aviso firmado', async () => {
-    assert.equal((await api('ana').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO' })).status, 400);
-    const checkout = await api('ana').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'CO' });
+    assert.equal((await api('ana').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' })).status, 400);
+    const checkout = await api('ana').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'CO' });
     assert.equal(checkout.status, 201, JSON.stringify(checkout.body));
     assert.equal(checkout.body.checkout.mode, 'REDIRECT');
     assert.match(checkout.body.checkout.initPoint, /checkout\.test/);
@@ -161,7 +161,7 @@ run('dLocal Go', () => {
   });
 
   test('Si dLocal Go convierte a la moneda local, el pago aprobado sí activa; regresar sincroniza', async () => {
-    const checkout = await api('luis').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'CL' });
+    const checkout = await api('luis').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'CL' });
     const id = checkout.body.attempt.id;
     const paymentId = (await prisma.paymentAttempt.findUnique({ where: { id } })).providerRef;
     payments.set(paymentId, { ...payments.get(paymentId), amount: 9500, currency: 'CLP', status: 'PAID' });
@@ -173,20 +173,20 @@ run('dLocal Go', () => {
   });
 
   test('Importe distinto en la misma moneda, rechazo y un aviso de otro pago no activan nada', async () => {
-    const first = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'PE' });
+    const first = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'PE' });
     const firstRef = (await prisma.paymentAttempt.findUnique({ where: { id: first.body.attempt.id } })).providerRef;
     payments.set(firstRef, { ...payments.get(firstRef), amount: 1, status: 'PAID' });
     await notify(firstRef);
     assert.equal((await prisma.paymentAttempt.findUnique({ where: { id: first.body.attempt.id } })).status, 'PENDING');
     assert.ok(await prisma.adminEvent.findFirst({ where: { userId: ids.eva, type: 'IMPORTE_NO_COINCIDE' } }));
 
-    const second = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'PE' });
+    const second = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'PE' });
     const secondRef = (await prisma.paymentAttempt.findUnique({ where: { id: second.body.attempt.id } })).providerRef;
     payments.get(secondRef).status = 'EXPIRED';
     await notify(secondRef);
     assert.equal((await prisma.paymentAttempt.findUnique({ where: { id: second.body.attempt.id } })).status, 'REJECTED');
 
-    const third = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'PE' });
+    const third = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'PE' });
     const forged = `DP-${uid}-ajeno`;
     payments.set(forged, { id: forged, amount: 10, currency: 'USD', status: 'PAID', order_id: third.body.attempt.id });
     await notify(forged);
@@ -194,7 +194,7 @@ run('dLocal Go', () => {
     assert.equal(await prisma.accessGrant.count({ where: { userId: ids.eva } }), 0);
 
     methodError = true;
-    const unavailable = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'NG' });
+    const unavailable = await api('eva').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'NG' });
     methodError = false;
     assert.equal(unavailable.status, 409);
     assert.match(unavailable.body.error, /no está disponible/);
@@ -230,9 +230,12 @@ run('dLocal Go', () => {
     assert.equal((await prisma.accessGrant.findUnique({ where: { id: grant.id } })).active, true);
   });
 
-  test('Convive con las otras pasarelas: elegir un proveedor inactivo se rechaza', async () => {
-    assert.equal((await api('mia').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'PAYPAL' })).status, 409);
-    const checkout = await api('mia').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', provider: 'DLOCALGO', country: 'MX' });
+  test('Ya no se puede comprar con Mercado Pago ni con PayPal', async () => {
+    const checkout = await api('mia').post('/api/payments/checkout', { offerCode: 'TOOLS_ALL', country: 'MX' });
     assert.equal(checkout.body.attempt.provider, 'DLOCALGO');
+    assert.equal((await api('mia').post(`/api/payments/attempts/${checkout.body.attempt.id}/card`, { token: 'x', paymentMethodId: 'visa' })).status, 404);
+    assert.equal((await api('mia').post(`/api/payments/attempts/${checkout.body.attempt.id}/paypal/create`)).status, 404);
+    assert.equal((await api('admin').get('/api/admin/payment-settings')).status, 404);
+    assert.equal((await api('admin').get('/api/admin/paypal-settings')).status, 404);
   });
 });

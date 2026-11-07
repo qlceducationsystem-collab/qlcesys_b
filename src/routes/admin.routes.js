@@ -1,5 +1,4 @@
 import { DLOCAL_CURRENCIES, DLOCAL_METHODS, dlocalSettingsView, saveDlocalSettings, testDlocalConnection } from '../services/payments/dlocalSettings.service.js';
-import { PAYPAL_CURRENCIES, paypalSettingsView, savePaypalSettings, testPaypalConnection } from '../services/payments/paypalSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
@@ -27,7 +26,6 @@ import { getLoginNotice, saveLoginNotice } from '../services/loginNotice.service
 import * as exercises from '../services/exerciseInbox.service.js';
 import { adminMessages, adminSend, stopShareByAdmin } from '../services/dataShare.service.js';
 import { EVENT_GROUPS, listEvents, actorOf, recordEvent } from '../services/adminEvent.service.js';
-import { paymentSettingsView, savePaymentSettings, testMercadoPagoConnection } from '../services/payments/paymentSettings.service.js';
 import { CLIENT_EMAIL_GROUPS, mailSettingsView, recordMailTest, saveMailSettings } from '../services/mailSettings.service.js';
 import { resetEmailReady, sendClientEmail } from '../services/email.service.js';
 import { adminQuestions, answerQuestion, releaseCredits } from '../services/credit.service.js';
@@ -147,13 +145,6 @@ const mailSettingsSchema = z.object({
   smtpEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido')]).optional(),
   smtpPassword: z.string().trim().max(100).optional(),
 });
-const paymentSettingsSchema = z.object({
-  accessToken: z.string().trim().max(300).optional(),
-  publicKey: z.string().trim().max(200).optional(),
-  webhookSecret: z.string().trim().max(300).optional(),
-  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
-  enabled: z.boolean().optional(),
-});
 const dlocalSettingsSchema = z.object({
   apiKey: z.string().trim().max(300).optional(),
   secretKey: z.string().trim().max(300).optional(),
@@ -172,33 +163,6 @@ r.put('/dlocal-settings', FULL, validate(dlocalSettingsSchema), ah(async (req, r
   res.json(view);
 }));
 r.post('/dlocal-settings/test', FULL, ah(async (_req, res) => res.json(await testDlocalConnection())));
-const paypalSettingsSchema = z.object({
-  clientId: z.string().trim().max(200).optional(),
-  clientSecret: z.string().trim().max(300).optional(),
-  webhookId: z.string().trim().max(100).optional(),
-  mode: z.enum(['SANDBOX', 'LIVE']).optional(),
-  currency: z.enum(PAYPAL_CURRENCIES).optional(),
-  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
-  enabled: z.boolean().optional(),
-});
-r.get('/paypal-settings', FULL, ah(async (_req, res) => res.json(await paypalSettingsView())));
-r.put('/paypal-settings', FULL, validate(paypalSettingsSchema), ah(async (req, res) => {
-  const view = await savePaypalSettings(req.body);
-  if (req.body.clientId || req.body.clientSecret || req.body.webhookId || req.body.mode || req.body.enabled !== undefined) {
-    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'PayPal activo' : 'PayPal desactivado', result: `Modo ${view.mode}` });
-  }
-  res.json(view);
-}));
-r.post('/paypal-settings/test', FULL, ah(async (_req, res) => res.json(await testPaypalConnection())));
-r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
-r.put('/payment-settings', FULL, validate(paymentSettingsSchema), ah(async (req, res) => {
-  const view = await savePaymentSettings(req.body);
-  if (req.body.accessToken || req.body.publicKey || req.body.webhookSecret || req.body.enabled !== undefined) {
-    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Activo' : 'Desactivado', result: 'Configuración de Mercado Pago modificada' });
-  }
-  res.json(view);
-}));
-r.post('/payment-settings/test', FULL, ah(async (_req, res) => res.json(await testMercadoPagoConnection())));
 r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
 r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => {
   const view = await saveMailSettings(req.body);

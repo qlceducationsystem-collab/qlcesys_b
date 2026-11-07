@@ -65,10 +65,9 @@ async function checkoutData(user, { offerCode, promoCode, gift, quantity: wanted
 export async function createCheckout(user, input) {
   const params = typeof input === 'string' ? { offerCode: input } : input;
   const data = await checkoutData(user, params);
-  const provider = await activeProvider(params.provider);
+  const provider = await activeProvider();
   const charge = await provider.quote(data.amount, data.offer.currency);
   const recurringOffer = provider.code !== 'MOCK' && data.kind === 'STANDARD' && RECURRING_OFFER_TYPES.includes(data.offer.type) && !!data.offer.billingCycle;
-  const billingCycle = recurringOffer && provider.supportsRecurring ? data.offer.billingCycle : null;
   if (recurringOffer && (await prisma.subscription.findFirst({ where: { userId: user.id, OR: [{ status: { in: ['ACTIVE', 'SUSPENDED'] } }, { status: 'PENDING', provider: 'MERCADOPAGO' }] } }))) {
     throw conflict('Ya tienes una suscripción activa. Cancélala en Mi acceso para contratar otra.');
   }
@@ -76,7 +75,7 @@ export async function createCheckout(user, input) {
     data: {
       userId: user.id, offerId: data.offer.id, amount: data.amount, currency: data.offer.currency, provider: provider.code,
       chargedAmount: charge?.amount ?? null, chargedCurrency: charge?.currency ?? null,
-      kind: data.kind, quantity: data.quantity, billingCycle, promotionId: data.promotionId || null, giftMessage: data.giftMessage || null, giftRecipientName: data.giftRecipientName || null,
+      kind: data.kind, quantity: data.quantity, promotionId: data.promotionId || null, giftMessage: data.giftMessage || null, giftRecipientName: data.giftRecipientName || null,
     },
     include: { offer: true },
   });
@@ -91,7 +90,7 @@ export async function createCheckout(user, input) {
   if (data.kind === 'STANDARD') {
     await recordEvent({ category: 'SUSCRIPCION', type: 'CONTRATADA', actor: actorOf(user), user, offer: data.offer, status: 'Pago pendiente', amount: data.amount });
   }
-  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, initPoint: checkout.initPoint || null, publicKey: checkout.publicKey || null, clientId: checkout.clientId || null, currency: checkout.currency || null } };
+  return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, initPoint: checkout.initPoint || null } };
 }
 
 async function subscriptionEventType(tx, attempt) {
@@ -232,57 +231,6 @@ export async function refreshPaypalSubscription(sub) {
   }
 }
 
-async function ownedPaypalAttempt(user, attemptId, { allowResolved = false } = {}) {
-  const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, subscription: true } });
-  if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
-  if (attempt.provider !== 'PAYPAL') throw forbidden('Este pago no se procesa con PayPal');
-  if (attempt.status !== 'PENDING' && !allowResolved) throw conflict('Este pago ya fue resuelto. Revisa tu historial en Mi acceso.');
-  return attempt;
-}
-
-export async function paypalCreate(user, attemptId) {
-  const attempt = await ownedPaypalAttempt(user, attemptId);
-  if (!attempt.billingCycle) {
-    const orderId = await paypalProvider.createOrder({ attempt, offer: attempt.offer });
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerRef: orderId } });
-    return { orderId };
-  }
-  const created = await paypalProvider.createSubscription({ attempt, offer: attempt.offer });
-  const previous = attempt.subscriptionId;
-  const sub = await prisma.subscription.create({
-    data: { userId: user.id, offerId: attempt.offerId, provider: 'PAYPAL', providerSubscriptionId: created.id, cycle: attempt.billingCycle, amount: attempt.chargedAmount, currency: attempt.chargedCurrency },
-  });
-  await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { subscriptionId: sub.id } });
-  if (previous) await prisma.subscription.deleteMany({ where: { id: previous, status: 'PENDING' } });
-  return { subscriptionId: created.id };
-}
-
-export async function paypalConfirm(user, attemptId, { orderId, subscriptionId }) {
-  const attempt = await ownedPaypalAttempt(user, attemptId, { allowResolved: true });
-  if (attempt.status !== 'PENDING') return syncAttempt(user, attempt.id, NO_SEARCH);
-  if (attempt.billingCycle) {
-    if (!attempt.subscription || attempt.subscription.providerSubscriptionId !== subscriptionId) throw badRequest('La suscripción no corresponde a este pago');
-    await refreshPaypalSubscription(attempt.subscription).catch((err) => console.error('[pagos] suscripción sin confirmar:', attempt.id, err.message));
-    return syncAttempt(user, attempt.id, NO_SEARCH);
-  }
-  if (!orderId || attempt.providerRef !== orderId) throw badRequest('La orden no corresponde a este pago');
-  let capture;
-  try {
-    capture = await paypalProvider.captureOrder(orderId, attempt.id);
-  } catch (err) {
-    if (err.providerStatus >= 400 && err.providerStatus < 500) {
-      await resolveAttempt(attempt.id, 'REJECTED');
-      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
-    }
-    console.error('[pagos] captura sin confirmar:', attempt.id, err.message);
-    return syncAttempt(user, attempt.id, NO_SEARCH);
-  }
-  if (capture.status === 'COMPLETED') await resolveAttempt(attempt.id, 'APPROVED', prisma, { paidAmount: capture.amount, paidCurrency: capture.currency, paymentId: capture.paymentId });
-  else if (capture.status === 'DECLINED' || capture.status === 'FAILED') await resolveAttempt(attempt.id, 'REJECTED');
-  else if (capture.paymentId) await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: capture.paymentId } });
-  return syncAttempt(user, attempt.id, NO_SEARCH);
-}
-
 export async function syncAttempt(user, attemptId, { search = (id) => mercadoPagoProvider.searchByAttempt(id) } = {}) {
   let attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, subscription: true } });
   if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
@@ -308,46 +256,6 @@ export async function syncAttempt(user, attemptId, { search = (id) => mercadoPag
     ? (await prisma.giftCode.findMany({ where: { paymentAttemptId: attempt.id }, select: { code: true } })).map((g) => g.code)
     : undefined;
   return { attempt: attemptView(attempt), gifts };
-}
-
-export async function payWithCard(user, attemptId, card) {
-  const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true } });
-  if (!attempt || attempt.userId !== user.id) throw notFound('Intento de pago no encontrado');
-  if (attempt.provider !== 'MERCADOPAGO') throw forbidden('Este pago no se procesa con tarjeta');
-  const claimed = await prisma.paymentAttempt.updateMany({ where: { id: attempt.id, status: 'PENDING', providerRef: null }, data: { providerRef: attempt.id } });
-  if (!claimed.count) throw conflict('Este pago ya se está procesando. Revisa tu historial en Mi acceso.');
-  if (attempt.billingCycle) {
-    let created;
-    try {
-      created = await mercadoPagoProvider.createSubscription({ attempt, offer: attempt.offer, user, card });
-    } catch (err) {
-      if (err.providerStatus >= 400 && err.providerStatus < 500) {
-        await resolveAttempt(attempt.id, 'REJECTED');
-        return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
-      }
-      console.error('[pagos] suscripción sin confirmar:', attempt.id, err.message);
-      return syncAttempt(user, attempt.id, NO_SEARCH);
-    }
-    const sub = await prisma.subscription.create({
-      data: { userId: user.id, offerId: attempt.offerId, provider: 'MERCADOPAGO', providerSubscriptionId: created.id, cycle: attempt.billingCycle, amount: attempt.chargedAmount, currency: attempt.chargedCurrency, status: created.status === 'authorized' ? 'ACTIVE' : 'PENDING', nextBillingAt: created.nextBillingAt ? new Date(created.nextBillingAt) : null },
-    });
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { subscriptionId: sub.id } });
-    return syncAttempt(user, attempt.id, NO_SEARCH);
-  }
-  let payment;
-  try {
-    payment = await mercadoPagoProvider.chargeCard({ attempt, offer: attempt.offer, user, card });
-  } catch (err) {
-    if (err.providerStatus >= 400 && err.providerStatus < 500) {
-      await resolveAttempt(attempt.id, 'REJECTED');
-      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
-    }
-    console.error('[pagos] cobro sin confirmar:', attempt.id, err.message);
-    return syncAttempt(user, attempt.id).catch(() => syncAttempt(user, attempt.id, NO_SEARCH));
-  }
-  if (payment.status === 'PENDING') await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: payment.paymentId } });
-  else await resolveAttempt(attempt.id, payment.status, prisma, { paidAmount: payment.amount, paidCurrency: payment.currency, paymentId: payment.paymentId });
-  return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: payment.statusDetail, challenge: payment.challenge };
 }
 
 export const listMyAttempts = async (userId) =>

@@ -1,5 +1,3 @@
-import { publicChargeInfo } from '../services/payments/paymentSettings.service.js';
-import { publicPaypalInfo } from '../services/payments/paypalSettings.service.js';
 import { publicDlocalInfo } from '../services/payments/dlocalSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -8,16 +6,14 @@ import { validate } from '../middlewares/validate.js';
 import { requireRole } from '../middlewares/auth.js';
 import { cachedActiveOffers, getAccess } from '../services/access.service.js';
 import * as payments from '../services/payments/payment.service.js';
-import { activeProvider, activeProviders } from '../services/payments/providers.js';
+import { activeProvider } from '../services/payments/providers.js';
 import { checkPromotion } from '../services/promotion.service.js';
 import * as subscribers from '../services/subscriber.service.js';
 import { creditBalance } from '../services/credit.service.js';
-import { authLimiter } from '../middlewares/rateLimit.js';
 
 const r = Router();
 const checkoutSchema = z.object({
   offerCode: z.string().trim().min(1).max(40).optional(),
-  provider: z.enum(['MERCADOPAGO', 'PAYPAL', 'DLOCALGO']).optional(),
   country: z.string().trim().regex(/^[A-Z]{2}$/).optional(),
   promoCode: z.string().trim().min(4).max(40).optional(),
   quantity: z.coerce.number().int().min(1).max(payments.MAX_GIFTS).optional(),
@@ -27,21 +23,14 @@ const checkoutSchema = z.object({
     recipientName: z.string().trim().max(120).optional().nullable(),
   }).optional().nullable(),
 }).refine((v) => v.offerCode || v.promoCode, { message: 'Selecciona un producto', path: ['offerCode'] });
-const cardSchema = z.object({
-  token: z.string().trim().min(1).max(200),
-  paymentMethodId: z.string().trim().min(1).max(40),
-  issuerId: z.string().trim().max(40).optional(),
-  deviceId: z.string().trim().max(200).optional(),
-});
-const paypalConfirmSchema = z.object({ orderId: z.string().trim().max(60).optional(), subscriptionId: z.string().trim().max(60).optional() });
 const resolveSchema = z.object({ outcome: z.enum(['APPROVED', 'REJECTED']) });
 const codeSchema = z.object({ code: z.string().trim().min(4).max(40) });
 const preferencesSchema = z.object({ marketingOptOut: z.boolean() });
 
 r.get('/access', ah(async (req, res) => {
-  const [access, offers, provider, providers, charge, paypal, dlocal] = await Promise.all([getAccess(req.user.id), cachedActiveOffers(), activeProvider(), activeProviders(), publicChargeInfo(), publicPaypalInfo(), publicDlocalInfo()]);
+  const [access, offers, provider, dlocal] = await Promise.all([getAccess(req.user.id), cachedActiveOffers(), activeProvider(), publicDlocalInfo()]);
   const subscription = req.user.role === 'CLIENT' ? await subscribers.subscriptionStatus(req.user) : null;
-  res.json({ access, offers, provider: provider.code, providers: providers.map((p) => p.code), charge, paypal, dlocal, subscription });
+  res.json({ access, offers, provider: provider.code, dlocal, subscription });
 }));
 
 r.get('/attempts', ah(async (req, res) => res.json(await payments.listMyAttempts(req.user.id))));
@@ -57,20 +46,6 @@ r.post('/promo/check', requireRole('CLIENT'), validate(codeSchema), ah(async (re
 r.post('/subscription/cancel', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.cancelSubscription(req.user))));
 r.post('/subscription/resume', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.resumeSubscription(req.user))));
 r.put('/preferences', requireRole('CLIENT'), validate(preferencesSchema), ah(async (req, res) => res.json(await subscribers.setMarketing(req.user, req.body))));
-
-r.post('/attempts/:id/card', requireRole('CLIENT'), authLimiter, validate(cardSchema), ah(async (req, res) => {
-  const result = await payments.payWithCard(req.user, req.params.id, req.body);
-  const [access, credits] = await Promise.all([getAccess(req.user.id), creditBalance(req.user.id)]);
-  res.json({ ...result, access, credits });
-}));
-
-const withAccess = async (req, result) => {
-  const [access, credits] = await Promise.all([getAccess(req.user.id), creditBalance(req.user.id)]);
-  return { ...result, access, credits };
-};
-
-r.post('/attempts/:id/paypal/create', requireRole('CLIENT'), authLimiter, ah(async (req, res) => res.json(await payments.paypalCreate(req.user, req.params.id))));
-r.post('/attempts/:id/paypal/confirm', requireRole('CLIENT'), validate(paypalConfirmSchema), ah(async (req, res) => res.json(await withAccess(req, await payments.paypalConfirm(req.user, req.params.id, req.body)))));
 
 r.post('/attempts/:id/sync', requireRole('CLIENT'), ah(async (req, res) => {
   const result = await payments.syncAttempt(req.user, req.params.id);
