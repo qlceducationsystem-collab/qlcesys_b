@@ -1,9 +1,10 @@
 import { prisma } from '../config/prisma.js';
 import { isGrantActive } from '../domain/access.js';
-import { forbidden } from '../utils/httpError.js';
+import { conflict, forbidden } from '../utils/httpError.js';
 import { num } from '../utils/money.js';
 import { actorOf, recordEvent, SYSTEM } from './adminEvent.service.js';
 import { emailReady, sendClientEmail, sendEmail } from './email.service.js';
+import { cancelUserSubscriptions, hasCancelledSubscription, liveSubscription, subscriptionView } from './subscription.service.js';
 
 export const SUBSCRIBER_STATES = {
   ACTIVO: 'Activo',
@@ -67,6 +68,7 @@ export async function listSubscribers({ state, q } = {}) {
 export async function cancelSubscription(user) {
   if (user.role !== 'CLIENT') throw forbidden('Solo los clientes tienen suscripción');
   const full = await prisma.user.findUnique({ where: { id: user.id }, include: { accessGrants: { where: { active: true }, include: { offer: true } } } });
+  await cancelUserSubscriptions(user.id);
   if (full.subscriptionCancelledAt) return subscriptionStatus(user);
   await prisma.user.update({ where: { id: user.id }, data: { subscriptionCancelledAt: new Date() } });
   const current = full.accessGrants.filter((g) => isGrantActive(g));
@@ -78,6 +80,7 @@ export async function resumeSubscription(user) {
   if (user.role !== 'CLIENT') throw forbidden('Solo los clientes tienen suscripción');
   const full = await prisma.user.findUnique({ where: { id: user.id }, include: { accessGrants: { where: { active: true }, include: { offer: true } } } });
   if (!full.subscriptionCancelledAt) return subscriptionStatus(user);
+  if (await hasCancelledSubscription(user.id)) throw conflict('Tu suscripción ya se canceló en la pasarela de pago. Para continuar, adquiere de nuevo tu acceso cuando quieras.');
   await prisma.user.update({ where: { id: user.id }, data: { subscriptionCancelledAt: null } });
   const current = full.accessGrants.filter((g) => isGrantActive(g));
   await recordEvent({ category: 'SUSCRIPCION', type: 'RECUPERADA', actor: actorOf(user), user: full, offer: current[0]?.offer || null, status: 'Activo', result: 'El usuario reactivó su suscripción' });
@@ -86,7 +89,8 @@ export async function resumeSubscription(user) {
 
 export async function subscriptionStatus(user) {
   const full = await prisma.user.findUnique({ where: { id: user.id }, select: { subscriptionCancelledAt: true, marketingOptOut: true } });
-  return { cancelledAt: full.subscriptionCancelledAt, marketingOptOut: full.marketingOptOut };
+  const [live, cancelled] = await Promise.all([liveSubscription(user.id), hasCancelledSubscription(user.id)]);
+  return { cancelledAt: full.subscriptionCancelledAt, marketingOptOut: full.marketingOptOut, billing: subscriptionView(live), canResume: !cancelled };
 }
 
 export async function setMarketing(user, { marketingOptOut }) {
@@ -161,6 +165,11 @@ export async function runRetention(now = new Date(), { only } = {}) {
     const offer = [...grants].sort((a, b) => new Date(b.expiresAt || 0) - new Date(a.expiresAt || 0))[0]?.offer || null;
     if (days >= RETENTION_DAYS && user.retentionStage >= RETENTION_STEPS.length) {
       await recordEvent({ category: 'SUSCRIPCION', type: 'CUENTA_ELIMINADA_INACTIVIDAD', actor: SYSTEM, user, offer, status: 'Eliminada', result: `Sin renovación ${days} días después del vencimiento` }).catch(() => null);
+      try {
+        await cancelUserSubscriptions(user.id);
+      } catch {
+        continue;
+      }
       await prisma.user.delete({ where: { id: user.id } }).catch(() => null);
       deleted += 1;
       continue;

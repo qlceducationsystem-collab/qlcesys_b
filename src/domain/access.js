@@ -75,6 +75,25 @@ export function renewalBase(grants, offer, now = new Date()) {
   return latest && latest > now ? latest : null;
 }
 
+export const SUBSCRIPTION_GRACE_DAYS = 3;
+export const RECURRING_OFFER_TYPES = ['TOOL_ONLY', 'FULL_ANNUAL'];
+
+function addCycle(date, cycle) {
+  const months = cycle === 'YEARLY' ? 12 : 1;
+  const next = new Date(date);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, last));
+  return next;
+}
+
+export function subscriptionWindow(cycle, existingExpiry, now = new Date()) {
+  if (existingExpiry && existingExpiry > now) return { startsAt: existingExpiry, expiresAt: addCycle(existingExpiry, cycle) };
+  return { startsAt: now, expiresAt: new Date(addCycle(now, cycle).getTime() + SUBSCRIPTION_GRACE_DAYS * 86400000) };
+}
+
 export function grantWindow(offer, existingExpiry, now = new Date()) {
   const startsAt = existingExpiry && existingExpiry > now ? existingExpiry : now;
   const days = offer.accessDays || DEFAULT_ACCESS_DAYS[offer.type] || 30;

@@ -20,6 +20,7 @@ export const publicOffer = (o) => ({
   price: o.price === null || o.price === undefined ? null : Number(o.price),
   currency: o.currency,
   accessDays: o.accessDays,
+  billingCycle: o.billingCycle || null,
   active: o.active,
   giftable: o.giftable !== false,
   sessions: o.sessions || 0,

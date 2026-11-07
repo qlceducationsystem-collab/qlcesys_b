@@ -272,6 +272,7 @@ model User {
   legalVersion       String?
   marketingOptOut    Boolean     @default(false)
   subscriptionCancelledAt DateTime?
+  subscriptions      Subscription[]
   retentionStage     Int         @default(0)
   resetCodeHash      String?
   resetCodeExpiresAt DateTime?
@@ -782,6 +783,7 @@ model ProductOffer {
   price        Decimal?         @db.Decimal(14, 2)
   currency     String           @default("MXN")
   accessDays   Int?
+  billingCycle String?
   active       Boolean          @default(true)
   giftable     Boolean          @default(true)
   sessions     Int              @default(0)
@@ -792,6 +794,7 @@ model ProductOffer {
   grants       AccessGrant[]
   promotions   Promotion[]
   gifts        GiftCode[]
+  subscriptions Subscription[]
 }
 
 model PaymentAttempt {
@@ -815,16 +818,43 @@ model PaymentAttempt {
   authorizedById String?
   giftMessage String?
   giftRecipientName String?
+  billingCycle String?
+  subscriptionId String?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   offer       ProductOffer         @relation(fields: [offerId], references: [id])
   grant       AccessGrant?
   promotion   Promotion?           @relation(fields: [promotionId], references: [id])
+  subscription Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   gifts       GiftCode[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([subscriptionId])
+  @@index([providerPaymentId])
+}
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String
+  offerId                String
+  provider               String
+  providerSubscriptionId String?   @unique
+  cycle                  String
+  status                 String    @default("PENDING")
+  amount                 Decimal   @db.Decimal(14, 2)
+  currency               String
+  nextBillingAt          DateTime?
+  lastPaymentAt          DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer                  ProductOffer @relation(fields: [offerId], references: [id])
+  attempts               PaymentAttempt[]
+
+  @@index([userId, status])
 }
 
 model AccessGrant {

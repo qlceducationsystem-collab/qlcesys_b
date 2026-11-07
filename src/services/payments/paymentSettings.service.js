@@ -51,9 +51,14 @@ const offerCurrencies = async () => {
 export function convertForCharge(amount, currency, settings) {
   const target = chargeCurrency(settings);
   if (!target) throw conflict('Mercado Pago no está configurado');
+  return convertTo(amount, currency, target, settings.rates);
+}
+
+export function convertTo(amount, currency, target, rates) {
+  if (amount === null || amount === undefined) throw conflict('Este acceso todavía no tiene precio definido');
   const source = String(currency).toUpperCase();
   if (source === target) return { amount: round2(Number(amount)), currency: target };
-  const rate = Number(settings.rates?.[source]);
+  const rate = Number(rates?.[source]);
   if (!(rate > 0)) throw conflict(`Falta el tipo de cambio de ${source} a ${target}. Configúralo en Pasarela de pago.`);
   const converted = Number(amount) * rate;
   return { amount: WHOLE_CURRENCIES.includes(target) ? Math.ceil(converted) : round2(converted), currency: target };

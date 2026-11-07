@@ -1,3 +1,4 @@
+import { RECURRING_OFFER_TYPES } from '../domain/access.js';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/prisma.js';
 import { summarizeAccess } from '../domain/access.js';
@@ -95,6 +96,7 @@ export async function updateOffer(code, data) {
   const before = await prisma.productOffer.findUnique({ where: { code } });
   if (!before) throw notFound('Oferta no encontrada');
   const payload = { ...data, accessDays: data.accessDays ?? before.accessDays };
+  if (!RECURRING_OFFER_TYPES.includes(before.type)) delete payload.billingCycle;
   const updated = await prisma.productOffer.update({ where: { code }, data: payload });
   invalidateOffersCache();
   return publicOffer(updated);

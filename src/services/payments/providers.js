@@ -3,6 +3,7 @@ import { env } from '../../config/env.js';
 import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
 import { convertForCharge, paymentSettings } from './paymentSettings.service.js';
+import { paypalQuote, paypalRequest, paypalSettings, writePaypalSettings } from './paypalSettings.service.js';
 
 const mockProvider = {
   code: 'MOCK',
@@ -70,6 +71,34 @@ const mercadoPagoProvider = {
     });
     return paymentResult(payment);
   },
+  async createSubscription({ attempt, offer, user, card }) {
+    const data = await mpRequest('/preapproval', {
+      method: 'POST',
+      idempotencyKey: crypto.randomUUID(),
+      deviceId: card.deviceId,
+      body: {
+        reason: offer.name,
+        external_reference: attempt.id,
+        payer_email: user.email,
+        card_token_id: card.token,
+        auto_recurring: {
+          frequency: attempt.billingCycle === 'YEARLY' ? 12 : 1,
+          frequency_type: 'months',
+          transaction_amount: Number(attempt.chargedAmount),
+          currency_id: attempt.chargedCurrency,
+        },
+        back_url: `${env.frontendUrl}/app/acceso`,
+        status: 'authorized',
+      },
+    });
+    return { id: String(data.id), status: data.status, nextBillingAt: data.next_payment_date || null };
+  },
+  async getSubscription(id) {
+    return mpRequest(`/preapproval/${encodeURIComponent(id)}`);
+  },
+  async cancelSubscription(id) {
+    await mpRequest(`/preapproval/${encodeURIComponent(id)}`, { method: 'PUT', body: { status: 'canceled' } });
+  },
   async fetchPaymentResult(paymentId, fetcher = mpRequest) {
     return paymentResult(await fetcher(`/v1/payments/${encodeURIComponent(paymentId)}`));
   },
@@ -79,10 +108,100 @@ const mercadoPagoProvider = {
   },
 };
 
-export async function activeProvider() {
-  return (await paymentSettings()).enabled ? mercadoPagoProvider : mockProvider;
+const planKey = (offer, cycle, charge) => `${offer.code}:${cycle}:${charge.amount}:${charge.currency}`;
+
+async function ensurePaypalProduct(settings) {
+  if (settings.productId) return settings.productId;
+  const product = await paypalRequest('/v1/catalogs/products', { method: 'POST', body: { name: 'QLC Financial Education', type: 'DIGITAL' } });
+  await writePaypalSettings({ productId: product.id });
+  return product.id;
 }
 
-const ALL = [mockProvider, mercadoPagoProvider];
+async function ensurePaypalPlan(offer, cycle, charge) {
+  const settings = await paypalSettings();
+  const key = planKey(offer, cycle, charge);
+  if (settings.plans?.[key]) return settings.plans[key];
+  const productId = await ensurePaypalProduct(settings);
+  const plan = await paypalRequest('/v1/billing/plans', {
+    method: 'POST',
+    body: {
+      product_id: productId,
+      name: String(offer.name).slice(0, 127),
+      status: 'ACTIVE',
+      billing_cycles: [{
+        frequency: { interval_unit: cycle === 'YEARLY' ? 'YEAR' : 'MONTH', interval_count: 1 },
+        tenure_type: 'REGULAR',
+        sequence: 1,
+        total_cycles: 0,
+        pricing_scheme: { fixed_price: { value: charge.amount.toFixed(2), currency_code: charge.currency } },
+      }],
+      payment_preferences: { auto_bill_outstanding: true, payment_failure_threshold: 3 },
+    },
+  });
+  const latest = await paypalSettings();
+  await writePaypalSettings({ plans: { ...(latest.plans || {}), [key]: plan.id } });
+  return plan.id;
+}
+
+const paypalProvider = {
+  code: 'PAYPAL',
+  supportsManualResolution: false,
+  quote: (amount, currency) => paypalQuote(amount, currency),
+  async createCheckout() {
+    const settings = await paypalSettings();
+    return { mode: 'PAYPAL', clientId: settings.clientId, currency: settings.currency };
+  },
+  async createOrder({ attempt, offer }) {
+    const order = await paypalRequest('/v2/checkout/orders', {
+      method: 'POST',
+      body: {
+        intent: 'CAPTURE',
+        purchase_units: [{
+          custom_id: attempt.id,
+          description: String(offer.name).slice(0, 127),
+          amount: { currency_code: attempt.chargedCurrency, value: Number(attempt.chargedAmount).toFixed(2) },
+        }],
+      },
+    });
+    return String(order.id);
+  },
+  async captureOrder(orderId, attemptId) {
+    const order = await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', requestId: `capture-${attemptId}`, body: {} });
+    const capture = order.purchase_units?.[0]?.payments?.captures?.[0];
+    return { status: capture?.status || order.status, paymentId: capture ? String(capture.id) : null, amount: capture?.amount?.value ?? null, currency: capture?.amount?.currency_code ?? null };
+  },
+  async createSubscription({ attempt, offer }) {
+    const planId = await ensurePaypalPlan(offer, attempt.billingCycle, { amount: Number(attempt.chargedAmount), currency: attempt.chargedCurrency });
+    const sub = await paypalRequest('/v1/billing/subscriptions', { method: 'POST', body: { plan_id: planId, custom_id: attempt.id } });
+    return { id: String(sub.id) };
+  },
+  getSubscription: (id) => paypalRequest(`/v1/billing/subscriptions/${encodeURIComponent(id)}`),
+  async subscriptionSales(id, since) {
+    const start = new Date(new Date(since).getTime() - 86400000).toISOString();
+    const end = new Date(Date.now() + 3600000).toISOString();
+    const data = await paypalRequest(`/v1/billing/subscriptions/${encodeURIComponent(id)}/transactions?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
+    return (data.transactions || []).filter((t) => t.status === 'COMPLETED').map((t) => ({ paymentId: String(t.id), amount: t.amount_with_breakdown?.gross_amount?.value ?? null, currency: t.amount_with_breakdown?.gross_amount?.currency_code ?? null }));
+  },
+  async cancelSubscription(id) {
+    await paypalRequest(`/v1/billing/subscriptions/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason: 'Cancelada por el cliente' } });
+  },
+};
+
+export async function activeProviders() {
+  const [mp, paypal] = await Promise.all([paymentSettings(), paypalSettings()]);
+  return [...(mp.enabled ? [mercadoPagoProvider] : []), ...(paypal.enabled ? [paypalProvider] : [])];
+}
+
+export async function activeProvider(code) {
+  const list = await activeProviders();
+  if (code) {
+    const found = list.find((p) => p.code === code);
+    if (!found) throw new HttpError(409, 'Esta forma de pago no está disponible');
+    return found;
+  }
+  return list[0] || mockProvider;
+}
+
+const ALL = [mockProvider, mercadoPagoProvider, paypalProvider];
 export const providerByCode = (code) => ALL.find((p) => p.code === code);
-export { mercadoPagoProvider };
+export { mercadoPagoProvider, paypalProvider };

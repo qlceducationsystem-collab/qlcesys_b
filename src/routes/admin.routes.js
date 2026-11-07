@@ -1,3 +1,4 @@
+import { PAYPAL_CURRENCIES, paypalSettingsView, savePaypalSettings, testPaypalConnection } from '../services/payments/paypalSettings.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
@@ -152,6 +153,24 @@ const paymentSettingsSchema = z.object({
   rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
   enabled: z.boolean().optional(),
 });
+const paypalSettingsSchema = z.object({
+  clientId: z.string().trim().max(200).optional(),
+  clientSecret: z.string().trim().max(300).optional(),
+  webhookId: z.string().trim().max(100).optional(),
+  mode: z.enum(['SANDBOX', 'LIVE']).optional(),
+  currency: z.enum(PAYPAL_CURRENCIES).optional(),
+  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
+  enabled: z.boolean().optional(),
+});
+r.get('/paypal-settings', FULL, ah(async (_req, res) => res.json(await paypalSettingsView())));
+r.put('/paypal-settings', FULL, validate(paypalSettingsSchema), ah(async (req, res) => {
+  const view = await savePaypalSettings(req.body);
+  if (req.body.clientId || req.body.clientSecret || req.body.webhookId || req.body.mode || req.body.enabled !== undefined) {
+    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'PayPal activo' : 'PayPal desactivado', result: `Modo ${view.mode}` });
+  }
+  res.json(view);
+}));
+r.post('/paypal-settings/test', FULL, ah(async (_req, res) => res.json(await testPaypalConnection())));
 r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
 r.put('/payment-settings', FULL, validate(paymentSettingsSchema), ah(async (req, res) => {
   const view = await savePaymentSettings(req.body);

@@ -92,12 +92,13 @@ run('Mercado Pago configurado desde el panel', () => {
     const editLogin = await request(app).post('/api/auth/login').send({ email: editEmail, password: 'AdminPass123!' });
     tokens.edit = (await completeTwoFactor(app, editLogin.body.challengeToken)).token;
     for (const k of ['ana', 'luis', 'eva', 'old', 'card', 'otro']) await register(k);
-    await prisma.productOffer.update({ where: { code: 'FULL_ANNUAL' }, data: { price: 60, currency: 'USDT', active: true } });
+    await prisma.productOffer.update({ where: { code: 'FULL_ANNUAL' }, data: { price: 60, currency: 'USDT', active: true, billingCycle: null } });
     realFetch = global.fetch;
   });
 
   after(async () => {
     global.fetch = realFetch;
+    await prisma.productOffer.update({ where: { code: 'FULL_ANNUAL' }, data: { billingCycle: 'YEARLY' } });
     await prisma.appSetting.deleteMany({ where: { key: 'mercadopago' } });
     const { resetPaymentSettingsCache } = await import('../src/services/payments/paymentSettings.service.js');
     resetPaymentSettingsCache();

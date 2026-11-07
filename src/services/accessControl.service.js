@@ -5,6 +5,7 @@ import { num } from '../utils/money.js';
 import { actorOf, recordEvent } from './adminEvent.service.js';
 import { sendClientEmail } from './email.service.js';
 import { assertMaster } from './master.service.js';
+import { cancelUserSubscriptions } from './subscription.service.js';
 
 export const GRANT_REASONS = {
   CORTESIA: 'Cortesía',
@@ -108,6 +109,7 @@ export async function revokeManual(admin, id, { note, masterPassword, code }) {
   await assertMaster(admin, { masterPassword, code });
   const grant = await ownedGrant(id);
   if (!grant.active) throw badRequest('Este acceso ya estaba retirado');
+  await cancelUserSubscriptions(grant.userId, { offerId: grant.offerId });
   const updated = await prisma.accessGrant.update({ where: { id }, data: { active: false, revokedAt: new Date(), revokedById: admin.id }, include: { offer: true } });
   await recordEvent({ category: 'ACCESO', type: 'ACCESO_RETIRADO', actor: actorOf(admin), user: grant.user, offer: grant.offer, status: 'Desactivado', result: note || 'Retiro manual' });
   return grantView(updated);

@@ -1,3 +1,4 @@
+import { cancelUserSubscriptions } from './subscription.service.js';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
@@ -225,6 +226,7 @@ export async function deleteAccount(userId, { confirm, code }) {
   if (confirm !== 'ELIMINAR') throw badRequest('Escribe ELIMINAR para confirmar');
   await verifyUserCode(user, String(code || ''));
   await recordEvent({ category: 'PLATAFORMA', type: 'CUENTA_ELIMINADA', actor: actorOf(user), user, status: 'Eliminada' }).catch(() => null);
+  await cancelUserSubscriptions(user.id);
   await prisma.user.delete({ where: { id: user.id } });
   return { ok: true };
 }
