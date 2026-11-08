@@ -7,7 +7,7 @@ import { publicUser, SALT_ROUNDS } from './auth.service.js';
 import { invalidateOffersCache, publicOffer } from './access.service.js';
 
 const clientSelect = {
-  id: true, name: true, email: true, phone: true, role: true, isActive: true, createdAt: true, lastLoginAt: true, totpEnabledAt: true,
+  id: true, name: true, email: true, phone: true, residenceCountry: true, role: true, isActive: true, createdAt: true, lastLoginAt: true, totpEnabledAt: true,
   accessGrants: { where: { active: true } },
   progress: { where: { status: 'COMPLETED' }, select: { id: true } },
   _count: { select: { periods: true, monthlyCloses: true, appointments: true } },
@@ -42,6 +42,12 @@ export async function getClient(id) {
   if (!row) throw notFound('Cliente no encontrado');
   const grants = await prisma.accessGrant.findMany({ where: { userId: id }, include: { offer: true }, orderBy: { createdAt: 'desc' } });
   return { ...toClient(row), grants: grants.map((g) => ({ id: g.id, offer: g.offer.name, accessType: g.accessType, moduleNumber: g.moduleNumber, startsAt: g.startsAt, expiresAt: g.expiresAt, active: g.active, paymentAttemptId: g.paymentAttemptId, source: g.source, reason: g.reason })) };
+}
+
+export async function setClientResidenceCountry(adminUser, clientId, residenceCountry) {
+  await assertClient(clientId);
+  const user = await prisma.user.update({ where: { id: clientId }, data: { residenceCountry } });
+  return { id: user.id, residenceCountry: user.residenceCountry };
 }
 
 async function assertClient(clientId) {

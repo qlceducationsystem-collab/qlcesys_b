@@ -122,7 +122,7 @@ const RENEWAL_NOTICE_DAYS = 3;
 export async function sendRenewalReminders(now = new Date(), send = sendClientEmail) {
   const limit = new Date(now.getTime() + RENEWAL_NOTICE_DAYS * 86400000);
   const grants = await prisma.accessGrant.findMany({
-    where: { active: true, renewalNoticeAt: null, expiresAt: { gt: now, lte: limit }, paymentAttempt: { provider: 'DLOCALGO' }, offer: { billingCycle: { not: null } }, user: { role: 'CLIENT' } },
+    where: { active: true, renewalNoticeAt: null, expiresAt: { gt: now, lte: limit }, paymentAttempt: { provider: 'BITGET' }, offer: { billingCycle: { not: null } }, user: { role: 'CLIENT' } },
     include: { offer: true, user: true },
     take: 500,
   });

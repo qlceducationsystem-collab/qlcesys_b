@@ -27,7 +27,7 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
   };
 
   async function register(key) {
-    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
     assert.equal(res.status, 201);
     tokens[key] = (await completeTwoFactor(app, res.body.challengeToken)).token;
     ids[key] = (await prisma.user.findUnique({ where: { email: `${key}-${uid}@test.qlc` } })).id;
@@ -69,12 +69,31 @@ run('Estructura comercial: herramientas, masterclass por módulo, consultas, ori
     const seed = Object.fromEntries(OFFERS.map((o) => [o.code, o]));
     assert.equal(Number(seed.TOOLS_ALL.price), 5);
     assert.equal(seed.TOOLS_ALL.accessDays, 30);
+    assert.equal(Number(seed.TOOLS_ANNUAL.price), 40);
+    assert.equal(seed.TOOLS_ANNUAL.currency, 'USD');
+    assert.equal(seed.TOOLS_ANNUAL.accessDays, 365);
+    assert.equal(seed.TOOLS_ANNUAL.type, 'TOOL_ONLY');
     assert.equal(Number(seed.FULL_ANNUAL.price), 60);
     assert.equal(byCode.DIAMOND_ANNUAL?.price, 100);
     assert.equal(byCode.DIAMOND_ANNUAL?.sessions, 6);
     assert.equal(byCode.MASTERCLASS_M1?.price, 5);
     assert.equal(byCode.CONSULTA?.price, 3);
     assert.equal(byCode.ORIENTACION?.price, 10);
+  });
+
+  test('Herramientas por 1 año activa las herramientas durante 365 días, sin la Masterclass', async () => {
+    const { OFFERS } = await import('../prisma/data/offers.js');
+    const seed = OFFERS.find((o) => o.code === 'TOOLS_ANNUAL');
+    await prisma.productOffer.upsert({ where: { code: 'TOOLS_ANNUAL' }, create: seed, update: { active: true, price: 40, accessDays: 365 } });
+    await register('yearly');
+    const access = await buy('yearly', { offerCode: 'TOOLS_ANNUAL' });
+    const grant = await prisma.accessGrant.findFirst({ where: { userId: (await prisma.user.findUnique({ where: { email: `yearly-${uid}@test.qlc` } })).id } });
+    assert.equal(grant.accessType, 'TOOL_ONLY');
+    assert.equal(Math.round((new Date(grant.expiresAt) - new Date(grant.startsAt)) / 86400000), 365);
+    assert.ok(access);
+    const after = (await api('yearly').get('/api/payments/access')).body.access;
+    assert.equal(after.full, null);
+    assert.equal(after.tools.length, 12);
   });
 
   test('Solo herramientas no abre la Masterclass y solo Masterclass no abre herramientas', async () => {

@@ -26,7 +26,7 @@ run('Ajustes de clientes · desglose del diagnóstico, deudas, presupuesto, avis
     };
   };
 
-  const registerBody = (key, extra = {}) => ({ acceptLegal: true, legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!', ...extra });
+  const registerBody = (key, extra = {}) => ({ acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!', ...extra });
 
   async function register(key) {
     const res = await request(app).post('/api/auth/register').send(registerBody(key));

@@ -4,7 +4,7 @@ import { mercadoPagoToken } from './paymentSettings.service.js';
 
 const API = 'https://api.mercadopago.com';
 
-export async function mpRequest(path, { method = 'GET', body } = {}) {
+export async function mpRequest(path, { method = 'GET', body, idempotencyKey, deviceId } = {}) {
   const token = await mercadoPagoToken();
   if (!token) throw new HttpError(503, 'Mercado Pago no está configurado');
   const res = await fetch(`${API}${path}`, {
@@ -12,6 +12,8 @@ export async function mpRequest(path, { method = 'GET', body } = {}) {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+      ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

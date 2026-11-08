@@ -32,3 +32,15 @@ export const policyUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: filter(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']),
 }).single('file');
+
+const EVIDENCE_ERRORS = { LIMIT_FILE_SIZE: 'Cada archivo puede pesar como máximo 5 MB.', LIMIT_FILE_COUNT: 'Puedes adjuntar como máximo 5 archivos.', LIMIT_UNEXPECTED_FILE: 'Puedes adjuntar como máximo 5 archivos.' };
+
+const evidenceMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 5, fields: 20 },
+}).array('files', 5);
+
+export const evidenceUpload = (req, res, next) => evidenceMulter(req, res, (err) => {
+  if (err?.name === 'MulterError') return next(badRequest(EVIDENCE_ERRORS[err.code] || 'Archivo no válido'));
+  return next(err);
+});

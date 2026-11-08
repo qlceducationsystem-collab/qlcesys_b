@@ -43,8 +43,8 @@ async function assertEmailVerified({ email, emailToken, emailCode }) {
   }
 }
 
-export const publicUser = ({ id, email, name, role, adminLevel, phone, createdAt, totpEnabledAt, language }) => ({
-  id, email, name, role, adminLevel, phone, createdAt, language, twoFactorEnabled: !!totpEnabledAt,
+export const publicUser = ({ id, email, name, role, adminLevel, phone, residenceCountry, createdAt, totpEnabledAt, language }) => ({
+  id, email, name, role, adminLevel, phone, residenceCountry: residenceCountry || null, createdAt, language, twoFactorEnabled: !!totpEnabledAt,
 });
 
 const twoFactorReady = () => {
@@ -59,16 +59,22 @@ async function startSession(user) {
 
 const setupChallenge = (user) => ({ status: 'SETUP_2FA', challengeToken: signChallenge(user), user: publicUser(user) });
 
-export async function register({ name, email, password, phone, legalVersion, emailToken, emailCode, language }) {
+export async function register({ name, email, password, phone, residenceCountry, legalVersion, emailToken, emailCode, language }) {
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) throw conflict('Ya existe una cuenta con ese correo');
   await assertEmailVerified({ email, emailToken, emailCode });
   const user = await prisma.user.create({
-    data: { name, email, phone, role: 'CLIENT', language: language || 'es', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
+    data: { name, email, phone, residenceCountry, role: 'CLIENT', language: language || 'es', legalAcceptedAt: new Date(), legalVersion, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) },
   });
   sendClientEmail('BIENVENIDA', 'welcome', user.email, { name: user.name }).catch(() => null);
   recordEvent({ category: 'PLATAFORMA', type: 'NUEVO_REGISTRO', actor: actorOf(user), user, status: 'Cuenta creada' }).catch(() => null);
   return setupChallenge(user);
+}
+
+export async function setResidenceCountry(userId, residenceCountry) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user.residenceCountry) throw conflict('Tu país de residencia ya está registrado. Si necesitas cambiarla, escríbenos.');
+  return publicUser(await prisma.user.update({ where: { id: userId }, data: { residenceCountry } }));
 }
 
 export async function login({ email, password }) {

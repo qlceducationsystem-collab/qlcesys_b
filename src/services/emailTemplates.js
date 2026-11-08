@@ -40,6 +40,11 @@ const EVENT_LABELS_EN = {
   IMPORTE_NO_COINCIDE: 'Payment with an unexpected amount',
   PAGO_REVERTIDO: 'Payment refunded or charged back',
   PASARELA_CONFIGURADA: 'Payment gateway settings changed',
+  BITGET_REPORTADA: 'Bitget internal transfer reported',
+  BITGET_RECIBIDA: 'Bitget transfer received',
+  BITGET_CONFIRMADA: 'Bitget payment confirmed',
+  BITGET_RECHAZADA: 'Bitget report rejected',
+  BITGET_ELIMINADA: 'Bitget report deleted',
   PROMOCION_CREADA: 'Promotion created',
   PROMOCION_ENVIADA: 'Promotion sent by email',
   PROMOCION_CANCELADA: 'Promotion cancelled',
@@ -250,6 +255,12 @@ ${codes.map((c) => codeBlock(c, 3, 22)).join('')}
     body: `<p>Hola ${escapeHtml(name)},</p><p>Ya tienes disponible: <b>${escapeHtml(String(quantity))} × ${escapeHtml(product)}</b>.</p>${button(url('/app'), 'Entrar a mi plataforma')}`,
     text: `Hola ${name}, ya tienes disponible ${quantity} x ${product}.`,
   }),
+  bitgetRejected: ({ name, product, orderNumber, reason }) => ({
+    subject: 'Revisa tu reporte de transferencia Bitget',
+    title: 'Tu reporte necesita una corrección',
+    body: `<p>Hola ${escapeHtml(name)},</p><p>No pudimos confirmar tu transferencia con N.º de orden <b>${escapeHtml(orderNumber)}</b> para <b>${escapeHtml(product)}</b>.</p>${reason ? `<p>Motivo: ${escapeHtml(reason)}</p>` : ''}<p>Entra a Mi acceso y pulsa Corregir reporte para enviar los datos correctos.</p>${button(url('/app/acceso'), 'Corregir mi reporte')}`,
+    text: `Hola ${name}, no pudimos confirmar tu transferencia ${orderNumber}.${reason ? ` Motivo: ${reason}.` : ''} Corrige tu reporte en ${url('/app/acceso')}`,
+  }),
   renewalDue: ({ name, product, offerCode, expiresAt }) => ({
     subject: 'Tu acceso a QLC está por vencer: renueva tu pago',
     title: 'Tu acceso está por vencer',
@@ -380,6 +391,12 @@ ${codes.map((c) => codeBlock(c, 3, 22)).join('')}
     title: 'Purchase available',
     body: `<p>Hi ${escapeHtml(name)},</p><p>You now have available: <b>${escapeHtml(String(quantity))} × ${escapeHtml(productName(product, 'en'))}</b>.</p>${button(url('/app'), 'Go to my platform')}`,
     text: `Hi ${name}, you now have available ${quantity} x ${productName(product, 'en')}.`,
+  }),
+  bitgetRejected: ({ name, product, orderNumber, reason }) => ({
+    subject: 'Please review your Bitget transfer report',
+    title: 'Your report needs a correction',
+    body: `<p>Hi ${escapeHtml(name)},</p><p>We could not confirm your transfer with order number <b>${escapeHtml(orderNumber)}</b> for <b>${escapeHtml(productName(product, 'en'))}</b>.</p>${reason ? `<p>Reason: ${escapeHtml(reason)}</p>` : ''}<p>Go to My access and press Correct report to send the right details.</p>${button(url('/app/acceso'), 'Correct my report')}`,
+    text: `Hi ${name}, we could not confirm your transfer ${orderNumber}.${reason ? ` Reason: ${reason}.` : ''} Correct your report at ${url('/app/acceso')}`,
   }),
   renewalDue: ({ name, product, offerCode, expiresAt }) => ({
     subject: 'Your QLC access is about to expire: renew your payment',

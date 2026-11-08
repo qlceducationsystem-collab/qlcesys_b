@@ -1,4 +1,7 @@
-import { DLOCAL_CURRENCIES, DLOCAL_METHODS, dlocalSettingsView, saveDlocalSettings, testDlocalConnection } from '../services/payments/dlocalSettings.service.js';
+import { bitgetSettingsView, saveBitgetSettings } from '../services/payments/bitgetSettings.service.js';
+import * as bitget from '../services/payments/bitgetReport.service.js';
+import { paymentSettingsView, savePaymentSettings, testMercadoPagoConnection } from '../services/payments/paymentSettings.service.js';
+import { COUNTRY_CODES } from '../shared/countries.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
@@ -82,6 +85,7 @@ r.post('/general/grants/:id/revoke', FULL, validate(revokeSchema), ah(async (req
 r.post('/general/pending/:id/authorize', FULL, validate(authorizePromoSchema), ah(async (req, res) => res.json(await accessControl.authorizePromo(req.user, req.params.id, req.body))));
 r.post('/general/pending/:id/reject', FULL, validate(revokeSchema), ah(async (req, res) => res.json(await accessControl.rejectPromo(req.user, req.params.id, req.body))));
 r.patch('/clients/:id/status', FULL, validate(adminUserSchema), ah(async (req, res) => res.json(await admin.setClientActive(req.params.id, req.body))));
+r.patch('/clients/:id/residence-country', EDIT, validate(z.object({ residenceCountry: z.enum(COUNTRY_CODES) })), ah(async (req, res) => res.json(await admin.setClientResidenceCountry(req.user, req.params.id, req.body.residenceCountry))));
 r.get('/leads', validate(leadQuery, 'query'), ah(async (req, res) => res.json(await leads.listLeads(req.validQuery))));
 r.patch('/leads/:id', requireAdminLevel('EDIT'), validate(leadUpdateSchema), ah(async (req, res) => res.json(await leads.updateLead(req.params.id, req.body))));
 r.get('/login-notice', ah(async (_req, res) => res.json(await getLoginNotice())));
@@ -145,24 +149,44 @@ const mailSettingsSchema = z.object({
   smtpEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido')]).optional(),
   smtpPassword: z.string().trim().max(100).optional(),
 });
-const dlocalSettingsSchema = z.object({
-  apiKey: z.string().trim().max(300).optional(),
-  secretKey: z.string().trim().max(300).optional(),
-  mode: z.enum(['SANDBOX', 'LIVE']).optional(),
-  currency: z.enum(DLOCAL_CURRENCIES).optional(),
-  methods: z.enum(DLOCAL_METHODS).optional(),
+const paymentSettingsSchema = z.object({
+  accessToken: z.string().trim().max(300).optional(),
+  publicKey: z.string().trim().max(200).optional(),
+  webhookSecret: z.string().trim().max(300).optional(),
   rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
   enabled: z.boolean().optional(),
 });
-r.get('/dlocal-settings', FULL, ah(async (_req, res) => res.json(await dlocalSettingsView())));
-r.put('/dlocal-settings', FULL, validate(dlocalSettingsSchema), ah(async (req, res) => {
-  const view = await saveDlocalSettings(req.body);
-  if (req.body.apiKey || req.body.secretKey || req.body.mode || req.body.enabled !== undefined) {
-    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'dLocal Go activo' : 'dLocal Go desactivado', result: `Modo ${view.mode}` });
+r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
+r.put('/payment-settings', FULL, validate(paymentSettingsSchema), ah(async (req, res) => {
+  const view = await savePaymentSettings(req.body);
+  if (req.body.accessToken || req.body.publicKey || req.body.webhookSecret || req.body.enabled !== undefined) {
+    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Mercado Pago activo' : 'Mercado Pago desactivado', result: 'Configuración de Mercado Pago modificada' });
   }
   res.json(view);
 }));
-r.post('/dlocal-settings/test', FULL, ah(async (_req, res) => res.json(await testDlocalConnection())));
+r.post('/payment-settings/test', FULL, ah(async (_req, res) => res.json(await testMercadoPagoConnection())));
+const bitgetSettingsSchema = z.object({
+  uid: z.union([z.literal(''), z.string().trim().regex(/^\d{4,20}$/, 'El UID de Bitget tiene solo números')]).optional(),
+  instructions: z.string().trim().max(1500).optional(),
+  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
+  enabled: z.boolean().optional(),
+});
+r.get('/bitget-settings', FULL, ah(async (_req, res) => res.json(await bitgetSettingsView())));
+r.put('/bitget-settings', FULL, validate(bitgetSettingsSchema), ah(async (req, res) => {
+  const view = await saveBitgetSettings(req.body);
+  if (req.body.uid !== undefined || req.body.enabled !== undefined) {
+    await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Bitget activo' : 'Bitget desactivado', result: 'Configuración de transferencia Bitget modificada' });
+  }
+  res.json(view);
+}));
+const reportStatus = z.enum(['PENDING', 'REVIEW', 'CONFIRMED', 'REJECTED']).optional();
+r.get('/bitget-reports', ah(async (req, res) => res.json(await bitget.adminReports({ status: reportStatus.parse(req.query.status || undefined) }))));
+r.post('/bitget-reports/:id/received', EDIT, ah(async (req, res) => res.json(await bitget.markReceived(req.user, req.params.id))));
+r.post('/bitget-reports/:id/confirm', FULL, ah(async (req, res) => res.json(await bitget.confirmReport(req.user, req.params.id))));
+r.post('/bitget-reports/:id/reject', EDIT, validate(z.object({ reason: z.string().trim().max(500).optional() })), ah(async (req, res) => res.json(await bitget.rejectReport(req.user, req.params.id, req.body.reason))));
+r.post('/bitget-reports/:id/hide', EDIT, ah(async (req, res) => res.json(await bitget.hideReport(req.user, req.params.id))));
+r.delete('/bitget-reports/:id', FULL, ah(async (req, res) => res.json(await bitget.deleteReport(req.user, req.params.id))));
+r.get('/bitget-files/:id', ah(async (req, res) => bitget.streamEvidence(req.user, req.params.id, req.headers.range, res)));
 r.get('/mail-settings', ah(async (_req, res) => res.json({ ...(await mailSettingsView()), groups: EVENT_GROUPS, clientGroups: CLIENT_EMAIL_GROUPS })));
 r.put('/mail-settings', FULL, validate(mailSettingsSchema), ah(async (req, res) => {
   const view = await saveMailSettings(req.body);

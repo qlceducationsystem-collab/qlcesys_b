@@ -3,12 +3,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const source = path.resolve(root, '../src/shared/patrimonial.js');
-const target = path.resolve(process.argv[2] || path.resolve(root, '../../frontend/src/shared/patrimonial.js'));
+const targetDir = path.resolve(process.argv[2] || path.resolve(root, '../../frontend/src/shared'));
+const files = ['patrimonial.js', 'countries.js'];
 
-if (!fs.existsSync(path.dirname(target))) {
-  console.error(`[sync:shared] No existe ${path.dirname(target)}`);
+if (!fs.existsSync(targetDir)) {
+  console.error(`[sync:shared] No existe ${targetDir}`);
   process.exit(1);
 }
-fs.copyFileSync(source, target);
-console.info(`[sync:shared] ${source} → ${target}`);
+for (const file of files) {
+  const source = path.resolve(root, '../src/shared', file);
+  const target = path.join(targetDir, file);
+  fs.copyFileSync(source, target);
+  console.info(`[sync:shared] ${source} → ${target}`);
+}

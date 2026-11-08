@@ -25,6 +25,7 @@ r.post('/data-share/edit', authenticate, ah(async (req, res) => res.json(await d
 r.get('/data-share/messages', authenticate, ah(async (req, res) => res.json(await dataShare.clientMessages(req.user))));
 r.post('/data-share/messages', authenticate, ah(async (req, res) => res.status(201).json(await dataShare.clientSend(req.user, req.body?.body))));
 r.post('/data-share/stop', authenticate, ah(async (req, res) => res.json(await dataShare.stopShareByClient(req.user))));
+r.put('/residence-country', authenticate, validate(schemas.residenceCountrySchema), ah(async (req, res) => res.json({ user: await auth.setResidenceCountry(req.user.id, req.body.residenceCountry) })));
 r.put('/language', authenticate, validate(schemas.languageSchema), ah(async (req, res) => res.json(await auth.setLanguage(req.user.id, req.body.language))));
 r.post('/logout', (_req, res) => res.json({ ok: true }));
 

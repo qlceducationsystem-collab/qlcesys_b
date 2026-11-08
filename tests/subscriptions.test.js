@@ -67,7 +67,7 @@ run('Suscripciones ya contratadas en pasarelas anteriores', () => {
 
   async function register(key) {
     const email = `${key}-${uid}@test.qlc`;
-    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-11-07', name: `Cliente ${key}`, email, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-11-07', name: `Cliente ${key}`, email, password: 'Password123!' });
     assert.equal(res.status, 201);
     tokens[key] = (await completeTwoFactor(app, res.body.challengeToken)).token;
     ids[key] = (await prisma.user.findUnique({ where: { email } })).id;
@@ -84,7 +84,7 @@ run('Suscripciones ya contratadas en pasarelas anteriores', () => {
   const resetCaches = async () => {
     (await import('../src/services/payments/paymentSettings.service.js')).resetPaymentSettingsCache();
     (await import('../src/services/payments/paypalSettings.service.js')).resetPaypalCache();
-    (await import('../src/services/payments/dlocalSettings.service.js')).resetDlocalCache();
+    (await import('../src/services/payments/bitgetSettings.service.js')).resetBitgetCache();
   };
 
   before(async () => {
@@ -94,11 +94,11 @@ run('Suscripciones ya contratadas en pasarelas anteriores', () => {
     app = createApp();
     ({ prisma } = await import('../src/config/prisma.js'));
     const { encryptSecret } = await import('../src/utils/crypto.js');
-    await prisma.appSetting.deleteMany({ where: { key: { in: ['mercadopago', 'paypal', 'dlocalgo'] } } });
+    await prisma.appSetting.deleteMany({ where: { key: { in: ['mercadopago', 'paypal', 'bitget'] } } });
     const settings = {
       mercadopago: { encryptedToken: encryptSecret('APP_USR-token'), encryptedWebhookSecret: encryptSecret(MP_SECRET) },
       paypal: { mode: 'SANDBOX', clientId: 'cliente', encryptedSecret: encryptSecret('secreto'), webhookId: 'WH-1' },
-      dlocalgo: { enabled: true, mode: 'SANDBOX', encryptedApiKey: encryptSecret('k'), encryptedSecret: encryptSecret('s'), currency: 'USD', methods: 'NO_CARDS', rates: { USDT: 1 }, lastTest: { ok: true } },
+      bitget: { enabled: true, uid: '987654321', instructions: '', rates: {} },
     };
     for (const [key, value] of Object.entries(settings)) await prisma.appSetting.create({ data: { key, value } });
     await resetCaches();
@@ -112,7 +112,7 @@ run('Suscripciones ya contratadas en pasarelas anteriores', () => {
 
   after(async () => {
     global.fetch = realFetch;
-    await prisma.appSetting.deleteMany({ where: { key: { in: ['mercadopago', 'paypal', 'dlocalgo'] } } });
+    await prisma.appSetting.deleteMany({ where: { key: { in: ['mercadopago', 'paypal', 'bitget'] } } });
     await resetCaches();
   });
 

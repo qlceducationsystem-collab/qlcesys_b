@@ -29,7 +29,7 @@ run('Restablecer contraseña con código por correo', () => {
     ({ prisma } = await import('../src/config/prisma.js'));
     ({ testEmail } = await import('../src/services/email.service.js'));
     testEmail.setReady(false);
-    const res = await post('/api/auth/register', { acceptLegal: true, legalVersion: '2026-10-18', name: 'Cliente Reset', email, password: 'Password123!' });
+    const res = await post('/api/auth/register', { acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-10-18', name: 'Cliente Reset', email, password: 'Password123!' });
     assert.equal(res.status, 201);
     token = (await completeTwoFactor(app, res.body.challengeToken)).token;
   });

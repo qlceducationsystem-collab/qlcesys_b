@@ -53,8 +53,26 @@ export async function ensureFolder(kind, moduleNumber) {
   return id;
 }
 
-async function resumableUpload({ name, mimeType, size, kind, moduleNumber, body }) {
-  const parent = await ensureFolder(kind, moduleNumber);
+const safeName = (value) => String(value || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Sin nombre';
+
+export async function ensureClientFolder(user, section) {
+  const integration = await prisma.googleIntegration.findUnique({ where: { service: 'DRIVE' } });
+  const folders = { ...(integration?.driveFolders || {}) };
+  const ensure = async (key, name, parentKey) => {
+    if (folders[key] && (await folderExists(folders[key]))) return folders[key];
+    folders[key] = await createFolder(name, parentKey ? folders[parentKey] : undefined);
+    return folders[key];
+  };
+  await ensure('root', ROOT_NAME);
+  await ensure('clients', 'Clientes', 'root');
+  await ensure(`client:${user.id}`, safeName(`${user.name} - ${user.email}`), 'clients');
+  const id = await ensure(`client:${user.id}:${section}`, section, `client:${user.id}`);
+  await prisma.googleIntegration.update({ where: { service: 'DRIVE' }, data: { driveFolders: folders, lastSyncAt: new Date() } });
+  return id;
+}
+
+async function resumableUpload({ name, mimeType, size, kind, moduleNumber, parentId, body }) {
+  const parent = parentId || (await ensureFolder(kind, moduleNumber));
   const session = await driveFetch(`${UPLOAD}?uploadType=resumable&fields=id,name,mimeType,size`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': mimeType, 'X-Upload-Content-Length': String(size) },

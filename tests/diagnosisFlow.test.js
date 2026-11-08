@@ -27,7 +27,7 @@ run('Diagnóstico y productos: objetivo personalizado, lectura desde el M2 y neg
     const { createApp } = await import('../src/app.js');
     app = createApp();
     ({ prisma } = await import('../src/config/prisma.js'));
-    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: 'Cliente diagnóstico', email: `${uid}@test.qlc`, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-10-18', name: 'Cliente diagnóstico', email: `${uid}@test.qlc`, password: 'Password123!' });
     token = (await completeTwoFactor(app, res.body.challengeToken)).token;
     const checkout = await post('/api/payments/checkout', { offerCode: 'TOOLS_ALL' });
     await post(`/api/payments/attempts/${checkout.body.attempt.id}/simulate`, { outcome: 'APPROVED' });

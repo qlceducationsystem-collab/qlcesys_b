@@ -30,7 +30,7 @@ run('Administración comercial: suscriptores, promociones, control de accesos y 
   };
 
   async function register(key) {
-    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
+    const res = await request(app).post('/api/auth/register').send({ acceptLegal: true, residenceCountry: 'MX', legalVersion: '2026-10-18', name: `Cliente ${key}`, email: `${key}-${uid}@test.qlc`, password: 'Password123!' });
     assert.equal(res.status, 201);
     const done = await completeTwoFactor(app, res.body.challengeToken);
     tokens[key] = done.token;

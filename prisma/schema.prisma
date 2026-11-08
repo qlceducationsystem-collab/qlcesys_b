@@ -258,6 +258,7 @@ model User {
   passwordHash       String
   name               String
   phone              String?
+  residenceCountry        String?
   role               Role        @default(CLIENT)
   adminLevel         AdminLevel?
   isActive           Boolean     @default(true)
@@ -319,6 +320,7 @@ model User {
   serviceCredits   ServiceCredit[]
   moduleQuestions  ModuleQuestion[]
   masterclassDone  MasterclassProgress[]
+  bitgetReports    BitgetReport[]
 }
 
 model ServiceCredit {
@@ -828,6 +830,7 @@ model PaymentAttempt {
   promotion   Promotion?           @relation(fields: [promotionId], references: [id])
   subscription Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   gifts       GiftCode[]
+  bitgetReport BitgetReport?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -855,6 +858,44 @@ model Subscription {
   attempts               PaymentAttempt[]
 
   @@index([userId, status])
+}
+
+model BitgetReport {
+  id               String           @id @default(cuid())
+  userId           String
+  paymentAttemptId String           @unique
+  orderNumber      String
+  transferredAt    DateTime
+  status           String           @default("PENDING")
+  rejectReason     String?
+  hiddenForClient  Boolean          @default(false)
+  hiddenForAdmin   Boolean          @default(false)
+  receivedAt       DateTime?
+  receivedById     String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt          PaymentAttempt   @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  files            BitgetEvidence[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderNumber])
+}
+
+model BitgetEvidence {
+  id          String       @id @default(cuid())
+  reportId    String
+  name        String
+  mimeType    String
+  size        Int
+  driveFileId String
+  createdAt   DateTime     @default(now())
+  report      BitgetReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
 }
 
 model AccessGrant {

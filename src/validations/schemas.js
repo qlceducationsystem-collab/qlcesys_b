@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { COUNTRY_CODES } from '../shared/countries.js';
 
 const money = z.coerce.number({ invalid_type_error: 'Debe ser un número' }).min(0, 'No puede ser negativo').max(1e12);
 const text = (max = 200) => z.string().trim().min(1, 'Requerido').max(max);
@@ -7,6 +8,7 @@ const id = z.string().min(1).max(40);
 
 export const languageField = z.enum(['es', 'en']);
 export const languageSchema = z.object({ language: languageField });
+export const residenceCountrySchema = z.object({ residenceCountry: z.enum(COUNTRY_CODES, { errorMap: () => ({ message: 'Selecciona tu país de residencia' }) }) });
 
 export const registerSchema = z.object({
   language: languageField.optional(),
@@ -14,6 +16,7 @@ export const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email('Correo inválido').max(160),
   password: z.string().min(8, 'Mínimo 8 caracteres').max(128),
   phone: z.string().trim().max(30).optional(),
+  residenceCountry: z.enum(COUNTRY_CODES, { errorMap: () => ({ message: 'Selecciona tu país de residencia' }) }),
   acceptLegal: z.literal(true, { errorMap: () => ({ message: 'Debes aceptar los Términos y el Aviso de privacidad' }) }),
   legalVersion: z.string().trim().min(1).max(20),
   emailToken: z.string().max(2000).optional(),

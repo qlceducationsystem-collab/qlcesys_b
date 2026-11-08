@@ -1,9 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { num } from '../../utils/money.js';
 import { GATEWAY, recordEvent } from '../adminEvent.service.js';
-import { applyDlocalPayment, applySubscriptionPayment, closeSubscription, recordReversal, refreshPaypalSubscription, resolveAttempt } from './payment.service.js';
-import { dlocalProvider } from './providers.js';
-import { dlocalSettings } from './dlocalSettings.service.js';
+import { applySubscriptionPayment, closeSubscription, recordReversal, refreshPaypalSubscription, resolveAttempt } from './payment.service.js';
 import { mpRequest } from './mercadopago.client.js';
 
 const bySubscriptionId = (id) => prisma.subscription.findUnique({ where: { providerSubscriptionId: String(id) }, include: { offer: true, user: true } });
@@ -31,33 +29,6 @@ export async function processMpPreapproval(dataId) {
   else if (preapproval.status === 'paused') await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'SUSPENDED' } });
   else if (preapproval.status === 'authorized') await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'ACTIVE', nextBillingAt: preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : sub.nextBillingAt } });
   return { processed: true };
-}
-
-export async function processDlocalNotification(paymentId) {
-  const payment = await dlocalProvider.fetchPayment(paymentId);
-  const attempt = payment.attemptId ? await prisma.paymentAttempt.findUnique({ where: { id: String(payment.attemptId) } }) : null;
-  if (!attempt) return { ignored: true };
-  await applyDlocalPayment(attempt, payment);
-  return { processed: true };
-}
-
-export async function pollDlocalChargebacks() {
-  if (!(await dlocalSettings()).enabled) return 0;
-  let found = 0;
-  for (const chargeback of await dlocalProvider.listChargebacks()) {
-    const eventKey = `dlocalgo:chargeback:${chargeback.id}`;
-    if (await prisma.webhookEvent.findUnique({ where: { eventKey } })) continue;
-    await recordReversal(String(chargeback.payment_id), 'Contracargo');
-    await prisma.webhookEvent.create({ data: { provider: 'dlocalgo', eventKey, topic: 'chargeback', resourceId: String(chargeback.id) } });
-    found += 1;
-  }
-  return found;
-}
-
-export function startDlocalJob(intervalMinutes = 60) {
-  const run = () => pollDlocalChargebacks().catch((err) => console.error('[qlc] contracargos', err.message));
-  run();
-  return setInterval(run, intervalMinutes * 60000);
 }
 
 const parentCaptureId = (resource) => {

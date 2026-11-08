@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import { env } from '../../config/env.js';
+import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
+import { convertForCharge, paymentSettings } from './paymentSettings.service.js';
 import { paypalRequest } from './paypalSettings.service.js';
-import { DLOCAL_COUNTRIES, dlocalQuote, dlocalRequest, dlocalSettings } from './dlocalSettings.service.js';
-import { badRequest } from '../../utils/httpError.js';
+import { bitgetQuote, bitgetSettings } from './bitgetSettings.service.js';
 
 const mockProvider = {
   code: 'MOCK',
@@ -19,10 +21,16 @@ const MP_STATUS = { approved: 'APPROVED', rejected: 'REJECTED', cancelled: 'REJE
 const REVERSED = ['refunded', 'charged_back'];
 const isHttps = (url) => String(url).startsWith('https://');
 
+const challengeOf = (payment) => (payment.status_detail === 'pending_challenge' && payment.three_ds_info?.external_resource_url && payment.three_ds_info?.creq
+  ? { url: payment.three_ds_info.external_resource_url, creq: payment.three_ds_info.creq }
+  : null);
+
 const paymentResult = (payment) => ({
   attemptId: payment.external_reference,
   paymentId: String(payment.id),
   rawStatus: payment.status,
+  statusDetail: payment.status_detail || null,
+  challenge: challengeOf(payment),
   reversed: REVERSED.includes(payment.status),
   status: MP_STATUS[payment.status] || 'PENDING',
   amount: payment.transaction_amount ?? null,
@@ -32,6 +40,60 @@ const paymentResult = (payment) => ({
 const mercadoPagoProvider = {
   code: 'MERCADOPAGO',
   supportsManualResolution: false,
+  async quote(amount, currency) {
+    if (amount === null || amount === undefined) throw new HttpError(409, 'Este acceso todavía no tiene precio definido');
+    return convertForCharge(amount, currency, await paymentSettings());
+  },
+  async createCheckout() {
+    const { publicKey } = await paymentSettings();
+    if (!publicKey) throw new HttpError(409, 'Falta la Public Key. Configúrala en Pasarela de pago.');
+    return { mode: 'CARD', publicKey };
+  },
+  async chargeCard({ attempt, offer, user, card }, fetcher = mpRequest) {
+    const payment = await fetcher('/v1/payments', {
+      method: 'POST',
+      idempotencyKey: crypto.randomUUID(),
+      deviceId: card.deviceId,
+      body: {
+        transaction_amount: Number(attempt.chargedAmount),
+        token: card.token,
+        description: offer.name,
+        installments: 1,
+        payment_method_id: card.paymentMethodId,
+        ...(card.issuerId ? { issuer_id: Number(card.issuerId) } : {}),
+        payer: { email: user.email },
+        external_reference: attempt.id,
+        statement_descriptor: 'QLC',
+        three_d_secure_mode: 'optional',
+        capture: true,
+        binary_mode: false,
+        ...(isHttps(env.backendUrl) ? { notification_url: `${env.backendUrl}/api/webhooks/mercadopago` } : {}),
+      },
+    });
+    return paymentResult(payment);
+  },
+  async createSubscription({ attempt, offer, user, card }) {
+    const data = await mpRequest('/preapproval', {
+      method: 'POST',
+      idempotencyKey: crypto.randomUUID(),
+      deviceId: card.deviceId,
+      body: {
+        reason: offer.name,
+        external_reference: attempt.id,
+        payer_email: user.email,
+        card_token_id: card.token,
+        auto_recurring: {
+          frequency: attempt.billingCycle === 'YEARLY' ? 12 : 1,
+          frequency_type: 'months',
+          transaction_amount: Number(attempt.chargedAmount),
+          currency_id: attempt.chargedCurrency,
+        },
+        back_url: `${env.frontendUrl}/app/acceso`,
+        status: 'authorized',
+      },
+    });
+    return { id: String(data.id), status: data.status, nextBillingAt: data.next_payment_date || null };
+  },
   async getSubscription(id) {
     return mpRequest(`/preapproval/${encodeURIComponent(id)}`);
   },
@@ -62,43 +124,43 @@ const paypalProvider = {
   },
 };
 
-const DLOCAL_STATUS = { PAID: 'APPROVED', REJECTED: 'REJECTED', CANCELLED: 'REJECTED', EXPIRED: 'REJECTED' };
-
-const dlocalProvider = {
-  code: 'DLOCALGO',
+const bitgetProvider = {
+  code: 'BITGET',
   supportsManualResolution: false,
-  quote: (amount, currency) => dlocalQuote(amount, currency),
-  async createCheckout({ attempt, offer, user, charge, country }) {
-    if (!DLOCAL_COUNTRIES.includes(country)) throw badRequest('Elige tu país');
-    const settings = await dlocalSettings();
-    const payment = await dlocalRequest('/v1/payments', {
-      method: 'POST',
-      body: {
-        amount: charge.amount,
-        currency: charge.currency,
-        country,
-        order_id: attempt.id,
-        description: String(offer.name).slice(0, 100),
-        payer: { name: String(user.name || '').slice(0, 100), email: user.email, user_reference: user.id },
-        success_url: `${env.frontendUrl}/app/acceso?pago=${attempt.id}`,
-        back_url: `${env.frontendUrl}/app/acceso`,
-        ...(isHttps(env.backendUrl) ? { notification_url: `${env.backendUrl}/api/webhooks/dlocalgo` } : {}),
-        ...(settings.methods === 'NO_CARDS' ? { payment_type: 'BANK_TRANSFER,VOUCHER' } : {}),
-      },
-    });
-    return { mode: 'REDIRECT', initPoint: payment.redirect_url, providerRef: String(payment.id) };
+  quote: (amount, currency) => bitgetQuote(amount, currency),
+  async createCheckout() {
+    const settings = await bitgetSettings();
+    return { mode: 'BITGET', uid: settings.uid, instructions: settings.instructions || null };
   },
-  async fetchPayment(id) {
-    const payment = await dlocalRequest(`/v1/payments/${encodeURIComponent(id)}`);
-    return { id: String(payment.id), attemptId: payment.order_id, status: DLOCAL_STATUS[payment.status] || 'PENDING', amount: payment.amount, currency: payment.currency };
-  },
-  listChargebacks: async () => (await dlocalRequest('/v1/chargebacks')).data || [],
 };
 
-export async function activeProvider() {
-  return (await dlocalSettings()).enabled ? dlocalProvider : mockProvider;
+export const MERCADOPAGO_COUNTRY = 'MX';
+
+export async function anyGatewayEnabled() {
+  const [mp, bitget] = await Promise.all([paymentSettings(), bitgetSettings()]);
+  return !!(mp.enabled || bitget.enabled);
 }
 
-const ALL = [mockProvider, mercadoPagoProvider, paypalProvider, dlocalProvider];
+export async function activeProviders(user) {
+  const [mp, bitget] = await Promise.all([paymentSettings(), bitgetSettings()]);
+  return [
+    ...(mp.enabled && user?.residenceCountry === MERCADOPAGO_COUNTRY ? [mercadoPagoProvider] : []),
+    ...(bitget.enabled ? [bitgetProvider] : []),
+  ];
+}
+
+export async function activeProvider(code, user) {
+  const list = await activeProviders(user);
+  if (code) {
+    const found = list.find((p) => p.code === code);
+    if (!found) throw new HttpError(409, 'Esta forma de pago no está disponible');
+    return found;
+  }
+  if (list.length) return list[0];
+  if (await anyGatewayEnabled()) throw new HttpError(409, 'Por ahora no hay una forma de pago disponible para tu país. Escríbenos para ayudarte.');
+  return mockProvider;
+}
+
+const ALL = [mockProvider, mercadoPagoProvider, paypalProvider, bitgetProvider];
 export const providerByCode = (code) => ALL.find((p) => p.code === code);
-export { dlocalProvider, mercadoPagoProvider, paypalProvider };
+export { bitgetProvider, mercadoPagoProvider, paypalProvider };
