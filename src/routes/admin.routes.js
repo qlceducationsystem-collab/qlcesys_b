@@ -19,6 +19,7 @@ import {
 import * as admin from '../services/admin.service.js';
 import * as media from '../services/moduleMedia.service.js';
 import * as google from '../services/google/oauth.js';
+import { driveSettingsView, testDriveConnection } from '../services/google/driveSettings.service.js';
 import { listOffers } from '../services/access.service.js';
 import { listAllAttempts } from '../services/payments/payment.service.js';
 import { platformMetrics } from '../services/analytics.service.js';
@@ -200,6 +201,8 @@ r.get('/integrations', ah(async (_req, res) => {
   ]);
   res.json({ items, emails, redirectUri: env.google.redirectUri });
 }));
+r.get('/integrations/drive', FULL, ah(async (_req, res) => res.json(await driveSettingsView())));
+r.post('/integrations/drive/test', FULL, ah(async (_req, res) => res.json(await testDriveConnection())));
 r.get('/integrations/:service/connect', FULL, ah(async (req, res) => res.json({ url: google.buildAuthUrl(service(req), req.user.id) })));
 r.delete('/integrations/:service', FULL, ah(async (req, res) => {
   await google.disconnect(service(req));

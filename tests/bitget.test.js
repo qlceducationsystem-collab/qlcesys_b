@@ -91,7 +91,7 @@ run('País de residencia, Mercado Pago solo para México y transferencia interna
     });
     await prisma.appSetting.deleteMany({ where: { key: { in: ['mercadopago', 'bitget'] } } });
     await resetCaches();
-    await prisma.googleIntegration.upsert({ where: { service: 'DRIVE' }, create: { service: 'DRIVE', status: 'CONNECTED', encryptedRefreshToken: encryptSecret('r') }, update: { status: 'CONNECTED', encryptedRefreshToken: encryptSecret('r') } });
+    await prisma.googleIntegration.upsert({ where: { service: 'DRIVE' }, create: { service: 'DRIVE', status: 'CONNECTED', scopes: 'https://www.googleapis.com/auth/drive.file', encryptedRefreshToken: encryptSecret('r') }, update: { status: 'CONNECTED', scopes: 'https://www.googleapis.com/auth/drive.file', encryptedRefreshToken: encryptSecret('r') } });
     for (const [key, level] of [['admin', 'FULL'], ['edit', 'EDIT']]) {
       const email = `${key}-${uid}@admin.qlc`;
       await prisma.user.create({ data: { email, name: `Admin ${key}`, role: 'ADMIN', adminLevel: level, passwordHash: await bcrypt.hash('AdminPass123!', 4) } });

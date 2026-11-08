@@ -21,6 +21,8 @@ export const hasGrantedScopes = (service, granted) => {
 
 const tokenCache = new Map();
 
+export const resetTokenCache = () => tokenCache.clear();
+
 function assertConfigured() {
   if (!googleConfigured()) throw new HttpError(503, 'Configuración de Google pendiente en el servidor');
 }
@@ -64,7 +66,9 @@ export async function handleCallback({ code, state }) {
   if (!SERVICE_SCOPES[service]) throw badRequest('Servicio no válido');
   const tokens = await tokenRequest({ code: String(code), grant_type: 'authorization_code', redirect_uri: env.google.redirectUri });
   if (tokens.scope && !hasGrantedScopes(service, tokens.scope)) {
-    throw badRequest('Google no dio permiso para enviar correos. Pulsa Conectar con Google otra vez y marca la casilla de enviar correo electrónico en tu nombre.');
+    throw badRequest(service === 'DRIVE'
+      ? 'Google no dio permiso para usar Google Drive. Pulsa Conectar con Google otra vez y acepta el permiso.'
+      : 'Google no dio permiso para enviar correos. Pulsa Conectar con Google otra vez y marca la casilla de enviar correo electrónico en tu nombre.');
   }
   if (!tokens.refresh_token) throw badRequest('Google no entregó un token de actualización. Revoca el acceso previo y vuelve a conectar.');
   const info = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } }).then((r) => r.json()).catch(() => ({}));
@@ -104,7 +108,9 @@ export async function getAccessToken(service) {
 export async function disconnect(service) {
   const integration = await prisma.googleIntegration.findUnique({ where: { service } });
   tokenCache.delete(service);
-  if (integration?.encryptedRefreshToken && googleConfigured()) {
+  const other = await prisma.googleIntegration.findUnique({ where: { service: service === 'DRIVE' ? 'GMAIL' : 'DRIVE' } });
+  const sharedGrant = other?.status === 'CONNECTED' && !!other.encryptedRefreshToken && !!integration?.email && other.email === integration.email;
+  if (integration?.encryptedRefreshToken && googleConfigured() && !sharedGrant) {
     const token = decryptSecret(integration.encryptedRefreshToken);
     await fetch(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(() => null);
   }

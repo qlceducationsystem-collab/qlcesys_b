@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { prisma } from '../../config/prisma.js';
 import { HttpError } from '../../utils/httpError.js';
-import { getAccessToken } from './oauth.js';
+import { getAccessToken, hasGrantedScopes } from './oauth.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -55,6 +55,15 @@ export async function ensureFolder(kind, moduleNumber) {
 
 const safeName = (value) => String(value || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Sin nombre';
 
+export async function ensureRootFolder() {
+  const integration = await prisma.googleIntegration.findUnique({ where: { service: 'DRIVE' } });
+  const folders = { ...(integration?.driveFolders || {}) };
+  if (folders.root && (await folderExists(folders.root))) return folders.root;
+  folders.root = await createFolder(ROOT_NAME);
+  await prisma.googleIntegration.update({ where: { service: 'DRIVE' }, data: { driveFolders: folders, lastSyncAt: new Date() } });
+  return folders.root;
+}
+
 export async function ensureClientFolder(user, section) {
   const integration = await prisma.googleIntegration.findUnique({ where: { service: 'DRIVE' } });
   const folders = { ...(integration?.driveFolders || {}) };
@@ -95,7 +104,7 @@ export const uploadBuffer = ({ buffer, ...meta }) => resumableUpload({ ...meta, 
 
 export async function driveConnected() {
   const row = await prisma.googleIntegration.findUnique({ where: { service: 'DRIVE' } });
-  return row?.status === 'CONNECTED' && !!row.encryptedRefreshToken;
+  return row?.status === 'CONNECTED' && !!row.encryptedRefreshToken && hasGrantedScopes('DRIVE', row.scopes);
 }
 
 export async function streamFile(fileId, range, res) {
