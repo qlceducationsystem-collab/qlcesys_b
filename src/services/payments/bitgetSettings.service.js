@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma.js';
 import { badRequest, conflict } from '../../utils/httpError.js';
 import { round2 } from '../../utils/money.js';
@@ -6,7 +7,17 @@ import { driveConnected } from '../google/drive.js';
 const KEY = 'bitget';
 export const BITGET_CURRENCY = 'USDT';
 const PARITY = ['USD', 'USDT'];
-const DEFAULTS = { enabled: false, uid: null, instructions: '', rates: {} };
+const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const EVM = /^0x[0-9a-fA-F]{40}$/;
+export const WALLET_NETWORKS = {
+  SOL: { label: 'Solana (SPL)', pattern: BASE58 },
+  TRC20: { label: 'Tron (TRC20)', pattern: /^T[1-9A-HJ-NP-Za-km-z]{33}$/ },
+  ERC20: { label: 'Ethereum (ERC20)', pattern: EVM },
+  BEP20: { label: 'BNB Smart Chain (BEP20)', pattern: EVM },
+  POLYGON: { label: 'Polygon', pattern: EVM },
+  ARBITRUM: { label: 'Arbitrum One', pattern: EVM },
+};
+const DEFAULTS = { enabled: false, uid: null, instructions: '', rates: {}, walletAddress: '9i9gD2LFJ5TnfrFAY3rACnE3GWgqjkrWLXj3NyVEHbD', walletNetwork: null };
 let cache = null;
 
 export async function bitgetSettings() {
@@ -36,7 +47,7 @@ const rateOf = (rates, currency) => (PARITY.includes(currency) && !(Number(rates
 
 async function missingRequirements(settings, currencies) {
   const missing = [];
-  if (!settings.uid) missing.push('el UID de Bitget');
+  if (!settings.uid && !(settings.walletAddress && settings.walletNetwork)) missing.push('el UID de Bitget o la dirección de wallet con su red');
   if (!(await driveConnected())) missing.push('conectar Google Drive en Integraciones para guardar los comprobantes');
   for (const c of currencies) if (!(rateOf(settings.rates, c) > 0)) missing.push(`el tipo de cambio de ${c} a USDT`);
   return missing;
@@ -48,6 +59,9 @@ export async function bitgetSettingsView() {
   return {
     enabled: !!settings.enabled,
     uid: settings.uid || '',
+    walletAddress: settings.walletAddress || '',
+    walletNetwork: settings.walletNetwork || '',
+    networks: Object.entries(WALLET_NETWORKS).map(([value, n]) => ({ value, label: n.label })),
     instructions: settings.instructions || '',
     currency: BITGET_CURRENCY,
     rates: settings.rates || {},
@@ -56,12 +70,20 @@ export async function bitgetSettingsView() {
   };
 }
 
-export async function saveBitgetSettings({ uid, instructions, rates, enabled }) {
+export async function saveBitgetSettings({ uid, instructions, rates, enabled, walletAddress, walletNetwork }) {
+  const current = await bitgetSettings();
+  const nextAddress = walletAddress === undefined ? current.walletAddress : walletAddress || null;
+  const nextNetwork = walletNetwork === undefined ? current.walletNetwork : walletNetwork || null;
+  if (nextAddress && nextNetwork && !WALLET_NETWORKS[nextNetwork].pattern.test(nextAddress)) {
+    throw badRequest(`Esa dirección no corresponde a la red ${WALLET_NETWORKS[nextNetwork].label}. Revisa la red antes de guardar: enviar por otra red puede perder los fondos.`);
+  }
   const changes = {};
+  if (walletAddress !== undefined) changes.walletAddress = nextAddress;
+  if (walletNetwork !== undefined) changes.walletNetwork = nextNetwork;
   if (uid !== undefined) changes.uid = uid || null;
   if (instructions !== undefined) changes.instructions = instructions || '';
   if (rates) changes.rates = Object.fromEntries(Object.entries(rates).map(([k, v]) => [k.toUpperCase(), Number(v)]).filter(([, v]) => v > 0));
-  if (uid === '') changes.enabled = false;
+  if (uid === '' && !(nextAddress && nextNetwork)) changes.enabled = false;
   const next = await write(changes);
   if (enabled === true) {
     const missing = await missingRequirements(next, await offerCurrencies());
@@ -81,9 +103,15 @@ export async function bitgetQuote(amount, currency) {
   return { amount: round2(Number(amount) * rate), currency: BITGET_CURRENCY };
 }
 
+export async function publicWallet() {
+  const { walletAddress, walletNetwork } = await bitgetSettings();
+  if (!walletAddress || !walletNetwork) return null;
+  return { address: walletAddress, network: WALLET_NETWORKS[walletNetwork].label, qr: await QRCode.toDataURL(walletAddress, { margin: 1, width: 240 }) };
+}
+
 export async function publicBitgetInfo() {
   const settings = await bitgetSettings();
   if (!settings.enabled) return null;
   const rates = Object.fromEntries((await offerCurrencies()).map((c) => [c, rateOf(settings.rates, c)]));
-  return { uid: settings.uid, instructions: settings.instructions || '', currency: BITGET_CURRENCY, rates, whole: false };
+  return { uid: settings.uid, instructions: settings.instructions || '', currency: BITGET_CURRENCY, rates, whole: false, wallet: await publicWallet() };
 }

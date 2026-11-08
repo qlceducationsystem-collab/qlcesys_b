@@ -3,7 +3,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
 import { convertForCharge, isTestToken, mercadoPagoToken, mpTesting, payerEmailFor, paymentSettings } from './paymentSettings.service.js';
 import { paypalRequest } from './paypalSettings.service.js';
-import { bitgetQuote, bitgetSettings } from './bitgetSettings.service.js';
+import { bitgetQuote, bitgetSettings, publicWallet } from './bitgetSettings.service.js';
 
 const mockProvider = {
   code: 'MOCK',
@@ -116,7 +116,7 @@ const bitgetProvider = {
   quote: (amount, currency) => bitgetQuote(amount, currency),
   async createCheckout() {
     const settings = await bitgetSettings();
-    return { mode: 'BITGET', uid: settings.uid, instructions: settings.instructions || null };
+    return { mode: 'BITGET', uid: settings.uid, instructions: settings.instructions || null, wallet: await publicWallet() };
   },
 };
 

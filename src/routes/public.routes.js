@@ -21,8 +21,9 @@ const leadsLimiter = rateLimit({ windowMs: 60 * 60000, limit: 8, standardHeaders
 publicRouter.post('/leads', leadsLimiter, validate(leadSchema), ah(async (req, res) => res.status(201).json(await createLead(req.body))));
 
 publicRouter.get('/offers', ah(async (_req, res) => {
+  const offers = await cachedActiveOffers();
   res.setHeader('Cache-Control', 'public, max-age=600, stale-while-revalidate=3600');
-  res.json({ offers: await cachedActiveOffers() });
+  res.json({ offers });
 }));
 
 const giftLimiter = rateLimit({ windowMs: 15 * 60000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, skip: () => env.isTest, message: { error: 'Demasiados intentos, espera unos minutos' } });

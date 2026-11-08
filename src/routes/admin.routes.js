@@ -1,4 +1,4 @@
-import { bitgetSettingsView, saveBitgetSettings } from '../services/payments/bitgetSettings.service.js';
+import { bitgetSettingsView, saveBitgetSettings, WALLET_NETWORKS } from '../services/payments/bitgetSettings.service.js';
 import * as bitget from '../services/payments/bitgetReport.service.js';
 import { paymentSettingsView, savePaymentSettings, testMercadoPagoConnection } from '../services/payments/paymentSettings.service.js';
 import { COUNTRY_CODES } from '../shared/countries.js';
@@ -168,13 +168,15 @@ r.post('/payment-settings/test', FULL, ah(async (_req, res) => res.json(await te
 const bitgetSettingsSchema = z.object({
   uid: z.union([z.literal(''), z.string().trim().regex(/^\d{4,20}$/, 'El UID de Bitget tiene solo números')]).optional(),
   instructions: z.string().trim().max(1500).optional(),
+  walletAddress: z.string().trim().max(128).optional(),
+  walletNetwork: z.union([z.literal(''), z.enum(Object.keys(WALLET_NETWORKS))]).optional(),
   rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
   enabled: z.boolean().optional(),
 });
 r.get('/bitget-settings', FULL, ah(async (_req, res) => res.json(await bitgetSettingsView())));
 r.put('/bitget-settings', FULL, validate(bitgetSettingsSchema), ah(async (req, res) => {
   const view = await saveBitgetSettings(req.body);
-  if (req.body.uid !== undefined || req.body.enabled !== undefined) {
+  if (req.body.uid !== undefined || req.body.walletAddress !== undefined || req.body.walletNetwork !== undefined || req.body.enabled !== undefined) {
     await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Bitget activo' : 'Bitget desactivado', result: 'Configuración de transferencia Bitget modificada' });
   }
   res.json(view);

@@ -10,7 +10,7 @@ import { resolveAttempt } from './payment.service.js';
 
 export const REPORT_STATUS = { PENDING: 'Pendiente', REVIEW: 'En revisión', CONFIRMED: 'Confirmado', REJECTED: 'Rechazado' };
 const FUTURE_TOLERANCE_MS = 10 * 60000;
-const ORDER_PATTERN = /^[A-Za-z0-9-]{4,64}$/;
+const ORDER_PATTERN = /^[A-Za-z0-9-]{4,128}$/;
 const DRIVE_SECTION = 'Pagos';
 
 export const storage = {
@@ -53,8 +53,9 @@ const INCLUDE = { files: { orderBy: { createdAt: 'asc' } }, attempt: { include: 
 
 function parseFields({ orderNumber, transferredAt }, settings, now = new Date()) {
   const order = String(orderNumber || '').trim();
-  if (!ORDER_PATTERN.test(order)) throw badRequest('Escribe el N.º de orden que te dio Bitget (solo letras, números o guiones).');
+  if (!ORDER_PATTERN.test(order)) throw badRequest('Escribe el N.º de orden de Bitget o el hash de la transacción (solo letras, números o guiones).');
   if (settings.uid && digits(order) && digits(order) === digits(settings.uid)) throw badRequest('Ese número es el UID de QLC, no el N.º de orden. Copia el N.º de orden que aparece en tu historial de Bitget.');
+  if (settings.walletAddress && order === settings.walletAddress) throw badRequest('Esa es la dirección de wallet de QLC, no tu comprobante. Copia el N.º de orden o el hash de tu transacción.');
   const when = new Date(transferredAt);
   if (!transferredAt || Number.isNaN(when.getTime())) throw badRequest('Indica la fecha y hora de la transferencia.');
   if (when.getTime() > now.getTime() + FUTURE_TOLERANCE_MS) throw badRequest('La fecha y hora de la transferencia no puede estar en el futuro.');

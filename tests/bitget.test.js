@@ -142,6 +142,32 @@ run('País de residencia, Mercado Pago solo para México y transferencia interna
     assert.deepEqual(ok.body.missing, []);
   });
 
+  test('Wallet: exige red correcta, entrega QR y acepta el hash como comprobante', async () => {
+    const ADDRESS = '9i9gD2LFJ5TnfrFAY3rACnE3GWgqjkrWLXj3NyVEHbD';
+    const start = await api('admin').get('/api/admin/bitget-settings');
+    assert.equal(start.body.walletAddress, ADDRESS);
+    assert.equal(start.body.walletNetwork, '');
+    const hidden = await checkout('bob', 'BITGET');
+    assert.equal(hidden.body.checkout.wallet, null);
+    const wrong = await api('admin').put('/api/admin/bitget-settings', { walletNetwork: 'TRC20' });
+    assert.equal(wrong.status, 400);
+    assert.match(wrong.body.error, /no corresponde a la red/);
+    assert.equal((await api('admin').put('/api/admin/bitget-settings', { walletNetwork: 'INVENTADA' })).status, 400);
+    assert.equal((await api('edit').put('/api/admin/bitget-settings', { walletNetwork: 'SOL' })).status, 403);
+    assert.equal((await api('admin').put('/api/admin/bitget-settings', { walletNetwork: 'SOL' })).status, 200);
+    const { body } = await checkout('bob', 'BITGET');
+    assert.equal(body.checkout.wallet.address, ADDRESS);
+    assert.equal(body.checkout.wallet.network, 'Solana (SPL)');
+    assert.match(body.checkout.wallet.qr, /^data:image\/png;base64,/);
+    assert.equal((await api('bob').get('/api/payments/access')).body.bitget.wallet.address, ADDRESS);
+    const url = `/api/payments/attempts/${body.attempt.id}/bitget-report`;
+    assert.match((await report('bob', url, { orderNumber: ADDRESS })).body.error, /dirección de wallet de QLC/);
+    const hash = `${uid}${'A'.repeat(88 - uid.length)}`;
+    const ok = await report('bob', url, { orderNumber: hash });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.equal(ok.body.orderNumber, hash);
+  });
+
   test('Mercado Pago solo se ofrece a quien reside en México; Bitget a todas', async () => {
     const { encryptSecret } = await import('../src/utils/crypto.js');
     await prisma.appSetting.create({ data: { key: 'mercadopago', value: { enabled: true, publicKey: 'APP_USR-public', encryptedToken: encryptSecret('APP_USR-token'), encryptedWebhookSecret: encryptSecret('s'), account: { siteId: 'MLM' }, rates: { USD: 18, USDT: 18 }, lastTest: { ok: true } } } });

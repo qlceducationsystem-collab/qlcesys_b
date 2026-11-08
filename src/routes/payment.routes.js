@@ -28,7 +28,7 @@ const checkoutSchema = z.object({
   }).optional().nullable(),
 }).refine((v) => v.offerCode || v.promoCode, { message: 'Selecciona un producto', path: ['offerCode'] });
 const reportSchema = z.object({
-  orderNumber: z.string().trim().min(1, 'Requerido').max(64),
+  orderNumber: z.string().trim().min(1, 'Requerido').max(128),
   transferredAt: z.string().trim().min(1, 'Requerido').max(40),
   removeFileIds: z.union([z.string().max(40), z.array(z.string().max(40)).max(5)]).optional(),
 });
