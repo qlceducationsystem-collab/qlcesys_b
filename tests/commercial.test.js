@@ -98,11 +98,11 @@ run('Administración comercial: suscriptores, promociones, control de accesos y 
     await pay('juan', failed.id, 'REJECTED');
     assert.deepEqual((await pay('juan', first.id)).status, 400);
     let types = await events(ids.juan);
-    assert.ok(types.includes('CONTRATADA'));
-    assert.ok(types.includes('ACTIVADA'));
-    assert.ok(types.includes('RENOVADA'));
-    assert.ok(types.includes('PAGO_FALLIDO'));
-    const mails = testEmail.outbox.filter((m) => m.template === 'adminEvent' && m.data.type === 'ACTIVADA' && m.data.userEmail === `juan-${uid}@test.qlc`);
+    assert.ok(!types.includes('CONTRATADA'));
+    assert.equal(types.filter((t) => t === 'PAGO_EXITOSO').length, 2);
+    assert.equal(types.filter((t) => t === 'PAGO_FALLIDO').length, 1);
+    assert.equal(testEmail.outbox.filter((m) => m.template === 'adminEvent' && m.data.status === 'Pago pendiente').length, 0);
+    const mails = testEmail.outbox.filter((m) => m.template === 'adminEvent' && m.data.type === 'PAGO_EXITOSO' && m.data.status === 'Pago exitoso · primera compra' && m.data.userEmail === `juan-${uid}@test.qlc`);
     assert.ok(mails.some((m) => m.to === `general-${uid}@admin.qlc`));
     assert.ok(mails.some((m) => m.to === `edit-${uid}@admin.qlc`));
     const mail = mails[0];

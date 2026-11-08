@@ -31,6 +31,7 @@ const codeBlock = (code, spacing = 10, size = 32) => `<p style="margin:22px 0;fo
 
 const EVENT_LABELS_EN = {
   CONTRATADA: 'Subscription requested',
+  PAGO_EXITOSO: 'Payment successful',
   ACTIVADA: 'Subscription activated',
   RENOVADA: 'Subscription renewed',
   VENCIDA: 'Subscription expired',
@@ -124,6 +125,10 @@ const EXACT_EN = {
   'Recuperado con promoción': 'Recovered with a promotion',
   'Compra de regalo': 'Gift purchase',
   'Pago promocional': 'Promotional payment',
+  'Pago exitoso': 'Payment successful',
+  'Pago exitoso · renovación': 'Payment successful · renewal',
+  'Pago exitoso · recuperación': 'Payment successful · recovery',
+  'Pago exitoso · primera compra': 'Payment successful · first purchase',
   'No autorizado': 'Not authorized',
   'Retiro manual': 'Removed manually',
   Reembolsado: 'Refunded',

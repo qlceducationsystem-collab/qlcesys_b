@@ -3,7 +3,7 @@ import { grantTools, grantWindow, isGrantActive, RECURRING_OFFER_TYPES, renewalB
 import { badRequest, conflict, forbidden, notFound } from '../../utils/httpError.js';
 import { num, round2 } from '../../utils/money.js';
 import { loadGrants } from '../access.service.js';
-import { actorOf, GATEWAY, notifyEvent, recordEvent } from '../adminEvent.service.js';
+import { GATEWAY, notifyEvent, recordEvent } from '../adminEvent.service.js';
 import { createGiftCodes, emailGiftCodes } from '../gift.service.js';
 import { promoPrice, usablePromotion } from '../promotion.service.js';
 import { grantCredits } from '../credit.service.js';
@@ -88,19 +88,16 @@ export async function createCheckout(user, input) {
     throw err;
   }
   if (checkout.providerRef) await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerRef: checkout.providerRef } });
-  if (data.kind === 'STANDARD') {
-    await recordEvent({ category: 'SUSCRIPCION', type: 'CONTRATADA', actor: actorOf(user), user, offer: data.offer, status: 'Pago pendiente', amount: data.amount });
-  }
   return { attempt: attemptView(attempt), checkout: { mode: checkout.mode, publicKey: checkout.publicKey || null, uid: checkout.uid || null, instructions: checkout.instructions || null } };
 }
 
-async function subscriptionEventType(tx, attempt) {
+async function paidStatus(tx, attempt) {
   const all = await tx.accessGrant.findMany({ where: { userId: attempt.userId } });
   const user = await tx.user.findUnique({ where: { id: attempt.userId }, select: { subscriptionCancelledAt: true } });
   const sameType = all.filter((g) => g.active && g.accessType === attempt.offer.type && isGrantActive(g));
-  if (sameType.length && !user.subscriptionCancelledAt) return 'RENOVADA';
-  if (all.length) return 'RECUPERADA';
-  return 'ACTIVADA';
+  if (sameType.length && !user.subscriptionCancelledAt) return 'Pago exitoso · renovación';
+  if (all.length) return 'Pago exitoso · recuperación';
+  return 'Pago exitoso · primera compra';
 }
 
 const canRecover = (attempt, status) => status === 'APPROVED' && attempt.status === 'REJECTED' && attempt.provider === 'MERCADOPAGO';
@@ -137,10 +134,10 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
     } else {
       if (SERVICE_TYPES.includes(attempt.offer.type)) {
         await grantCredits(tx, { userId: attempt.userId, kind: attempt.offer.type, quantity: attempt.quantity, source: 'PAGO', paymentAttemptId: attempt.id });
-        events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'SERVICIO_COMPRADO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: `${attempt.quantity} disponible(s)`, amount: attempt.amount }, tx));
+        events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_EXITOSO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Pago exitoso', amount: attempt.amount, result: `${attempt.quantity} disponible(s)` }, tx));
         return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date() }), changed: true, events, offer: attempt.offer, userId: attempt.userId, mail: ['SERVICIO_DISPONIBLE', 'serviceCredits', attempt.user, { name: attempt.user.name, product: attempt.offer.name, quantity: attempt.quantity }] };
       }
-      const type = await subscriptionEventType(tx, attempt);
+      const paid = await paidStatus(tx, attempt);
       const grants = await tx.accessGrant.findMany({ where: { userId: attempt.userId, active: true } });
       const base = renewalBase(grants, attempt.offer);
       const { startsAt, expiresAt } = attempt.subscriptionId && attempt.billingCycle ? subscriptionWindow(attempt.billingCycle, base) : grantWindow(attempt.offer, base);
@@ -150,7 +147,7 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
       if (attempt.offer.sessions > 0) await grantCredits(tx, { userId: attempt.userId, kind: 'ORIENTACION', quantity: attempt.offer.sessions, source: 'MEMBRESIA', grantId: grant.id, paymentAttemptId: attempt.id, expiresAt });
       await tx.user.update({ where: { id: attempt.userId }, data: { retentionStage: 0 } });
       if (attempt.subscription?.status !== 'CANCELLED') await tx.user.update({ where: { id: attempt.userId }, data: { subscriptionCancelledAt: null } });
-      events.push(await recordEvent({ category: 'SUSCRIPCION', type, actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Activo', amount: attempt.amount, result: `Vigente hasta ${expiresAt.toISOString().slice(0, 10)}` }, tx));
+      events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_EXITOSO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: paid, amount: attempt.amount, result: `Vigente hasta ${expiresAt.toISOString().slice(0, 10)}` }, tx));
       mail = ['ACCESO_ACTIVADO', 'accessActivated', attempt.user, { name: attempt.user.name, product: attempt.offer.name, expiresAt }];
     }
     return { attempt: attemptView({ ...attempt, status, resolvedAt: new Date(), authorization: attempt.kind === 'PROMO' && status === 'APPROVED' ? 'PENDING' : attempt.authorization }), changed: true, events, gifts, mail, offer: attempt.offer, userId: attempt.userId };
