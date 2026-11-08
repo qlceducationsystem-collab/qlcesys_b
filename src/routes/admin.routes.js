@@ -154,6 +154,7 @@ const paymentSettingsSchema = z.object({
   accessToken: z.string().trim().max(300).optional(),
   publicKey: z.string().trim().max(200).optional(),
   webhookSecret: z.string().trim().max(300).optional(),
+  testPayerEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido').max(160)]).optional(),
   enabled: z.boolean().optional(),
 });
 r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));

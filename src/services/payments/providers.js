@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { env } from '../../config/env.js';
 import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
-import { convertForCharge, paymentSettings } from './paymentSettings.service.js';
+import { convertForCharge, payerEmailFor, paymentSettings } from './paymentSettings.service.js';
 import { paypalRequest } from './paypalSettings.service.js';
 import { bitgetQuote, bitgetSettings } from './bitgetSettings.service.js';
 
@@ -61,7 +61,7 @@ const mercadoPagoProvider = {
         installments: 1,
         payment_method_id: card.paymentMethodId,
         ...(card.issuerId ? { issuer_id: Number(card.issuerId) } : {}),
-        payer: { email: user.email },
+        payer: { email: await payerEmailFor(user) },
         external_reference: attempt.id,
         statement_descriptor: 'QLC',
         three_d_secure_mode: 'optional',
@@ -80,7 +80,7 @@ const mercadoPagoProvider = {
       body: {
         reason: offer.name,
         external_reference: attempt.id,
-        payer_email: user.email,
+        payer_email: await payerEmailFor(user),
         card_token_id: card.token,
         auto_recurring: {
           frequency: attempt.billingCycle === 'YEARLY' ? 12 : 1,

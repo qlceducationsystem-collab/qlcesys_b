@@ -296,6 +296,29 @@ run('Mercado Pago configurado desde el panel', () => {
     assert.equal((await api('admin').put('/api/admin/payment-settings', { publicKey: 'APP_USR-llave-publica', enabled: true })).body.enabled, true);
   });
 
+  test('El correo de comprador de prueba solo se usa con credenciales de prueba', async () => {
+    const { paymentSettings, resetPaymentSettingsCache } = await import('../src/services/payments/paymentSettings.service.js');
+    const TEST_BUYER = 'test_user_1@testuser.com';
+    assert.equal((await api('admin').put('/api/admin/payment-settings', { testPayerEmail: 'no-es-correo' })).status, 400);
+    assert.equal((await api('admin').put('/api/admin/payment-settings', { testPayerEmail: TEST_BUYER })).body.testPayerEmail, TEST_BUYER);
+    await register('tester');
+    const charged = async (card) => {
+      const { body } = await api('tester').post('/api/payments/checkout', { offerCode: 'FULL_ANNUAL' });
+      assert.equal((await api('tester').post(`/api/payments/attempts/${body.attempt.id}/card`, { token: card, paymentMethodId: 'master' })).status, 200);
+      return charges.at(-1).body.payer.email;
+    };
+    assert.equal(await charged('tok-no'), `tester-${uid}@test.qlc`);
+    const live = await paymentSettings();
+    const setTestUser = async (testUser) => {
+      await prisma.appSetting.update({ where: { key: 'mercadopago' }, data: { value: { ...live, account: { ...live.account, testUser } } } });
+      resetPaymentSettingsCache();
+    };
+    await setTestUser(true);
+    assert.equal(await charged('tok-no'), TEST_BUYER);
+    await setTestUser(false);
+    assert.equal((await api('admin').put('/api/admin/payment-settings', { testPayerEmail: '' })).body.testPayerEmail, '');
+  });
+
   test('Un reembolso avisa al administrador y no se confunde con un rechazo', async () => {
     payments.set('1001', { id: 1001, external_reference: ids.anaAttempt, status: 'refunded', transaction_amount: 1110, currency_id: 'MXN' });
     await webhook('1001', 'req-7');

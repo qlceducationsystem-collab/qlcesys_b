@@ -7,7 +7,7 @@ import { round2 } from '../../utils/money.js';
 const KEY = 'mercadopago';
 const SITE_CURRENCY = { MLM: 'MXN', MLA: 'ARS', MLB: 'BRL', MLC: 'CLP', MCO: 'COP', MPE: 'PEN', MLU: 'UYU' };
 const WHOLE_CURRENCIES = ['CLP', 'COP'];
-const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, marketRates: {}, ratesUpdatedAt: null, ratesError: null, account: null, lastTest: null };
+const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, marketRates: {}, ratesUpdatedAt: null, ratesError: null, testPayerEmail: null, account: null, lastTest: null };
 export const RATE_MARKUP = 1;
 const MAX_RATE_JUMP = 0.25;
 const RATES_STALE_MS = 72 * 3600000;
@@ -44,6 +44,12 @@ const open = (payload) => {
 export const mercadoPagoToken = async () => open((await paymentSettings()).encryptedToken);
 export const mercadoPagoWebhookSecret = async () => open((await paymentSettings()).encryptedWebhookSecret);
 export const isTestToken = (token) => String(token || '').startsWith('TEST-');
+
+export async function payerEmailFor(user) {
+  const settings = await paymentSettings();
+  const testing = !!settings.account?.testUser || isTestToken(await mercadoPagoToken());
+  return testing && settings.testPayerEmail ? settings.testPayerEmail : user.email;
+}
 
 export const chargeCurrency = (settings) => SITE_CURRENCY[settings.account?.siteId] || null;
 
@@ -155,6 +161,7 @@ export async function paymentSettingsView() {
     enabled: !!settings.enabled,
     hasToken: !!settings.encryptedToken,
     publicKey: settings.publicKey || '',
+    testPayerEmail: settings.testPayerEmail || '',
     hasWebhookSecret: !!settings.encryptedWebhookSecret,
     testMode: isTestToken(token) || !!settings.account?.testUser,
     encryptionReady: !!env.tokenEncryptionKey,
@@ -173,8 +180,9 @@ export async function paymentSettingsView() {
   };
 }
 
-export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, enabled }) {
+export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, testPayerEmail, enabled }) {
   const changes = {};
+  if (testPayerEmail !== undefined) changes.testPayerEmail = testPayerEmail || null;
   if (accessToken || webhookSecret) {
     if (!env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar las credenciales cifradas');
   }
