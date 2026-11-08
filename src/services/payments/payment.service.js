@@ -105,7 +105,7 @@ async function subscriptionEventType(tx, attempt) {
 
 const canRecover = (attempt, status) => status === 'APPROVED' && attempt.status === 'REJECTED' && attempt.provider === 'MERCADOPAGO';
 
-export async function resolveAttempt(attemptId, status, db = prisma, { paidAmount, paidCurrency, paymentId } = {}) {
+export async function resolveAttempt(attemptId, status, db = prisma, { paidAmount, paidCurrency, paymentId, failureDetail } = {}) {
   const result = await db.$transaction(async (tx) => {
     const attempt = await tx.paymentAttempt.findUnique({ where: { id: attemptId }, include: { offer: true, user: true, promotion: true, subscription: true } });
     if (!attempt) throw notFound('Intento de pago no encontrado');
@@ -123,7 +123,7 @@ export async function resolveAttempt(attemptId, status, db = prisma, { paidAmoun
     let mail = null;
     if (status === 'REJECTED') {
       if (attempt.kind === 'PROMO') await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { promotionId: null } });
-      events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_FALLIDO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Rechazado', amount: attempt.amount, result: attempt.kind === 'GIFT' ? 'Compra de regalo' : attempt.kind === 'PROMO' ? 'Pago promocional' : null }, tx));
+      events.push(await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_FALLIDO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: 'Rechazado', amount: attempt.amount, result: [attempt.kind === 'GIFT' ? 'Compra de regalo' : attempt.kind === 'PROMO' ? 'Pago promocional' : null, failureDetail].filter(Boolean).join(' · ') || null }, tx));
     } else if (attempt.kind === 'PROMO') {
       await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { authorization: 'PENDING' } });
       if (attempt.promotionId) await tx.promotion.update({ where: { id: attempt.promotionId }, data: { status: 'USADA', usedAt: new Date() } });
@@ -259,8 +259,8 @@ export async function payWithCard(user, attemptId, card) {
       created = await mercadoPagoProvider.createSubscription({ attempt, offer: attempt.offer, user, card });
     } catch (err) {
       if (err.providerStatus >= 400 && err.providerStatus < 500) {
-        await resolveAttempt(attempt.id, 'REJECTED');
-        return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
+        await resolveAttempt(attempt.id, 'REJECTED', prisma, { failureDetail: err.providerDetail });
+        return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused' };
       }
       console.error('[pagos] suscripción sin confirmar:', attempt.id, err.message);
       return syncAttempt(user, attempt.id, NO_SEARCH);
@@ -276,14 +276,14 @@ export async function payWithCard(user, attemptId, card) {
     payment = await mercadoPagoProvider.chargeCard({ attempt, offer: attempt.offer, user, card });
   } catch (err) {
     if (err.providerStatus >= 400 && err.providerStatus < 500) {
-      await resolveAttempt(attempt.id, 'REJECTED');
-      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'cc_rejected_other_reason' };
+      await resolveAttempt(attempt.id, 'REJECTED', prisma, { failureDetail: err.providerDetail });
+      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused' };
     }
     console.error('[pagos] cobro sin confirmar:', attempt.id, err.message);
     return syncAttempt(user, attempt.id).catch(() => syncAttempt(user, attempt.id, NO_SEARCH));
   }
   if (payment.status === 'PENDING') await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: payment.paymentId } });
-  else await resolveAttempt(attempt.id, payment.status, prisma, { paidAmount: payment.amount, paidCurrency: payment.currency, paymentId: payment.paymentId });
+  else await resolveAttempt(attempt.id, payment.status, prisma, { paidAmount: payment.amount, paidCurrency: payment.currency, paymentId: payment.paymentId, failureDetail: payment.status === 'REJECTED' ? `Mercado Pago: ${payment.statusDetail || 'rechazado'}` : undefined });
   return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: payment.statusDetail, challenge: payment.challenge };
 }
 

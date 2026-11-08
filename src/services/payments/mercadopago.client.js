@@ -22,6 +22,8 @@ export async function mpRequest(path, { method = 'GET', body, idempotencyKey, de
     console.error(`[mercadopago] ${method} ${path} → ${res.status}: ${data?.message || 'error'}`);
     const error = new HttpError(502, 'No pudimos comunicarnos con el procesador de pagos');
     error.providerStatus = res.status;
+    const causes = (Array.isArray(data?.cause) ? data.cause : []).map((c) => [c?.code, c?.description].filter(Boolean).join(' ')).filter(Boolean);
+    error.providerDetail = `Mercado Pago ${res.status}: ${[data?.message || data?.error, ...causes].filter(Boolean).join(' · ') || 'sin detalle'}`.slice(0, 400);
     throw error;
   }
   return data;
