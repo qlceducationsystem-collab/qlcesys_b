@@ -6,6 +6,7 @@ import { reconcileDiagnosisBreakdown, resyncPlaceholdersOnce } from './services/
 import { startIncomeJob } from './services/productIncome.service.js';
 import { startSubscriptionJob } from './services/subscriber.service.js';
 import { applyGoogleCredentials } from './services/mailSettings.service.js';
+import { startExchangeRateJob } from './services/payments/paymentSettings.service.js';
 
 applyGoogleCredentials().catch((err) => console.error('[qlc] credenciales de Google', err.message));
 
@@ -18,6 +19,7 @@ const server = app.listen(env.port, () => {
 const keepAlive = startKeepAlive();
 const incomeJob = startIncomeJob();
 const subscriptionJob = startSubscriptionJob();
+const exchangeRateJob = startExchangeRateJob();
 
 reconcileDiagnosisBreakdown()
   .then((periods) => periods && console.info(`[qlc] desglose del diagnóstico conciliado en ${periods} periodos`))
@@ -30,6 +32,7 @@ async function shutdown(signal) {
   if (keepAlive) clearInterval(keepAlive);
   clearInterval(incomeJob);
   clearInterval(subscriptionJob);
+  clearInterval(exchangeRateJob);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

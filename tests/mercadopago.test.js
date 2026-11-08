@@ -19,6 +19,8 @@ run('Mercado Pago configurado desde el panel', () => {
   const SECRET = 'clave-webhook-privada';
   const payments = new Map();
   const charges = [];
+  let ratesDown = true;
+  let usdMarket = 17;
 
   const api = (who) => {
     const auth = (r) => r.set('Authorization', `Bearer ${tokens[who]}`);
@@ -33,6 +35,8 @@ run('Mercado Pago configurado desde el panel', () => {
 
   const stubFetch = async (url, opt = {}) => {
     const u = String(url);
+    if (u.includes('frankfurter') || u.includes('er-api')) return ratesDown ? json({}, 500) : json({ rates: { MXN: usdMarket } });
+    if (u.includes('bitso')) return ratesDown ? json({}, 500) : json({ payload: { ask: '17.5' } });
     assert.equal(opt.headers?.Authorization, `Bearer ${TOKEN}`);
     if (u.endsWith('/users/me')) return json({ id: 1, nickname: 'QLC', site_id: 'MLM', tags: [] });
     if (u.endsWith('/v1/payments')) {
@@ -136,11 +140,38 @@ run('Mercado Pago configurado desde el panel', () => {
     assert.match(noRate.body.error, /tipo de cambio/);
   });
 
+  test('El tipo de cambio se actualiza solo, suma 1 peso y frena valores anómalos o fallas', async () => {
+    ratesDown = false;
+    const { refreshExchangeRates, paymentSettings } = await import('../src/services/payments/paymentSettings.service.js');
+    assert.equal((await refreshExchangeRates(stubFetch)).updated, true);
+    let settings = await paymentSettings();
+    assert.equal(settings.marketRates.USDT, 17.5);
+    assert.equal(settings.rates.USDT, 18.5);
+    const stamp = settings.ratesUpdatedAt;
+    usdMarket = 30;
+    const sawBitso = async (url, opt) => (String(url).includes('bitso') ? json({ payload: { ask: '30' } }) : stubFetch(url, opt));
+    assert.equal((await refreshExchangeRates(sawBitso)).updated, false);
+    settings = await paymentSettings();
+    assert.equal(settings.rates.USDT, 18.5);
+    assert.match(settings.ratesError, /25%/);
+    usdMarket = 17;
+    const fallback = async (url) => (String(url).includes('er-api') ? json({ rates: { MXN: 17.2 } }) : json({}, 500));
+    assert.equal((await refreshExchangeRates(fallback)).updated, true);
+    settings = await paymentSettings();
+    assert.equal(settings.rates.USDT, 18.2);
+    assert.notEqual(settings.ratesUpdatedAt, null);
+    assert.ok(stamp);
+    assert.equal((await refreshExchangeRates(stubFetch)).updated, true);
+    assert.equal((await paymentSettings()).rates.USDT, 18.5);
+    assert.equal((await paymentSettings()).ratesError, null);
+  });
+
   test('Activado: cobra en la moneda de la cuenta con el tipo de cambio, sin pago simulado', async () => {
     const legacy = await api('old').post('/api/payments/checkout', { offerCode: 'FULL_ANNUAL' });
     assert.equal(legacy.body.attempt.provider, 'MOCK');
     ids.legacyAttempt = legacy.body.attempt.id;
-    const on = await api('admin').put('/api/admin/payment-settings', { rates: { USD: 18, USDT: 18.5, MXN: 1 }, enabled: true });
+    ratesDown = false;
+    const on = await api('admin').put('/api/admin/payment-settings', { rates: { USDT: 1 }, enabled: true });
     assert.equal(on.status, 200, JSON.stringify(on.body));
     assert.equal(on.body.enabled, true);
     const access = await api('ana').get('/api/payments/access');

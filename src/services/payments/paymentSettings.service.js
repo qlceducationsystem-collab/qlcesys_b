@@ -7,7 +7,11 @@ import { round2 } from '../../utils/money.js';
 const KEY = 'mercadopago';
 const SITE_CURRENCY = { MLM: 'MXN', MLA: 'ARS', MLB: 'BRL', MLC: 'CLP', MCO: 'COP', MPE: 'PEN', MLU: 'UYU' };
 const WHOLE_CURRENCIES = ['CLP', 'COP'];
-const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, account: null, lastTest: null };
+const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, marketRates: {}, ratesUpdatedAt: null, ratesError: null, account: null, lastTest: null };
+export const RATE_MARKUP = 1;
+const MAX_RATE_JUMP = 0.25;
+const RATES_STALE_MS = 72 * 3600000;
+const RATE_TIMEOUT_MS = 10000;
 let cache = null;
 
 export async function paymentSettings() {
@@ -64,6 +68,70 @@ export function convertTo(amount, currency, target, rates) {
   return { amount: WHOLE_CURRENCIES.includes(target) ? Math.ceil(converted) : round2(converted), currency: target };
 }
 
+async function getJson(url, fetcher) {
+  const res = await fetcher(url, { signal: AbortSignal.timeout(RATE_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`respondió ${res.status}`);
+  return res.json();
+}
+
+const validRate = (value) => {
+  const rate = Number(value);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('valor no válido');
+  return rate;
+};
+
+async function officialRate(code, target, fetcher) {
+  try {
+    const data = await getJson(`https://api.frankfurter.dev/v1/latest?base=${code}&symbols=${target}`, fetcher);
+    return validRate(data.rates?.[target]);
+  } catch {
+    const data = await getJson(`https://open.er-api.com/v6/latest/${code}`, fetcher);
+    return validRate(data.rates?.[target]);
+  }
+}
+
+async function marketRate(code, target, fetcher) {
+  if (code === 'USDT' && target === 'MXN') {
+    try {
+      const data = await getJson('https://api.bitso.com/v3/ticker/?book=usdt_mxn', fetcher);
+      return validRate(data.payload?.ask);
+    } catch {
+      return officialRate('USD', target, fetcher);
+    }
+  }
+  return officialRate(code === 'USDT' ? 'USD' : code, target, fetcher);
+}
+
+export async function refreshExchangeRates(fetcher = fetch, now = new Date()) {
+  const settings = await paymentSettings();
+  const target = chargeCurrency(settings);
+  if (!target) return { updated: false };
+  const rates = { ...settings.rates };
+  const marketRates = { ...settings.marketRates };
+  const problems = [];
+  for (const code of (await offerCurrencies()).filter((c) => c !== target)) {
+    try {
+      const market = await marketRate(code, target, fetcher);
+      const previous = Number(settings.marketRates?.[code]);
+      if (previous > 0 && Math.abs(market - previous) / previous > MAX_RATE_JUMP) throw new Error(`cambio mayor a ${MAX_RATE_JUMP * 100}%: ${market}`);
+      marketRates[code] = market;
+      rates[code] = Number((market + RATE_MARKUP).toFixed(4));
+    } catch (err) {
+      problems.push(`${code}: ${err.message}`.slice(0, 120));
+    }
+  }
+  const ratesError = problems.length ? problems.join('; ') : null;
+  if (ratesError) console.error('[qlc] tipo de cambio sin actualizar:', ratesError);
+  await write({ rates, marketRates, ratesError, ...(ratesError ? {} : { ratesUpdatedAt: now.toISOString() }) });
+  return { updated: !ratesError };
+}
+
+export function startExchangeRateJob(intervalMinutes = 60) {
+  const run = () => refreshExchangeRates().catch((err) => console.error('[qlc] tipo de cambio', err.message));
+  run();
+  return setInterval(run, intervalMinutes * 60000);
+}
+
 const sameKind = (publicKey, token) => isTestToken(publicKey) === isTestToken(token);
 
 const missingRequirements = (settings, currencies, token) => {
@@ -93,6 +161,11 @@ export async function paymentSettingsView() {
     account: settings.account ? { nickname: settings.account.nickname, siteId: settings.account.siteId } : null,
     chargeCurrency: target,
     rates: settings.rates || {},
+    marketRates: settings.marketRates || {},
+    rateMarkup: RATE_MARKUP,
+    ratesUpdatedAt: settings.ratesUpdatedAt,
+    ratesError: settings.ratesError,
+    ratesStale: !settings.ratesUpdatedAt || Date.now() - new Date(settings.ratesUpdatedAt).getTime() > RATES_STALE_MS,
     ratesNeeded: target ? currencies.filter((c) => c !== target) : [],
     lastTest: settings.lastTest,
     webhookUrl: `${env.backendUrl}/api/webhooks/mercadopago`,
@@ -100,7 +173,7 @@ export async function paymentSettingsView() {
   };
 }
 
-export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, rates, enabled }) {
+export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, enabled }) {
   const changes = {};
   if (accessToken || webhookSecret) {
     if (!env.tokenEncryptionKey) throw badRequest('Falta TOKEN_ENCRYPTION_KEY en el servidor para guardar las credenciales cifradas');
@@ -110,9 +183,10 @@ export async function savePaymentSettings({ accessToken, publicKey, webhookSecre
   }
   if (publicKey) changes.publicKey = publicKey;
   if (webhookSecret) changes.encryptedWebhookSecret = encryptSecret(webhookSecret);
-  if (rates) changes.rates = Object.fromEntries(Object.entries(rates).map(([k, v]) => [k.toUpperCase(), Number(v)]).filter(([, v]) => v > 0));
-  const next = await write(changes);
+  let next = await write(changes);
   if (enabled === true) {
+    await refreshExchangeRates();
+    next = await paymentSettings();
     const missing = missingRequirements(next, await offerCurrencies(), await mercadoPagoToken());
     if (missing.length) throw badRequest(`Para activar Mercado Pago falta: ${missing.join(', ')}.`);
   }
@@ -133,6 +207,7 @@ export async function testMercadoPagoConnection(fetcher = fetch) {
       account: { id: data.id, nickname: data.nickname || null, siteId: data.site_id, testUser: (data.tags || []).includes('test_user') },
       lastTest: { at, ok: true, error: null },
     });
+    await refreshExchangeRates(fetcher);
   } catch (err) {
     await write({ lastTest: { at, ok: false, error: err.message.slice(0, 200) }, enabled: false });
   }

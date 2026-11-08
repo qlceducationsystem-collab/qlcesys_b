@@ -153,7 +153,6 @@ const paymentSettingsSchema = z.object({
   accessToken: z.string().trim().max(300).optional(),
   publicKey: z.string().trim().max(200).optional(),
   webhookSecret: z.string().trim().max(300).optional(),
-  rates: z.record(z.string().trim().min(3).max(6), z.coerce.number().positive().max(1000000)).optional(),
   enabled: z.boolean().optional(),
 });
 r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
