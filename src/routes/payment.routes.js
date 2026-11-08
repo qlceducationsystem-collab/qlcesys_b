@@ -27,12 +27,6 @@ const checkoutSchema = z.object({
     recipientName: z.string().trim().max(120).optional().nullable(),
   }).optional().nullable(),
 }).refine((v) => v.offerCode || v.promoCode, { message: 'Selecciona un producto', path: ['offerCode'] });
-const cardSchema = z.object({
-  token: z.string().trim().min(1).max(200),
-  paymentMethodId: z.string().trim().min(1).max(40),
-  issuerId: z.string().trim().max(40).optional(),
-  deviceId: z.string().trim().max(200).optional(),
-});
 const reportSchema = z.object({
   orderNumber: z.string().trim().min(1, 'Requerido').max(64),
   transferredAt: z.string().trim().min(1, 'Requerido').max(40),
@@ -63,12 +57,6 @@ r.post('/promo/check', requireRole('CLIENT'), validate(codeSchema), ah(async (re
 r.post('/subscription/cancel', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.cancelSubscription(req.user))));
 r.post('/subscription/resume', requireRole('CLIENT'), ah(async (req, res) => res.json(await subscribers.resumeSubscription(req.user))));
 r.put('/preferences', requireRole('CLIENT'), validate(preferencesSchema), ah(async (req, res) => res.json(await subscribers.setMarketing(req.user, req.body))));
-
-r.post('/attempts/:id/card', requireRole('CLIENT'), authLimiter, validate(cardSchema), ah(async (req, res) => {
-  const result = await payments.payWithCard(req.user, req.params.id, req.body);
-  const [access, credits] = await Promise.all([getAccess(req.user.id), creditBalance(req.user.id)]);
-  res.json({ ...result, access, credits });
-}));
 
 r.get('/bitget', requireRole('CLIENT'), ah(async (req, res) => res.json(await bitget.clientOverview(req.user))));
 r.post('/attempts/:id/bitget-report', requireRole('CLIENT'), authLimiter, evidenceUpload, validate(reportSchema), ah(async (req, res) => res.status(201).json(await bitget.submitReport(req.user, req.params.id, req.body, req.files))));

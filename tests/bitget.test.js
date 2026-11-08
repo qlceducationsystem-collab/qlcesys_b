@@ -153,9 +153,12 @@ run('País de residencia, Mercado Pago solo para México y transferencia interna
     assert.deepEqual(us.body.providers, ['BITGET']);
     assert.equal(us.body.charge, null);
     assert.equal((await checkout('bob', 'MERCADOPAGO')).status, 409);
+    const realFetch = global.fetch;
+    global.fetch = async () => ({ ok: true, status: 201, json: async () => ({ id: `pref-${uid}`, init_point: 'https://mp.test/pagar' }) });
     const card = await checkout('ana', 'MERCADOPAGO');
+    global.fetch = realFetch;
     assert.equal(card.status, 201);
-    assert.equal(card.body.checkout.mode, 'CARD');
+    assert.equal(card.body.checkout.mode, 'REDIRECT');
     const sim = await checkout('bob');
     assert.equal(sim.body.attempt.provider, 'BITGET');
     assert.equal((await api('bob').post(`/api/payments/attempts/${sim.body.attempt.id}/simulate`, { outcome: 'APPROVED' })).status, 403);

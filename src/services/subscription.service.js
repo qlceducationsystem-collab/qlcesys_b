@@ -4,7 +4,7 @@ import { num } from '../utils/money.js';
 import { providerByCode } from './payments/providers.js';
 
 const LIVE = ['ACTIVE', 'PENDING', 'SUSPENDED'];
-export const BILLING_WHERE = { OR: [{ status: { in: ['ACTIVE', 'SUSPENDED'] } }, { status: 'PENDING', provider: 'MERCADOPAGO' }] };
+export const BILLING_WHERE = { status: { in: ['ACTIVE', 'SUSPENDED'] } };
 const ALREADY_CLOSED = [400, 404, 422];
 
 export const liveSubscription = (userId, db = prisma) =>

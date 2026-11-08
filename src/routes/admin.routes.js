@@ -152,7 +152,6 @@ const mailSettingsSchema = z.object({
 });
 const paymentSettingsSchema = z.object({
   accessToken: z.string().trim().max(300).optional(),
-  publicKey: z.string().trim().max(200).optional(),
   webhookSecret: z.string().trim().max(300).optional(),
   testPayerEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email('Correo no válido').max(160)]).optional(),
   enabled: z.boolean().optional(),
@@ -160,7 +159,7 @@ const paymentSettingsSchema = z.object({
 r.get('/payment-settings', FULL, ah(async (_req, res) => res.json(await paymentSettingsView())));
 r.put('/payment-settings', FULL, validate(paymentSettingsSchema), ah(async (req, res) => {
   const view = await savePaymentSettings(req.body);
-  if (req.body.accessToken || req.body.publicKey || req.body.webhookSecret || req.body.enabled !== undefined) {
+  if (req.body.accessToken || req.body.webhookSecret || req.body.enabled !== undefined) {
     await recordEvent({ category: 'PLATAFORMA', type: 'PASARELA_CONFIGURADA', actor: actorOf(req.user), status: view.enabled ? 'Mercado Pago activo' : 'Mercado Pago desactivado', result: 'Configuración de Mercado Pago modificada' });
   }
   res.json(view);

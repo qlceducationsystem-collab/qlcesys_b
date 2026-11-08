@@ -7,7 +7,7 @@ import { round2 } from '../../utils/money.js';
 const KEY = 'mercadopago';
 const SITE_CURRENCY = { MLM: 'MXN', MLA: 'ARS', MLB: 'BRL', MLC: 'CLP', MCO: 'COP', MPE: 'PEN', MLU: 'UYU' };
 const WHOLE_CURRENCIES = ['CLP', 'COP'];
-const DEFAULTS = { enabled: false, publicKey: null, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, marketRates: {}, ratesUpdatedAt: null, ratesError: null, testPayerEmail: null, account: null, lastTest: null };
+const DEFAULTS = { enabled: false, encryptedToken: null, encryptedWebhookSecret: null, rates: {}, marketRates: {}, ratesUpdatedAt: null, ratesError: null, testPayerEmail: null, account: null, lastTest: null };
 export const RATE_MARKUP = 1;
 const MAX_RATE_JUMP = 0.25;
 const RATES_STALE_MS = 72 * 3600000;
@@ -45,10 +45,14 @@ export const mercadoPagoToken = async () => open((await paymentSettings()).encry
 export const mercadoPagoWebhookSecret = async () => open((await paymentSettings()).encryptedWebhookSecret);
 export const isTestToken = (token) => String(token || '').startsWith('TEST-');
 
+export async function mpTesting() {
+  const settings = await paymentSettings();
+  return !!settings.account?.testUser || isTestToken(await mercadoPagoToken());
+}
+
 export async function payerEmailFor(user) {
   const settings = await paymentSettings();
-  const testing = !!settings.account?.testUser || isTestToken(await mercadoPagoToken());
-  return testing && settings.testPayerEmail ? settings.testPayerEmail : user.email;
+  return (await mpTesting()) && settings.testPayerEmail ? settings.testPayerEmail : user.email;
 }
 
 export const chargeCurrency = (settings) => SITE_CURRENCY[settings.account?.siteId] || null;
@@ -138,13 +142,9 @@ export function startExchangeRateJob(intervalMinutes = 60) {
   return setInterval(run, intervalMinutes * 60000);
 }
 
-const sameKind = (publicKey, token) => isTestToken(publicKey) === isTestToken(token);
-
-const missingRequirements = (settings, currencies, token) => {
+const missingRequirements = (settings, currencies) => {
   const missing = [];
   if (!settings.encryptedToken) missing.push('el Access Token');
-  if (!settings.publicKey) missing.push('la Public Key');
-  else if (token && !sameKind(settings.publicKey, token)) missing.push('una Public Key del mismo tipo que el Access Token (prueba o producción)');
   if (!settings.encryptedWebhookSecret) missing.push('la clave secreta del webhook');
   if (!settings.lastTest?.ok) missing.push('una prueba de conexión correcta');
   const target = chargeCurrency(settings);
@@ -160,7 +160,6 @@ export async function paymentSettingsView() {
   return {
     enabled: !!settings.enabled,
     hasToken: !!settings.encryptedToken,
-    publicKey: settings.publicKey || '',
     testPayerEmail: settings.testPayerEmail || '',
     hasWebhookSecret: !!settings.encryptedWebhookSecret,
     testMode: isTestToken(token) || !!settings.account?.testUser,
@@ -176,11 +175,11 @@ export async function paymentSettingsView() {
     ratesNeeded: target ? currencies.filter((c) => c !== target) : [],
     lastTest: settings.lastTest,
     webhookUrl: `${env.backendUrl}/api/webhooks/mercadopago`,
-    missing: missingRequirements(settings, currencies, token),
+    missing: missingRequirements(settings, currencies),
   };
 }
 
-export async function savePaymentSettings({ accessToken, publicKey, webhookSecret, testPayerEmail, enabled }) {
+export async function savePaymentSettings({ accessToken, webhookSecret, testPayerEmail, enabled }) {
   const changes = {};
   if (testPayerEmail !== undefined) changes.testPayerEmail = testPayerEmail || null;
   if (accessToken || webhookSecret) {
@@ -189,13 +188,12 @@ export async function savePaymentSettings({ accessToken, publicKey, webhookSecre
   if (accessToken) {
     Object.assign(changes, { encryptedToken: encryptSecret(accessToken), lastTest: null, account: null, enabled: false });
   }
-  if (publicKey) changes.publicKey = publicKey;
   if (webhookSecret) changes.encryptedWebhookSecret = encryptSecret(webhookSecret);
   let next = await write(changes);
   if (enabled === true) {
     await refreshExchangeRates();
     next = await paymentSettings();
-    const missing = missingRequirements(next, await offerCurrencies(), await mercadoPagoToken());
+    const missing = missingRequirements(next, await offerCurrencies());
     if (missing.length) throw badRequest(`Para activar Mercado Pago falta: ${missing.join(', ')}.`);
   }
   if (enabled !== undefined) await write({ enabled: !!enabled && !changes.encryptedToken });

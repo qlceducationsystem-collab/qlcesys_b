@@ -1,8 +1,7 @@
-import crypto from 'node:crypto';
 import { env } from '../../config/env.js';
 import { HttpError } from '../../utils/httpError.js';
 import { mpRequest } from './mercadopago.client.js';
-import { convertForCharge, payerEmailFor, paymentSettings } from './paymentSettings.service.js';
+import { convertForCharge, isTestToken, mercadoPagoToken, mpTesting, payerEmailFor, paymentSettings } from './paymentSettings.service.js';
 import { paypalRequest } from './paypalSettings.service.js';
 import { bitgetQuote, bitgetSettings } from './bitgetSettings.service.js';
 
@@ -21,16 +20,11 @@ const MP_STATUS = { approved: 'APPROVED', rejected: 'REJECTED', cancelled: 'REJE
 const REVERSED = ['refunded', 'charged_back'];
 const isHttps = (url) => String(url).startsWith('https://');
 
-const challengeOf = (payment) => (payment.status_detail === 'pending_challenge' && payment.three_ds_info?.external_resource_url && payment.three_ds_info?.creq
-  ? { url: payment.three_ds_info.external_resource_url, creq: payment.three_ds_info.creq }
-  : null);
-
 const paymentResult = (payment) => ({
   attemptId: payment.external_reference,
   paymentId: String(payment.id),
   rawStatus: payment.status,
   statusDetail: payment.status_detail || null,
-  challenge: challengeOf(payment),
   reversed: REVERSED.includes(payment.status),
   status: MP_STATUS[payment.status] || 'PENDING',
   amount: payment.transaction_amount ?? null,
@@ -44,55 +38,47 @@ const mercadoPagoProvider = {
     if (amount === null || amount === undefined) throw new HttpError(409, 'Este acceso todavía no tiene precio definido');
     return convertForCharge(amount, currency, await paymentSettings());
   },
-  async createCheckout() {
-    const { publicKey } = await paymentSettings();
-    if (!publicKey) throw new HttpError(409, 'Falta la Public Key. Configúrala en Pasarela de pago.');
-    return { mode: 'CARD', publicKey };
-  },
-  async chargeCard({ attempt, offer, user, card }, fetcher = mpRequest) {
-    const payment = await fetcher('/v1/payments', {
-      method: 'POST',
-      idempotencyKey: crypto.randomUUID(),
-      deviceId: card.deviceId,
-      body: {
-        transaction_amount: Number(attempt.chargedAmount),
-        token: card.token,
-        description: offer.name,
-        installments: 1,
-        payment_method_id: card.paymentMethodId,
-        ...(card.issuerId ? { issuer_id: Number(card.issuerId) } : {}),
-        payer: { email: await payerEmailFor(user) },
-        external_reference: attempt.id,
-        statement_descriptor: 'QLC',
-        three_d_secure_mode: 'optional',
-        capture: true,
-        binary_mode: false,
-        ...(isHttps(env.backendUrl) ? { notification_url: `${env.backendUrl}/api/webhooks/mercadopago` } : {}),
-      },
-    });
-    return paymentResult(payment);
-  },
-  async createSubscription({ attempt, offer, user, card }) {
-    const data = await mpRequest('/preapproval', {
-      method: 'POST',
-      idempotencyKey: crypto.randomUUID(),
-      deviceId: card.deviceId,
-      body: {
-        reason: offer.name,
-        external_reference: attempt.id,
-        payer_email: await payerEmailFor(user),
-        card_token_id: card.token,
-        auto_recurring: {
-          frequency: attempt.billingCycle === 'YEARLY' ? 12 : 1,
-          frequency_type: 'months',
-          transaction_amount: Number(attempt.chargedAmount),
-          currency_id: attempt.chargedCurrency,
+  async createCheckout({ attempt, offer, user }) {
+    const returnUrl = `${env.frontendUrl}/app/acceso?pago=${attempt.id}`;
+    const webhook = isHttps(env.backendUrl) ? { notification_url: `${env.backendUrl}/api/webhooks/mercadopago` } : {};
+    if (attempt.billingCycle) {
+      const data = await mpRequest('/preapproval', {
+        method: 'POST',
+        idempotencyKey: attempt.id,
+        body: {
+          reason: String(offer.name).slice(0, 250),
+          external_reference: attempt.id,
+          payer_email: await payerEmailFor(user),
+          auto_recurring: {
+            frequency: attempt.billingCycle === 'YEARLY' ? 12 : 1,
+            frequency_type: 'months',
+            transaction_amount: Number(attempt.chargedAmount),
+            currency_id: attempt.chargedCurrency,
+          },
+          back_url: returnUrl,
+          status: 'pending',
         },
-        back_url: `${env.frontendUrl}/app/acceso`,
-        status: 'authorized',
+      });
+      if (!data.init_point) throw new HttpError(502, 'Mercado Pago no entregó el enlace para contratar la suscripción');
+      return { mode: 'REDIRECT', initPoint: data.init_point, subscription: { id: String(data.id), status: data.status, nextBillingAt: data.next_payment_date || null } };
+    }
+    const includePayer = !(await mpTesting()) || !!(await paymentSettings()).testPayerEmail;
+    const data = await mpRequest('/checkout/preferences', {
+      method: 'POST',
+      idempotencyKey: attempt.id,
+      body: {
+        items: [{ id: offer.code, title: String(offer.name).slice(0, 250), quantity: 1, unit_price: Number(attempt.chargedAmount), currency_id: attempt.chargedCurrency }],
+        ...(includePayer ? { payer: { email: await payerEmailFor(user) } } : {}),
+        external_reference: attempt.id,
+        back_urls: { success: returnUrl, pending: returnUrl, failure: returnUrl },
+        ...(isHttps(returnUrl) ? { auto_return: 'approved' } : {}),
+        statement_descriptor: 'QLC',
+        ...webhook,
       },
     });
-    return { id: String(data.id), status: data.status, nextBillingAt: data.next_payment_date || null };
+    const link = isTestToken(await mercadoPagoToken()) && data.sandbox_init_point ? data.sandbox_init_point : data.init_point;
+    if (!link) throw new HttpError(502, 'Mercado Pago no entregó el enlace de pago');
+    return { mode: 'REDIRECT', initPoint: link, providerRef: String(data.id) };
   },
   async getSubscription(id) {
     return mpRequest(`/preapproval/${encodeURIComponent(id)}`);

@@ -13,7 +13,7 @@ const r = Router();
 export async function processMercadoPagoPayment({ dataId, eventId }, { db = prisma, fetcher } = {}) {
   const eventKey = `payment:${dataId}:${eventId || 'na'}`;
   if (await db.webhookEvent.findUnique({ where: { eventKey } })) return { duplicate: true };
-  const { attemptId, status, amount, currency, paymentId, reversed, rawStatus } = await mercadoPagoProvider.fetchPaymentResult(dataId, fetcher);
+  const { attemptId, status, amount, currency, paymentId, reversed, rawStatus, statusDetail } = await mercadoPagoProvider.fetchPaymentResult(dataId, fetcher);
   let attempt = attemptId ? await db.paymentAttempt.findUnique({ where: { id: String(attemptId) }, include: { user: true, offer: true } }) : null;
   if (attempt?.subscriptionId) {
     attempt = reversed ? await db.paymentAttempt.findFirst({ where: { providerPaymentId: String(paymentId) }, include: { user: true, offer: true } }) : null;
@@ -22,7 +22,7 @@ export async function processMercadoPagoPayment({ dataId, eventId }, { db = pris
     if (reversed && attempt.status === 'APPROVED') {
       await recordEvent({ category: 'SUSCRIPCION', type: 'PAGO_REVERTIDO', actor: GATEWAY, user: attempt.user, offer: attempt.offer, status: rawStatus === 'refunded' ? 'Reembolsado' : 'Contracargo', amount, result: 'El acceso sigue activo: revísalo en Control de accesos' });
     } else if (status !== 'PENDING') {
-      await resolveAttempt(attempt.id, status, db, { paidAmount: amount, paidCurrency: currency, paymentId });
+      await resolveAttempt(attempt.id, status, db, { paidAmount: amount, paidCurrency: currency, paymentId, failureDetail: status === 'REJECTED' && statusDetail ? `Mercado Pago: ${statusDetail}` : undefined });
     }
   }
   try {
