@@ -257,7 +257,7 @@ export async function payWithCard(user, attemptId, card) {
     } catch (err) {
       if (err.providerStatus >= 400 && err.providerStatus < 500) {
         await resolveAttempt(attempt.id, 'REJECTED', prisma, { failureDetail: err.providerDetail });
-        return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused' };
+        return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused', detail: err.providerDetail || null };
       }
       console.error('[pagos] suscripción sin confirmar:', attempt.id, err.message);
       return syncAttempt(user, attempt.id, NO_SEARCH);
@@ -274,7 +274,7 @@ export async function payWithCard(user, attemptId, card) {
   } catch (err) {
     if (err.providerStatus >= 400 && err.providerStatus < 500) {
       await resolveAttempt(attempt.id, 'REJECTED', prisma, { failureDetail: err.providerDetail });
-      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused' };
+      return { ...(await syncAttempt(user, attempt.id, NO_SEARCH)), reason: 'gateway_refused', detail: err.providerDetail || null };
     }
     console.error('[pagos] cobro sin confirmar:', attempt.id, err.message);
     return syncAttempt(user, attempt.id).catch(() => syncAttempt(user, attempt.id, NO_SEARCH));

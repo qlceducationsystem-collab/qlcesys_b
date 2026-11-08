@@ -254,6 +254,7 @@ run('Mercado Pago configurado desde el panel', () => {
     const bad = await pay(invalid, 'tok-invalid');
     assert.equal(bad.body.attempt.status, 'REJECTED');
     assert.equal(bad.body.reason, 'gateway_refused');
+    assert.equal(bad.body.detail, 'Mercado Pago 400: invalid token');
     const refused = await prisma.adminEvent.findFirst({ where: { type: 'PAGO_FALLIDO', result: { contains: 'invalid token' } } });
     assert.match(refused.result, /Mercado Pago 400: invalid token/);
 
